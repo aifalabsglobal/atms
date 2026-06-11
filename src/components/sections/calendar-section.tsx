@@ -78,10 +78,10 @@ export default function CalendarSection() {
   const isToday = (day: number) =>
     day === today.getDate() && currentMonth === today.getMonth() && currentYear === today.getFullYear();
 
-  // Get events for a specific day
+  // Get events for a specific day (respects the type filter)
   const getEventsForDay = (day: number) => {
     const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    return events.filter((e: any) => e.startDate === dateStr);
+    return monthEvents.filter((e: any) => e.startDate === dateStr);
   };
 
   // Stats
