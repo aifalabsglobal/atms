@@ -307,13 +307,13 @@ function AppContent() {
           </aside>
 
           {/* Main Content */}
-          <main className="flex-1 overflow-y-auto flex flex-col">
-            <div className="p-4 md:p-6 max-w-[1600px] mx-auto w-full">
+          <main className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex-1 overflow-y-auto p-4 md:p-6 max-w-[1600px] mx-auto w-full">
               {renderSection()}
             </div>
 
             {/* Footer */}
-            <footer className="border-t shrink-0 mt-auto">
+            <footer className="border-t shrink-0">
               <div className="px-4 md:px-6 py-3 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-muted-foreground">
                 <span>© 2026 JNTUH Engineering College — Smart Campus Management System</span>
                 <div className="flex items-center gap-4">
