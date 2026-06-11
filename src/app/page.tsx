@@ -1,11 +1,11 @@
 'use client';
 
-import { useAppStore, type Section } from '@/lib/store';
+import { useAppStore, type Section, ROLE_LABELS, ROLE_PRESETS, ROLE_SECTIONS, type Role, type CurrentUser } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, ScanLine, BookOpen, Users, ShieldAlert,
   BarChart3, MapPin, Settings, Menu, X, Bell, ChevronDown,
-  GraduationCap, LogOut, Moon, Sun, Search
+  GraduationCap, LogOut, Moon, Sun, Search, Shield, UserCircle,
 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,7 @@ import { Input } from '@/components/ui/input';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
   DropdownMenuSeparator, DropdownMenuTrigger,
+  DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem,
 } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -34,7 +35,7 @@ const ReportsSection = dynamic(() => import('@/components/sections/reports-secti
 const GeofencesSection = dynamic(() => import('@/components/sections/geofences-section'), { ssr: false });
 const SettingsSection = dynamic(() => import('@/components/sections/settings-section'), { ssr: false });
 
-const navItems: { id: Section; label: string; icon: React.ElementType; badge?: string }[] = [
+const allNavItems: { id: Section; label: string; icon: React.ElementType; badge?: string }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'attendance', label: 'Attendance', icon: ScanLine },
   { id: 'lms', label: 'Learning Mgmt', icon: BookOpen },
@@ -45,10 +46,27 @@ const navItems: { id: Section; label: string; icon: React.ElementType; badge?: s
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
+// Role colors for avatar backgrounds
+const ROLE_COLORS: Record<Role, string> = {
+  super_admin: '#1A3C6E',
+  admin: '#2C5F8A',
+  hod: '#1B6B4A',
+  faculty: '#7C3AED',
+  lab_assistant: '#B45309',
+  student: '#0E7490',
+  parent: '#BE185D',
+  visitor: '#6B7280',
+  security: '#991B1B',
+};
+
 // Inner component that uses useQuery - must be inside Providers
 function AppContent() {
-  const { activeSection, setActiveSection, sidebarOpen, setSidebarOpen } = useAppStore();
+  const { activeSection, setActiveSection, sidebarOpen, setSidebarOpen, currentUser, setCurrentRole } = useAppStore();
   const { theme, setTheme } = useTheme();
+
+  const role = currentUser.role;
+  const allowedSections = ROLE_SECTIONS[role];
+  const navItems = allNavItems.filter(item => allowedSections.includes(item.id));
 
   const { data: notifData } = useQuery({
     queryKey: ['notifications'],
@@ -140,25 +158,72 @@ function AppContent() {
               </DropdownMenuContent>
             </DropdownMenu>
 
+            {/* Role Switcher */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs border-dashed">
+                  <Shield className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">{ROLE_LABELS[role]}</span>
+                  <ChevronDown className="h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel className="text-xs text-muted-foreground">Switch Role View</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {(Object.keys(ROLE_PRESETS) as Role[]).map((r) => {
+                  const preset = ROLE_PRESETS[r];
+                  const isActive = r === role;
+                  return (
+                    <DropdownMenuItem
+                      key={r}
+                      onClick={() => setCurrentRole(r)}
+                      className={cn("flex items-center gap-2 cursor-pointer", isActive && "bg-accent")}
+                    >
+                      <Avatar className="h-6 w-6">
+                        <AvatarFallback className="text-[9px] text-white" style={{ backgroundColor: ROLE_COLORS[r] }}>
+                          {preset.avatar}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium truncate">{ROLE_LABELS[r]}</p>
+                        <p className="text-[10px] text-muted-foreground truncate">{preset.name}</p>
+                      </div>
+                      {isActive && (
+                        <span className="h-2 w-2 rounded-full bg-primary" />
+                      )}
+                    </DropdownMenuItem>
+                  );
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* User Profile Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="h-9 gap-2 pl-2 pr-1">
                   <Avatar className="h-7 w-7">
-                    <AvatarFallback className="bg-[#1A3C6E] text-white text-xs">RK</AvatarFallback>
+                    <AvatarFallback className="text-white text-xs" style={{ backgroundColor: ROLE_COLORS[role] }}>
+                      {currentUser.avatar}
+                    </AvatarFallback>
                   </Avatar>
-                  <span className="hidden sm:block text-sm">Dr. Ramesh</span>
+                  <span className="hidden sm:block text-sm max-w-[100px] truncate">{currentUser.name.split(' ')[0]}</span>
                   <ChevronDown className="h-3 w-3" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <div className="p-2">
-                  <p className="text-sm font-medium">Dr. Ramesh Kumar</p>
-                  <p className="text-xs text-muted-foreground">admin@uohyd.ac.in</p>
-                  <Badge variant="secondary" className="mt-1 text-[10px]">Super Admin</Badge>
+                  <p className="text-sm font-medium">{currentUser.name}</p>
+                  <p className="text-xs text-muted-foreground">{currentUser.email}</p>
+                  <Badge className="mt-1 text-[10px] text-white" style={{ backgroundColor: ROLE_COLORS[role] }}>
+                    {ROLE_LABELS[role]}
+                  </Badge>
+                  {currentUser.department && (
+                    <p className="text-[10px] text-muted-foreground mt-1">{currentUser.department}</p>
+                  )}
                 </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem>
-                  <Users className="mr-2 h-4 w-4" /> Profile
+                  <UserCircle className="mr-2 h-4 w-4" /> Profile
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setActiveSection('settings')}>
                   <Settings className="mr-2 h-4 w-4" /> Settings
@@ -183,6 +248,19 @@ function AppContent() {
               <div className="fixed inset-0 top-14 bg-black/20 z-[-1] md:hidden" onClick={() => setSidebarOpen(false)} />
             )}
             <ScrollArea className="flex-1 py-2">
+              {/* Current Role Indicator */}
+              <div className="px-3 mb-2">
+                <div className="rounded-lg border bg-muted/30 p-2.5 flex items-center gap-2">
+                  <div className="h-7 w-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold" style={{ backgroundColor: ROLE_COLORS[role] }}>
+                    {currentUser.avatar}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[11px] font-medium truncate">{currentUser.name}</p>
+                    <p className="text-[10px] text-muted-foreground truncate">{ROLE_LABELS[role]}</p>
+                  </div>
+                </div>
+              </div>
+              <Separator className="mb-2" />
               <nav className="flex flex-col gap-1 px-2">
                 {navItems.map(item => {
                   const Icon = item.icon;

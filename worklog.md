@@ -1,21 +1,27 @@
 ---
 Task ID: 1
-Agent: Main
-Task: Fix dev server stability and verify full UoH SCMS application
+Agent: Main Agent
+Task: Implement role-based dashboard views with role switcher for UoH SCMS
 
 Work Log:
-- Investigated dev server stability issue - Next.js dev server process was being killed when bash sessions terminated
-- Discovered that the Caddy gateway (PID 2) was unable to reach Next.js when server died
-- Found that using a double-fork nohup approach kept the server alive persistently
-- Verified all 8 section components render correctly through Agent Browser
-- Fixed HTML validation issue: Changed p tags containing Skeleton to span blocks in attendance-section.tsx
-- Verified no critical console errors (only non-breaking HTML nesting warnings)
-- Tested Caddy gateway forwarding - confirmed working at http://localhost:81/
+- Updated `src/lib/store.ts` with Role type (9 roles), ROLE_PRESETS (user per role), ROLE_SECTIONS (sidebar access per role), ROLE_LABELS, and setCurrentRole action
+- Updated `src/app/page.tsx` with role switcher dropdown in header (Shield icon + role label), role-based sidebar filtering, role-colored avatars, and user profile with role badge
+- Rewrote `src/components/sections/dashboard-section.tsx` with 8 distinct dashboard views:
+  - AdminDashboard (super_admin + admin): Full overview with all stats, charts, active sessions, violations, recent activity
+  - HODDashboard: Department-focused stats, courses, violations
+  - FacultyDashboard: My courses, quick actions panel, attendance stats
+  - LabAssistantDashboard: Lab sessions, equipment zones status, capture methods
+  - StudentDashboard: Attendance ring/circle, course attendance with progress bars, upcoming actions
+  - ParentDashboard: Child overview card, attendance summary, course performance, notifications
+  - VisitorDashboard: Campus info, zones & geofences, visitor guidelines
+  - SecurityDashboard: Alert banner for pending violations, security feed, active sessions, violations chart
+- Added WelcomeBanner component with role-specific greetings and descriptions
+- Added role-specific color theming (ROLE_COLORS)
+- Verified all 9 role views render correctly via Agent Browser testing
 
 Stage Summary:
-- Application is fully functional with all 8 sections rendering correctly
-- Dev server running persistently on port 3000 via double-fork nohup
-- Caddy gateway on port 81 forwarding to Next.js successfully
-- Dashboard shows: 9 students, 4 faculty, 8 courses, 76% attendance rate, 4 pending violations
-- Full RBAC system with 9 roles and 20 users operational
-- All API routes working (dashboard, attendance, LMS, geofences, reports, violations, notifications, users)
+- Role switcher dropdown allows instant switching between 9 roles
+- Each role sees a customized dashboard with relevant widgets and data
+- Sidebar navigation adapts per role (e.g., Visitor only sees Dashboard + Geofences)
+- User profile in header shows role-specific name, avatar, email, and department
+- All views confirmed working via browser testing
