@@ -428,10 +428,10 @@ export default function AttendanceSection() {
                     <Icon className="h-5 w-5" style={{ color: card.color }} />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-xs font-medium text-muted-foreground truncate">{card.title}</p>
-                    <p className="text-xl font-bold mt-0.5" style={{ color: card.color }}>
+                    <span className="text-xs font-medium text-muted-foreground truncate block">{card.title}</span>
+                    <span className="text-xl font-bold mt-0.5 block" style={{ color: card.color }}>
                       {isLoading ? <Skeleton className="h-6 w-12" /> : card.value}
-                    </p>
+                    </span>
                   </div>
                 </div>
               </CardContent>
