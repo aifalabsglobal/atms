@@ -1,0 +1,21 @@
+{
+  "code": 200,
+  "data": {
+    "description": "",
+    "external": {},
+    "html": "<html><head>\n<title>404 Not Found</title>\n</head><body>\n<h1>Not Found</h1>\n<p>The requested URL was not found on this server.</p>\n<p>Additionally, a 404 Not Found\nerror was encountered while trying to use an ErrorDocument to handle the request.</p>\n\n</body></html>",
+    "metadata": {},
+    "title": "404 Not Found",
+    "url": "https://crraoaimscs.res.in/btech-course-structure/",
+    "usage": {
+      "tokens": 71
+    },
+    "warning": "Target URL returned error 404: Not Found"
+  },
+  "meta": {
+    "usage": {
+      "tokens": 71
+    }
+  },
+  "status": 20000
+}

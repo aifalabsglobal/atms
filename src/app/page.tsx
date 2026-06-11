@@ -6,6 +6,7 @@ import {
   LayoutDashboard, ScanLine, BookOpen, Users, ShieldAlert,
   BarChart3, MapPin, Settings, Menu, X, Bell, ChevronDown,
   GraduationCap, LogOut, Moon, Sun, Search, Shield, UserCircle,
+  Database, CalendarDays,
 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
@@ -22,27 +23,30 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Toaster } from '@/components/ui/toaster';
 import { useQuery } from '@tanstack/react-query';
-import dynamic from 'next/dynamic';
 import { Providers } from '@/components/providers';
 
-// Lazy load sections for performance
-const DashboardSection = dynamic(() => import('@/components/sections/dashboard-section'), { ssr: false });
-const AttendanceSection = dynamic(() => import('@/components/sections/attendance-section'), { ssr: false });
-const LmsSection = dynamic(() => import('@/components/sections/lms-section'), { ssr: false });
-const UsersSection = dynamic(() => import('@/components/sections/users-section'), { ssr: false });
-const ViolationsSection = dynamic(() => import('@/components/sections/violations-section'), { ssr: false });
-const ReportsSection = dynamic(() => import('@/components/sections/reports-section'), { ssr: false });
-const GeofencesSection = dynamic(() => import('@/components/sections/geofences-section'), { ssr: false });
-const SettingsSection = dynamic(() => import('@/components/sections/settings-section'), { ssr: false });
+// Direct imports for all sections
+import DashboardSection from '@/components/sections/dashboard-section';
+import AttendanceSection from '@/components/sections/attendance-section';
+import LmsSection from '@/components/sections/lms-section';
+import UsersSection from '@/components/sections/users-section';
+import ViolationsSection from '@/components/sections/violations-section';
+import ReportsSection from '@/components/sections/reports-section';
+import GeofencesSection from '@/components/sections/geofences-section';
+import SettingsSection from '@/components/sections/settings-section';
+import MastersSection from '@/components/sections/masters-section';
+import CalendarSection from '@/components/sections/calendar-section';
 
 const allNavItems: { id: Section; label: string; icon: React.ElementType; badge?: string }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { id: 'masters', label: 'Masters', icon: Database },
   { id: 'attendance', label: 'Attendance', icon: ScanLine },
   { id: 'lms', label: 'Learning Mgmt', icon: BookOpen },
   { id: 'users', label: 'Users & RBAC', icon: Users },
   { id: 'violations', label: 'Violations', icon: ShieldAlert, badge: 'alert' },
   { id: 'reports', label: 'Reports', icon: BarChart3 },
   { id: 'geofences', label: 'Geofences', icon: MapPin },
+  { id: 'calendar', label: 'Calendar', icon: CalendarDays },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
@@ -85,6 +89,8 @@ function AppContent() {
       case 'violations': return <ViolationsSection />;
       case 'reports': return <ReportsSection />;
       case 'geofences': return <GeofencesSection />;
+      case 'calendar': return <CalendarSection />;
+      case 'masters': return <MastersSection />;
       case 'settings': return <SettingsSection />;
       default: return <DashboardSection />;
     }
@@ -309,9 +315,9 @@ function AppContent() {
             {/* Footer */}
             <footer className="border-t mt-auto">
               <div className="px-4 md:px-6 py-3 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-muted-foreground">
-                <span>© 2026 University of Hyderabad — Smart Campus Management System</span>
+                <span>© 2026 JNTUH Engineering College — Smart Campus Management System</span>
                 <div className="flex items-center gap-4">
-                  <span>Powered by <strong className="text-[#1A3C6E]">UoH SCMS</strong></span>
+                  <span>Powered by <strong className="text-[#1A3C6E]">JNTUH SCMS</strong></span>
                   <Separator orientation="vertical" className="h-3" />
                   <span>IT Department</span>
                 </div>

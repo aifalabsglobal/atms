@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type Section = 'dashboard' | 'attendance' | 'lms' | 'users' | 'violations' | 'reports' | 'geofences' | 'settings';
+export type Section = 'dashboard' | 'attendance' | 'lms' | 'users' | 'violations' | 'reports' | 'geofences' | 'calendar' | 'masters' | 'settings';
 
 export type Role = 'super_admin' | 'admin' | 'hod' | 'faculty' | 'lab_assistant' | 'student' | 'parent' | 'visitor' | 'security';
 
@@ -29,15 +29,15 @@ export const ROLE_PRESETS: Record<Role, CurrentUser> = {
   super_admin: {
     id: 'u1',
     name: 'Dr. Ramesh Kumar',
-    email: 'admin@uohyd.ac.in',
+    email: 'admin@jntuh.ac.in',
     role: 'super_admin',
-    department: 'IT Department',
+    department: 'Administration',
     avatar: 'RK',
   },
   admin: {
     id: 'u2',
     name: 'Priya Sharma',
-    email: 'priya.admin@uohyd.ac.in',
+    email: 'priya.admin@jntuh.ac.in',
     role: 'admin',
     department: 'Administration',
     avatar: 'PS',
@@ -45,53 +45,53 @@ export const ROLE_PRESETS: Record<Role, CurrentUser> = {
   hod: {
     id: 'u5',
     name: 'Dr. Suresh Babu',
-    email: 'suresh.hod@uohyd.ac.in',
+    email: 'suresh.hod@jntuh.ac.in',
     role: 'hod',
-    department: 'School of Computer Science',
+    department: 'Computer Science & Engineering',
     avatar: 'SB',
   },
   faculty: {
     id: 'u6',
     name: 'Dr. Anil Verma',
-    email: 'anil.faculty@uohyd.ac.in',
+    email: 'anil.faculty@jntuh.ac.in',
     role: 'faculty',
-    department: 'School of Computer Science',
+    department: 'Computer Science & Engineering',
     avatar: 'AV',
   },
   lab_assistant: {
     id: 'u8',
     name: 'Rajesh Kumar',
-    email: 'rajesh.lab@uohyd.ac.in',
+    email: 'rajesh.lab@jntuh.ac.in',
     role: 'lab_assistant',
-    department: 'School of Computer Science',
+    department: 'Computer Science & Engineering',
     avatar: 'RK',
   },
   student: {
     id: 'u10',
     name: 'Arun Kumar',
-    email: 'arun.student@uohyd.ac.in',
+    email: 'arun.student@jntuh.ac.in',
     role: 'student',
-    department: 'School of Computer Science',
+    department: 'Computer Science & Engineering',
     avatar: 'AK',
   },
   parent: {
     id: 'u18',
     name: 'Satish Reddy',
-    email: 'satish.parent@uohyd.ac.in',
+    email: 'satish.parent@jntuh.ac.in',
     role: 'parent',
     avatar: 'SR',
   },
   visitor: {
     id: 'u19',
     name: 'Meera Joshi',
-    email: 'meera.visitor@uohyd.ac.in',
+    email: 'meera.visitor@jntuh.ac.in',
     role: 'visitor',
     avatar: 'MJ',
   },
   security: {
     id: 'u20',
     name: 'Ganesh Patil',
-    email: 'ganesh.security@uohyd.ac.in',
+    email: 'ganesh.security@jntuh.ac.in',
     role: 'security',
     avatar: 'GP',
   },
@@ -99,15 +99,15 @@ export const ROLE_PRESETS: Record<Role, CurrentUser> = {
 
 // Which sidebar sections each role can access
 export const ROLE_SECTIONS: Record<Role, Section[]> = {
-  super_admin: ['dashboard', 'attendance', 'lms', 'users', 'violations', 'reports', 'geofences', 'settings'],
-  admin: ['dashboard', 'attendance', 'lms', 'users', 'violations', 'reports', 'geofences', 'settings'],
-  hod: ['dashboard', 'attendance', 'lms', 'users', 'violations', 'reports', 'geofences'],
-  faculty: ['dashboard', 'attendance', 'lms', 'violations', 'reports'],
-  lab_assistant: ['dashboard', 'attendance', 'geofences'],
-  student: ['dashboard', 'attendance', 'lms', 'reports'],
-  parent: ['dashboard', 'attendance', 'reports'],
-  visitor: ['dashboard', 'geofences'],
-  security: ['dashboard', 'attendance', 'violations', 'geofences'],
+  super_admin: ['dashboard', 'masters', 'attendance', 'lms', 'users', 'violations', 'reports', 'geofences', 'calendar', 'settings'],
+  admin: ['dashboard', 'masters', 'attendance', 'lms', 'users', 'violations', 'reports', 'geofences', 'calendar', 'settings'],
+  hod: ['dashboard', 'attendance', 'lms', 'users', 'violations', 'reports', 'geofences', 'calendar'],
+  faculty: ['dashboard', 'attendance', 'lms', 'violations', 'reports', 'calendar'],
+  lab_assistant: ['dashboard', 'attendance', 'geofences', 'calendar'],
+  student: ['dashboard', 'attendance', 'lms', 'reports', 'calendar'],
+  parent: ['dashboard', 'attendance', 'reports', 'calendar'],
+  visitor: ['dashboard', 'geofences', 'calendar'],
+  security: ['dashboard', 'attendance', 'violations', 'geofences', 'calendar'],
 };
 
 interface AppState {

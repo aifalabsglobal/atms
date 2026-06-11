@@ -1,7 +1,7 @@
 import { db } from '@/lib/db';
 
 async function main() {
-  console.log('🌱 Seeding UoH SCMS database...');
+  console.log('🌱 Seeding JNTUH SCMS database with R22 Regulation data...');
 
   // Clean existing data (order matters for FK constraints)
   await db.notification.deleteMany();
@@ -20,146 +20,415 @@ async function main() {
   await db.timetableSlot.deleteMany();
   await db.course.deleteMany();
   await db.program.deleteMany();
+  await db.calendarEvent.deleteMany();
+  await db.subject.deleteMany();
+  await db.semester.deleteMany();
+  await db.academicYear.deleteMany();
   await db.biometricRecord.deleteMany();
   await db.faceEmbedding.deleteMany();
   await db.geofence.deleteMany();
   await db.user.deleteMany();
+  await db.department.deleteMany();
 
   // ==========================================
-  // 1. USERS (9 roles as per document)
+  // 1. DEPARTMENTS (JNTUH Engineering College)
   // ==========================================
-  const users = await Promise.all([
-    db.user.create({ data: { email: 'admin@uohyd.ac.in', name: 'Dr. Ramesh Kumar', employeeId: 'UOH001', department: 'IT Department', role: 'super_admin', status: 'active', phone: '+91-9876543210' } }),
-    db.user.create({ data: { email: 'dean.it@uohyd.ac.in', name: 'Prof. Anitha Sharma', employeeId: 'UOH002', department: 'Computer Science', role: 'admin', status: 'active', phone: '+91-9876543211' } }),
-    db.user.create({ data: { email: 'hod.cs@uohyd.ac.in', name: 'Dr. Venkat Reddy', employeeId: 'UOH003', department: 'Computer Science', role: 'hod', status: 'active', phone: '+91-9876543212' } }),
-    db.user.create({ data: { email: 'faculty.suresh@uohyd.ac.in', name: 'Dr. Suresh Babu', employeeId: 'UOH004', department: 'Computer Science', role: 'faculty', status: 'active', phone: '+91-9876543213' } }),
-    db.user.create({ data: { email: 'faculty.priya@uohyd.ac.in', name: 'Dr. Priya Menon', employeeId: 'UOH005', department: 'Mathematics', role: 'faculty', status: 'active', phone: '+91-9876543214' } }),
-    db.user.create({ data: { email: 'lab.ravi@uohyd.ac.in', name: 'Ravi Teja', employeeId: 'UOH006', department: 'Computer Science', role: 'lab_assistant', status: 'active', phone: '+91-9876543215' } }),
-    db.user.create({ data: { email: 'student.arun@uohyd.ac.in', name: 'Arun Kumar', employeeId: 'STU001', department: 'Computer Science', role: 'student', status: 'active', phone: '+91-9876543216' } }),
-    db.user.create({ data: { email: 'student.bhavya@uohyd.ac.in', name: 'Bhavya Sri', employeeId: 'STU002', department: 'Computer Science', role: 'student', status: 'active', phone: '+91-9876543217' } }),
-    db.user.create({ data: { email: 'student.chaitanya@uohyd.ac.in', name: 'Chaitanya Rao', employeeId: 'STU003', department: 'Computer Science', role: 'student', status: 'active', phone: '+91-9876543218' } }),
-    db.user.create({ data: { email: 'student.deepa@uohyd.ac.in', name: 'Deepa Nair', employeeId: 'STU004', department: 'Mathematics', role: 'student', status: 'active', phone: '+91-9876543219' } }),
-    db.user.create({ data: { email: 'student.eshwar@uohyd.ac.in', name: 'Eshwar Prasad', employeeId: 'STU005', department: 'Computer Science', role: 'student', status: 'active', phone: '+91-9876543220' } }),
-    db.user.create({ data: { email: 'student.fatima@uohyd.ac.in', name: 'Fatima Begum', employeeId: 'STU006', department: 'Electronics', role: 'student', status: 'active', phone: '+91-9876543221' } }),
-    db.user.create({ data: { email: 'student.ganesh@uohyd.ac.in', name: 'Ganesh Patil', employeeId: 'STU007', department: 'Computer Science', role: 'student', status: 'active', phone: '+91-9876543222' } }),
-    db.user.create({ data: { email: 'student.harika@uohyd.ac.in', name: 'Harika Devi', employeeId: 'STU008', department: 'Mathematics', role: 'student', status: 'active', phone: '+91-9876543223' } }),
-    db.user.create({ data: { email: 'student.irfan@uohyd.ac.in', name: 'Irfan Khan', employeeId: 'STU009', department: 'Computer Science', role: 'student', status: 'suspended', phone: '+91-9876543224' } }),
-    db.user.create({ data: { email: 'parent.arun@uohyd.ac.in', name: 'Mr. Rajesh Kumar', department: 'N/A', role: 'parent', status: 'active', phone: '+91-9876543225' } }),
-    db.user.create({ data: { email: 'visitor.john@uohyd.ac.in', name: 'John Smith', department: 'External', role: 'visitor', status: 'active', phone: '+91-9876543226' } }),
-    db.user.create({ data: { email: 'security.murthy@uohyd.ac.in', name: 'Murthy Garu', employeeId: 'SEC001', department: 'Security', role: 'security', status: 'active', phone: '+91-9876543227' } }),
-    db.user.create({ data: { email: 'faculty.rao@uohyd.ac.in', name: 'Prof. Lakshmi Rao', employeeId: 'UOH007', department: 'Electronics', role: 'faculty', status: 'active', phone: '+91-9876543228' } }),
-    db.user.create({ data: { email: 'student.jaya@uohyd.ac.in', name: 'Jaya Lakshmi', employeeId: 'STU010', department: 'Electronics', role: 'student', status: 'active', phone: '+91-9876543229' } }),
+  console.log('📦 Creating departments...');
+  const departments = await Promise.all([
+    db.department.create({ data: { name: 'Computer Science & Engineering', code: 'CSE', building: 'CSE Block', floor: '1-3', phone: '+91-40-23158661', email: 'cse@jntuh.ac.in', isActive: true } }),
+    db.department.create({ data: { name: 'CSE (Artificial Intelligence & Machine Learning)', code: 'CSE-AIML', building: 'CSE Block', floor: '4', phone: '+91-40-23158662', email: 'aiml@jntuh.ac.in', isActive: true } }),
+    db.department.create({ data: { name: 'CSE (Data Science)', code: 'CSE-DS', building: 'CSE Block', floor: '4', phone: '+91-40-23158663', email: 'ds@jntuh.ac.in', isActive: true } }),
+    db.department.create({ data: { name: 'CSE (Networks)', code: 'CSE-NT', building: 'CSE Block', floor: '3', phone: '+91-40-23158664', email: 'nt@jntuh.ac.in', isActive: true } }),
+    db.department.create({ data: { name: 'Electronics & Communication Engineering', code: 'ECE', building: 'ECE Block', floor: '1-3', phone: '+91-40-23158665', email: 'ece@jntuh.ac.in', isActive: true } }),
+    db.department.create({ data: { name: 'Electrical & Electronics Engineering', code: 'EEE', building: 'EEE Block', floor: '1-2', phone: '+91-40-23158666', email: 'eee@jntuh.ac.in', isActive: true } }),
+    db.department.create({ data: { name: 'Mechanical Engineering', code: 'MECH', building: 'MECH Block', floor: '1-2', phone: '+91-40-23158667', email: 'mech@jntuh.ac.in', isActive: true } }),
+    db.department.create({ data: { name: 'Civil Engineering', code: 'CIVIL', building: 'CIVIL Block', floor: '1-2', phone: '+91-40-23158668', email: 'civil@jntuh.ac.in', isActive: true } }),
+    db.department.create({ data: { name: 'Information Technology', code: 'IT', building: 'IT Block', floor: '1-2', phone: '+91-40-23158669', email: 'it@jntuh.ac.in', isActive: true } }),
+    db.department.create({ data: { name: 'Computer Science & Applied Mathematics', code: 'CSAM', building: 'CSE Block', floor: '5', phone: '+91-40-23158670', email: 'csam@jntuh.ac.in', isActive: true } }),
   ]);
 
-  const [admin, , hod, faculty1, faculty2, , s1, s2, s3, s4, s5, s6, s7, s8, , , , , faculty3, s10] = users;
+  const [cseDept, aimlDept, dsDept, ntDept, eceDept, eeeDept, mechDept, civilDept, itDept, csamDept] = departments;
+
+  // ==========================================
+  // 2. ACADEMIC YEAR
+  // ==========================================
+  console.log('📦 Creating academic year...');
+  const academicYear = await db.academicYear.create({
+    data: {
+      name: '2025-2026',
+      code: 'AY2526',
+      startDate: '2025-07-01',
+      endDate: '2026-06-30',
+      status: 'active',
+      regulation: 'R22',
+      isActive: true,
+    }
+  });
+
+  // ==========================================
+  // 3. SEMESTERS (8 semesters for 4-year B.Tech)
+  // ==========================================
+  console.log('📦 Creating semesters...');
+  const semestersData = [
+    { name: 'I Year I Sem', code: 'I-I', year: 1, semester: 1, startDate: '2025-07-01', endDate: '2025-11-30', status: 'active' },
+    { name: 'I Year II Sem', code: 'I-II', year: 1, semester: 2, startDate: '2025-12-01', endDate: '2026-04-30', status: 'upcoming' },
+    { name: 'II Year I Sem', code: 'II-I', year: 2, semester: 1, startDate: '2025-07-01', endDate: '2025-11-30', status: 'active' },
+    { name: 'II Year II Sem', code: 'II-II', year: 2, semester: 2, startDate: '2025-12-01', endDate: '2026-04-30', status: 'upcoming' },
+    { name: 'III Year I Sem', code: 'III-I', year: 3, semester: 1, startDate: '2025-07-01', endDate: '2025-11-30', status: 'active' },
+    { name: 'III Year II Sem', code: 'III-II', year: 3, semester: 2, startDate: '2025-12-01', endDate: '2026-04-30', status: 'upcoming' },
+    { name: 'IV Year I Sem', code: 'IV-I', year: 4, semester: 1, startDate: '2025-07-01', endDate: '2025-11-30', status: 'active' },
+    { name: 'IV Year II Sem', code: 'IV-II', year: 4, semester: 2, startDate: '2025-12-01', endDate: '2026-04-30', status: 'upcoming' },
+  ];
+
+  const semesters = await Promise.all(
+    semestersData.map(s => db.semester.create({
+      data: { ...s, academicYearId: academicYear.id, isActive: true }
+    }))
+  );
+
+  const [semI1, semI2, semII1, semII2, semIII1, semIII2, semIV1, semIV2] = semesters;
+
+  // ==========================================
+  // 4. SUBJECTS (JNTU R22 CSE pattern)
+  // ==========================================
+  console.log('📦 Creating subjects...');
+  const subjectsData = [
+    // I Year I Sem (CSE)
+    { code: 'MA101BS', name: 'Mathematics-I', departmentId: cseDept.id, semesterId: semI1.id, credits: 3, lectureHours: 3, tutorialHours: 1, labHours: 0, type: 'core', category: 'BS', syllabus: 'Matrices, Eigen values, Eigen vectors, Partial differentiation, Multiple integrals, Special functions', textbooks: JSON.stringify(['Higher Engineering Mathematics by B.S. Grewal', 'Advanced Engineering Mathematics by Erwin Kreyszig']), referenceBooks: JSON.stringify(['Engineering Mathematics by N.P. Bali']) },
+    { code: 'AP101BS', name: 'Applied Physics', departmentId: cseDept.id, semesterId: semI1.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'BS', syllabus: 'Wave Optics, Lasers, Fiber Optics, Quantum Mechanics, Solid State Physics, Semiconductors', textbooks: JSON.stringify(['Engineering Physics by Avadhanulu & Kshirsagar', 'Physics for Engineers by M.N. Avadhanulu']), referenceBooks: JSON.stringify(['Modern Engineering Physics by A.S. Vasudeva']) },
+    { code: 'CS101ES', name: 'Programming for Problem Solving', departmentId: cseDept.id, semesterId: semI1.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'ES', syllabus: 'Introduction to C, Variables, Data Types, Operators, Control Structures, Arrays, Strings, Functions, Pointers, Structures, File Handling', textbooks: JSON.stringify(['Let Us C by Yashavant Kanetkar', 'Programming in ANSI C by E. Balaguruswamy']), referenceBooks: JSON.stringify(['C Programming: A Modern Approach by K.N. King']) },
+    { code: 'EE101ES', name: 'Basic Electrical Engineering', departmentId: cseDept.id, semesterId: semI1.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'ES', syllabus: 'DC Circuits, AC Circuits, Transformers, Electrical Machines, Measuring Instruments', textbooks: JSON.stringify(['Basic Electrical Engineering by V.K. Mehta', 'Electrical Technology by B.L. Theraja']), referenceBooks: JSON.stringify(['Fundamentals of Electrical Engineering by R. Prasad']) },
+    { code: 'ME101ES', name: 'Engineering Drawing', departmentId: cseDept.id, semesterId: semI1.id, credits: 3, lectureHours: 2, tutorialHours: 0, labHours: 3, type: 'core', category: 'ES', syllabus: 'Introduction to Engineering Drawing, Conic Sections, Projections of Points, Lines, Planes, Solids, Isometric Projections', textbooks: JSON.stringify(['Engineering Drawing by N.D. Bhatt', 'Engineering Graphics by P.J. Shah']), referenceBooks: JSON.stringify(['Machine Drawing by N.D. Bhatt']) },
+    { code: 'AP111BS', name: 'Applied Physics Lab', departmentId: cseDept.id, semesterId: semI1.id, credits: 1, lectureHours: 0, tutorialHours: 0, labHours: 3, type: 'lab', category: 'BS' },
+    { code: 'CS111ES', name: 'Programming Lab', departmentId: cseDept.id, semesterId: semI1.id, credits: 1, lectureHours: 0, tutorialHours: 0, labHours: 3, type: 'lab', category: 'ES' },
+    { code: 'MC101BS', name: 'English', departmentId: cseDept.id, semesterId: semI1.id, credits: 2, lectureHours: 2, tutorialHours: 0, labHours: 0, type: 'audit', category: 'HS', syllabus: 'Grammar, Vocabulary, Reading Comprehension, Writing Skills, Communication Skills' },
+    { code: 'CS112ES', name: 'IT Workshop', departmentId: cseDept.id, semesterId: semI1.id, credits: 1, lectureHours: 0, tutorialHours: 0, labHours: 3, type: 'lab', category: 'ES' },
+
+    // I Year II Sem (CSE)
+    { code: 'MA201BS', name: 'Mathematics-II', departmentId: cseDept.id, semesterId: semI2.id, credits: 4, lectureHours: 3, tutorialHours: 1, labHours: 0, type: 'core', category: 'BS', syllabus: 'Ordinary Differential Equations, Laplace Transforms, Vector Calculus, Fourier Series, PDE', textbooks: JSON.stringify(['Higher Engineering Mathematics by B.S. Grewal']), referenceBooks: JSON.stringify(['Advanced Engineering Mathematics by Erwin Kreyszig']) },
+    { code: 'CH201BS', name: 'Chemistry', departmentId: cseDept.id, semesterId: semI2.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'BS', syllabus: 'Water Technology, Corrosion, Polymers, Fuels, Lubricants, Phase Rule, Chemical Bonding', textbooks: JSON.stringify(['Engineering Chemistry by P.C. Jain & Monika']), referenceBooks: JSON.stringify(['Engineering Chemistry by Shashi Chawla']) },
+    { code: 'CS201ES', name: 'Data Structures', departmentId: cseDept.id, semesterId: semI2.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'ES', syllabus: 'Arrays, Linked Lists, Stacks, Queues, Trees, Graphs, Sorting, Searching, Hashing', textbooks: JSON.stringify(['Data Structures through C by G.S. Baluja', 'Data Structures and Algorithms by A.V. Aho']), referenceBooks: JSON.stringify(['Data Structures using C by Reema Thareja']) },
+    { code: 'EC201ES', name: 'Digital Logic Design', departmentId: cseDept.id, semesterId: semI2.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'ES', syllabus: 'Number Systems, Boolean Algebra, Combinational Circuits, Sequential Circuits, Memory, PLA, PAL', textbooks: JSON.stringify(['Digital Design by M. Morris Mano', 'Fundamentals of Digital Logic by Brown & Vranesic']), referenceBooks: JSON.stringify(['Digital Logic and Computer Design by M. Morris Mano']) },
+    { code: 'CS211ES', name: 'Data Structures Lab', departmentId: cseDept.id, semesterId: semI2.id, credits: 1, lectureHours: 0, tutorialHours: 0, labHours: 3, type: 'lab', category: 'ES' },
+    { code: 'CH211BS', name: 'Chemistry Lab', departmentId: cseDept.id, semesterId: semI2.id, credits: 1, lectureHours: 0, tutorialHours: 0, labHours: 3, type: 'lab', category: 'BS' },
+    { code: 'MC201', name: 'Environmental Science', departmentId: cseDept.id, semesterId: semI2.id, credits: 0, lectureHours: 2, tutorialHours: 0, labHours: 0, type: 'audit', category: 'HS', syllabus: 'Ecosystems, Biodiversity, Environmental Pollution, Natural Resources, Social Issues' },
+    { code: 'CS202ES', name: 'Discrete Mathematics', departmentId: cseDept.id, semesterId: semI2.id, credits: 3, lectureHours: 3, tutorialHours: 1, labHours: 0, type: 'core', category: 'BS', syllabus: 'Set Theory, Relations, Functions, Graph Theory, Combinatorics, Logic, Proofs, Algebraic Structures', textbooks: JSON.stringify(['Discrete Mathematics by Kenneth H. Rosen', 'Discrete Mathematical Structures by Kolman & Busby']), referenceBooks: JSON.stringify(['Discrete Mathematics by R. Johnsonbaugh']) },
+
+    // II Year I Sem (CSE)
+    { code: 'MA301BS', name: 'Mathematical Foundations of CS', departmentId: cseDept.id, semesterId: semII1.id, credits: 3, lectureHours: 3, tutorialHours: 1, labHours: 0, type: 'core', category: 'BS', syllabus: 'Probability, Statistics, Information Theory, Group Theory, Lattices, Boolean Algebra', textbooks: JSON.stringify(['Mathematical Foundations of Computer Science by J.K. Sharma']), referenceBooks: JSON.stringify(['Discrete Mathematics by Kenneth Rosen']) },
+    { code: 'CS301PC', name: 'Computer Organization', departmentId: cseDept.id, semesterId: semII1.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'PC', syllabus: 'Basic Computer Organization, Register Transfer, Micro-operations, CPU Design, Control Unit, Memory Organization, I/O Organization, Pipelining', textbooks: JSON.stringify(['Computer Organization by Carl Hamacher', 'Computer System Architecture by M. Morris Mano']), referenceBooks: JSON.stringify(['Computer Organization and Design by Patterson & Hennessy']) },
+    { code: 'CS302PC', name: 'Operating Systems', departmentId: cseDept.id, semesterId: semII1.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'PC', syllabus: 'Process Management, CPU Scheduling, Process Synchronization, Deadlocks, Memory Management, Virtual Memory, File Systems, I/O Systems', textbooks: JSON.stringify(['Operating System Concepts by Silberschatz, Galvin & Gagne', 'Operating Systems by William Stallings']), referenceBooks: JSON.stringify(['Modern Operating Systems by Andrew S. Tanenbaum']) },
+    { code: 'CS303PC', name: 'Database Management Systems', departmentId: cseDept.id, semesterId: semII1.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'PC', syllabus: 'ER Model, Relational Model, SQL, Normalization, Transaction Management, Concurrency Control, Recovery, Indexing, NoSQL', textbooks: JSON.stringify(['Database System Concepts by Silberschatz, Korth & Sudarshan', 'Fundamentals of Database Systems by Elmasri & Navathe']), referenceBooks: JSON.stringify(['Database Management Systems by R. Ramakrishnan']) },
+    { code: 'CS304PC', name: 'Object Oriented Programming through Java', departmentId: cseDept.id, semesterId: semII1.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'PC', syllabus: 'OOP Concepts, Java Basics, Inheritance, Polymorphism, Interfaces, Packages, Exception Handling, Multithreading, I/O, Collections, Generics, Applets, Swings, JDBC', textbooks: JSON.stringify(['Java: The Complete Reference by Herbert Schildt', 'Core Java by Cay Horstmann']), referenceBooks: JSON.stringify(['Head First Java by Kathy Sierra']) },
+    { code: 'CS311PC', name: 'OS Lab', departmentId: cseDept.id, semesterId: semII1.id, credits: 1, lectureHours: 0, tutorialHours: 0, labHours: 3, type: 'lab', category: 'PC' },
+    { code: 'CS312PC', name: 'DBMS Lab', departmentId: cseDept.id, semesterId: semII1.id, credits: 1, lectureHours: 0, tutorialHours: 0, labHours: 3, type: 'lab', category: 'PC' },
+    { code: 'CS313PC', name: 'Java Programming Lab', departmentId: cseDept.id, semesterId: semII1.id, credits: 1, lectureHours: 0, tutorialHours: 0, labHours: 3, type: 'lab', category: 'PC' },
+
+    // II Year II Sem (CSE)
+    { code: 'CS401PC', name: 'Design and Analysis of Algorithms', departmentId: cseDept.id, semesterId: semII2.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'PC', syllabus: 'Algorithm Design Techniques: Greedy, Dynamic Programming, Backtracking, Branch and Bound, NP-Completeness, Approximation Algorithms', textbooks: JSON.stringify(['Introduction to Algorithms by Cormen, Leiserson, Rivest & Stein', 'Algorithm Design by Jon Kleinberg & Eva Tardos']), referenceBooks: JSON.stringify(['Design and Analysis of Algorithms by Aho, Hopcroft & Ullman']) },
+    { code: 'CS402PC', name: 'Computer Networks', departmentId: cseDept.id, semesterId: semII2.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'PC', syllabus: 'OSI Model, TCP/IP, Data Link Layer, Network Layer, Transport Layer, Application Layer, Network Security', textbooks: JSON.stringify(['Computer Networks by Andrew S. Tanenbaum', 'Data Communications and Networking by Behrouz Forouzan']), referenceBooks: JSON.stringify(['Computer Networking: A Top-Down Approach by Kurose & Ross']) },
+    { code: 'CS403PC', name: 'Software Engineering', departmentId: cseDept.id, semesterId: semII2.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'PC', syllabus: 'Software Process Models, Requirements Engineering, Design Patterns, Testing, Project Management, Agile, UML', textbooks: JSON.stringify(['Software Engineering: A Practitioners Approach by Roger Pressman', 'Software Engineering by Ian Sommerville']), referenceBooks: JSON.stringify(['Design Patterns by Gang of Four']) },
+    { code: 'CS404PC', name: 'Python Programming', departmentId: cseDept.id, semesterId: semII2.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'PC', syllabus: 'Python Basics, Data Structures in Python, OOP in Python, Modules, File Handling, Regular Expressions, Database Connectivity, Web Scraping, Numpy, Pandas, Matplotlib', textbooks: JSON.stringify(['Python Crash Course by Eric Matthes', 'Automate the Boring Stuff with Python by Al Sweigart']), referenceBooks: JSON.stringify(['Learning Python by Mark Lutz']) },
+    { code: 'CS405PC', name: 'Theory of Computation', departmentId: cseDept.id, semesterId: semII2.id, credits: 3, lectureHours: 3, tutorialHours: 1, labHours: 0, type: 'core', category: 'PC', syllabus: 'Finite Automata, Regular Expressions, Context-Free Grammars, Push Down Automata, Turing Machines, Undecidability', textbooks: JSON.stringify(['Introduction to Theory of Computation by Michael Sipser', 'Theory of Computation by Peter Linz']), referenceBooks: JSON.stringify(['Introduction to Automata Theory by Hopcroft, Motwani & Ullman']) },
+    { code: 'CS411PC', name: 'Computer Networks Lab', departmentId: cseDept.id, semesterId: semII2.id, credits: 1, lectureHours: 0, tutorialHours: 0, labHours: 3, type: 'lab', category: 'PC' },
+    { code: 'CS412PC', name: 'Python Programming Lab', departmentId: cseDept.id, semesterId: semII2.id, credits: 1, lectureHours: 0, tutorialHours: 0, labHours: 3, type: 'lab', category: 'PC' },
+    { code: 'CS413PC', name: 'Software Engineering Lab', departmentId: cseDept.id, semesterId: semII2.id, credits: 1, lectureHours: 0, tutorialHours: 0, labHours: 3, type: 'lab', category: 'PC' },
+
+    // III Year I Sem (CSE)
+    { code: 'CS501PC', name: 'Compiler Design', departmentId: cseDept.id, semesterId: semIII1.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'PC', syllabus: 'Lexical Analysis, Syntax Analysis, Semantic Analysis, Intermediate Code Generation, Code Optimization, Code Generation', textbooks: JSON.stringify(['Compilers: Principles, Techniques & Tools by Aho, Lam, Sethi & Ullman', 'Compiler Design by Aho & Ullman']), referenceBooks: JSON.stringify(['Modern Compiler Implementation by Andrew Appel']) },
+    { code: 'CS502PC', name: 'Artificial Intelligence', departmentId: cseDept.id, semesterId: semIII1.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'PC', syllabus: 'Search Strategies, Knowledge Representation, Reasoning, Planning, Learning, NLP, Expert Systems, Neural Networks', textbooks: JSON.stringify(['Artificial Intelligence: A Modern Approach by Russell & Norvig', 'AI by Elaine Rich & Kevin Knight']), referenceBooks: JSON.stringify(['Artificial Intelligence by Nils Nilsson']) },
+    { code: 'CS503PC', name: 'Machine Learning', departmentId: cseDept.id, semesterId: semIII1.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'PC', syllabus: 'Supervised Learning, Unsupervised Learning, Regression, Classification, SVM, Decision Trees, Ensemble Methods, Neural Networks, Reinforcement Learning', textbooks: JSON.stringify(['Machine Learning by Tom Mitchell', 'Pattern Recognition and Machine Learning by Christopher Bishop']), referenceBooks: JSON.stringify(['Elements of Statistical Learning by Hastie, Tibshirani & Friedman']) },
+    { code: 'CS504PC', name: 'Web Technologies', departmentId: cseDept.id, semesterId: semIII1.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'PC', syllabus: 'HTML5, CSS3, JavaScript, React/Angular, Node.js, Express, REST APIs, MongoDB, Web Security', textbooks: JSON.stringify(['Web Technologies by Uttam K. Roy', 'Learning Web Design by Jennifer Robbins']), referenceBooks: JSON.stringify(['Eloquent JavaScript by Marijn Haverbeke']) },
+    { code: 'CS505PC', name: 'Data Warehousing & Mining', departmentId: cseDept.id, semesterId: semIII1.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'PC', syllabus: 'Data Warehouse Architecture, OLAP, Data Preprocessing, Association Rules, Classification, Clustering, Web Mining, Text Mining', textbooks: JSON.stringify(['Data Mining: Concepts and Techniques by Jiawei Han', 'Data Warehousing by W.H. Inmon']), referenceBooks: JSON.stringify(['Introduction to Data Mining by Tan, Steinbach & Kumar']) },
+    { code: 'CS511PC', name: 'AI & ML Lab', departmentId: cseDept.id, semesterId: semIII1.id, credits: 1, lectureHours: 0, tutorialHours: 0, labHours: 3, type: 'lab', category: 'PC' },
+    { code: 'CS512PC', name: 'Web Technologies Lab', departmentId: cseDept.id, semesterId: semIII1.id, credits: 1, lectureHours: 0, tutorialHours: 0, labHours: 3, type: 'lab', category: 'PC' },
+
+    // III Year II Sem (CSE)
+    { code: 'CS601PC', name: 'Deep Learning', departmentId: cseDept.id, semesterId: semIII2.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'PC', syllabus: 'Neural Network Fundamentals, CNNs, RNNs, LSTMs, GANs, Autoencoders, Transfer Learning, Attention Mechanisms, Transformers', textbooks: JSON.stringify(['Deep Learning by Ian Goodfellow, Yoshua Bengio & Aaron Courville', 'Dive into Deep Learning']), referenceBooks: JSON.stringify(['Neural Networks and Deep Learning by Michael Nielsen']) },
+    { code: 'CS602PC', name: 'Natural Language Processing', departmentId: cseDept.id, semesterId: semIII2.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'PC', syllabus: 'Tokenization, POS Tagging, NER, Parsing, Word Embeddings, Seq2Seq, Attention, BERT, GPT, Text Classification, Sentiment Analysis', textbooks: JSON.stringify(['Speech and Language Processing by Jurafsky & Martin', 'NLP with Python by Bird, Klein & Loper']), referenceBooks: JSON.stringify(['Foundations of Statistical NLP by Manning & Schutze']) },
+    { code: 'CS603PC', name: 'Cloud Computing', departmentId: cseDept.id, semesterId: semIII2.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'PC', syllabus: 'Cloud Architecture, Virtualization, AWS, Azure, Google Cloud, Containers, Kubernetes, Serverless, Microservices, Cloud Security', textbooks: JSON.stringify(['Cloud Computing by Thomas Erl', 'Cloud Computing: Concepts, Technology & Architecture']), referenceBooks: JSON.stringify(['Architecting the Cloud by Michael Kavis']) },
+    { code: 'CS6XXPE', name: 'Professional Elective-I', departmentId: cseDept.id, semesterId: semIII2.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'professional_elective', category: 'PE', syllabus: 'Elective course as per student choice from the offered list' },
+    { code: 'CS611PC', name: 'Deep Learning Lab', departmentId: cseDept.id, semesterId: semIII2.id, credits: 1, lectureHours: 0, tutorialHours: 0, labHours: 3, type: 'lab', category: 'PC' },
+    { code: 'CS612PC', name: 'Cloud Computing Lab', departmentId: cseDept.id, semesterId: semIII2.id, credits: 1, lectureHours: 0, tutorialHours: 0, labHours: 3, type: 'lab', category: 'PC' },
+    { code: 'CS613PC', name: 'Comprehensive Viva', departmentId: cseDept.id, semesterId: semIII2.id, credits: 2, lectureHours: 0, tutorialHours: 0, labHours: 0, type: 'core', category: 'PC' },
+    { code: 'CS604PC', name: 'Management Science', departmentId: cseDept.id, semesterId: semIII2.id, credits: 2, lectureHours: 2, tutorialHours: 0, labHours: 0, type: 'core', category: 'HS', syllabus: 'Management Concepts, Planning, Organizing, Staffing, Directing, Controlling, Marketing Management, Financial Management', textbooks: JSON.stringify(['Management Science by Aryasri']) },
+
+    // IV Year I Sem (CSE)
+    { code: 'CS701PC', name: 'Big Data Analytics', departmentId: cseDept.id, semesterId: semIV1.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'PC', syllabus: 'Big Data Concepts, Hadoop Ecosystem, MapReduce, HDFS, Hive, Pig, Spark, NoSQL, Stream Processing, Big Data Visualization', textbooks: JSON.stringify(['Big Data: Principles and Best Practices by Holistic'], 'Hadoop: The Definitive Guide by Tom White'), referenceBooks: JSON.stringify(['Spark: The Definitive Guide']) },
+    { code: 'CS7XXPE1', name: 'Professional Elective-II', departmentId: cseDept.id, semesterId: semIV1.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'professional_elective', category: 'PE' },
+    { code: 'CS7XXPE2', name: 'Professional Elective-III', departmentId: cseDept.id, semesterId: semIV1.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'professional_elective', category: 'PE' },
+    { code: 'CS7XXOE', name: 'Open Elective', departmentId: cseDept.id, semesterId: semIV1.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'open_elective', category: 'OE' },
+    { code: 'CS711PC', name: 'Big Data Lab', departmentId: cseDept.id, semesterId: semIV1.id, credits: 1, lectureHours: 0, tutorialHours: 0, labHours: 3, type: 'lab', category: 'PC' },
+    { code: 'CS712PC', name: 'Project Phase-I', departmentId: cseDept.id, semesterId: semIV1.id, credits: 4, lectureHours: 0, tutorialHours: 0, labHours: 12, type: 'project', category: 'PC' },
+
+    // IV Year II Sem (CSE)
+    { code: 'CS8XXPE', name: 'Professional Elective-IV', departmentId: cseDept.id, semesterId: semIV2.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'professional_elective', category: 'PE' },
+    { code: 'CS8XXOE', name: 'Open Elective-II', departmentId: cseDept.id, semesterId: semIV2.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'open_elective', category: 'OE' },
+    { code: 'CS811PC', name: 'Project Phase-II', departmentId: cseDept.id, semesterId: semIV2.id, credits: 8, lectureHours: 0, tutorialHours: 0, labHours: 24, type: 'project', category: 'PC' },
+    { code: 'CS812PC', name: 'Seminar', departmentId: cseDept.id, semesterId: semIV2.id, credits: 2, lectureHours: 0, tutorialHours: 0, labHours: 0, type: 'core', category: 'PC' },
+
+    // ECE Subjects (for ECE department)
+    { code: 'EC101BS', name: 'Mathematics-I (ECE)', departmentId: eceDept.id, semesterId: semI1.id, credits: 3, lectureHours: 3, tutorialHours: 1, labHours: 0, type: 'core', category: 'BS', syllabus: 'Matrices, Eigen values, Partial differentiation, Multiple integrals', textbooks: JSON.stringify(['Higher Engineering Mathematics by B.S. Grewal']) },
+    { code: 'EC102ES', name: 'Network Analysis', departmentId: eceDept.id, semesterId: semI1.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'ES', syllabus: 'Network Theorems, Transient Analysis, Two-Port Networks, Filters', textbooks: JSON.stringify(['Network Analysis by M.E. Van Valkenburg']) },
+    { code: 'EC201PC', name: 'Electronic Devices and Circuits', departmentId: eceDept.id, semesterId: semII1.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'PC', syllabus: 'PN Junction, BJT, FET, Amplifiers, Oscillators, Operational Amplifiers', textbooks: JSON.stringify(['Electronic Devices and Circuit Theory by Boylestad & Nashelsky']) },
+    { code: 'EC202PC', name: 'Signals and Systems', departmentId: eceDept.id, semesterId: semII1.id, credits: 3, lectureHours: 3, tutorialHours: 1, labHours: 0, type: 'core', category: 'PC', syllabus: 'Continuous and Discrete Signals, Fourier Series, Fourier Transform, Laplace Transform, Z-Transform, Sampling Theorem', textbooks: JSON.stringify(['Signals and Systems by Alan V. Oppenheim']) },
+    { code: 'EC301PC', name: 'Analog Communications', departmentId: eceDept.id, semesterId: semIII1.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'PC', syllabus: 'Amplitude Modulation, Frequency Modulation, Receivers, Transmitters, Noise, Pulse Modulation', textbooks: JSON.stringify(['Analog and Digital Communications by H. Taub']) },
+    { code: 'EC302PC', name: 'Digital Communications', departmentId: eceDept.id, semesterId: semIII1.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'PC', syllabus: 'PCM, Delta Modulation, Baseband Transmission, Bandpass Modulation, Spread Spectrum, Information Theory', textbooks: JSON.stringify(['Digital Communications by John Proakis']) },
+    { code: 'EC303PC', name: 'VLSI Design', departmentId: eceDept.id, semesterId: semIII2.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'PC', syllabus: 'MOS Technology, CMOS Logic Design, Circuit Characterization, Subsystem Design, Testing', textbooks: JSON.stringify(['Principles of CMOS VLSI Design by Weste & Harris']) },
+    { code: 'EC401PC', name: 'Embedded Systems', departmentId: eceDept.id, semesterId: semIV1.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'PC', syllabus: 'Embedded System Concepts, ARM Architecture, Real-time Operating Systems, Device Drivers, Communication Protocols, IoT', textbooks: JSON.stringify(['Embedded Systems by Raj Kamal']) },
+  ];
+
+  const subjects = await Promise.all(
+    subjectsData.map(s => db.subject.create({ data: { ...s, isActive: true } }))
+  );
+
+  console.log(`   Created ${subjects.length} subjects`);
+
+  // ==========================================
+  // 5. USERS (20+ across roles)
+  // ==========================================
+  console.log('📦 Creating users...');
+  const usersData = [
+    // Super Admin
+    { email: 'vice.chancellor@jntuh.ac.in', name: 'Dr. K. Sreenivasa Raju', employeeId: 'JNTUH001', departmentId: cseDept.id, department: 'Administration', role: 'super_admin' as const, status: 'active', phone: '+91-9876543201' },
+    // Admin
+    { email: 'registrar@jntuh.ac.in', name: 'Prof. M. Manzoor Hussain', employeeId: 'JNTUH002', departmentId: cseDept.id, department: 'Administration', role: 'admin' as const, status: 'active', phone: '+91-9876543202' },
+    // HODs (one per dept)
+    { email: 'hod.cse@jntuh.ac.in', name: 'Dr. A. Vinaya Babu', employeeId: 'JNTUH003', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'hod' as const, status: 'active', phone: '+91-9876543203' },
+    { email: 'hod.aiml@jntuh.ac.in', name: 'Dr. B. Rama Devi', employeeId: 'JNTUH004', departmentId: aimlDept.id, department: 'CSE (AIML)', role: 'hod' as const, status: 'active', phone: '+91-9876543204' },
+    { email: 'hod.ds@jntuh.ac.in', name: 'Dr. C. Shoba Bindu', employeeId: 'JNTUH005', departmentId: dsDept.id, department: 'CSE (Data Science)', role: 'hod' as const, status: 'active', phone: '+91-9876543205' },
+    { email: 'hod.nt@jntuh.ac.in', name: 'Dr. D. Sreenu Naik', employeeId: 'JNTUH006', departmentId: ntDept.id, department: 'CSE (Networks)', role: 'hod' as const, status: 'active', phone: '+91-9876543206' },
+    { email: 'hod.ece@jntuh.ac.in', name: 'Dr. E. Nagabhooshanam', employeeId: 'JNTUH007', departmentId: eceDept.id, department: 'Electronics & Communication Engineering', role: 'hod' as const, status: 'active', phone: '+91-9876543207' },
+    { email: 'hod.eee@jntuh.ac.in', name: 'Dr. F. Suresh Babu', employeeId: 'JNTUH008', departmentId: eeeDept.id, department: 'Electrical & Electronics Engineering', role: 'hod' as const, status: 'active', phone: '+91-9876543208' },
+    { email: 'hod.mech@jntuh.ac.in', name: 'Dr. G. Krishna Mohana Rao', employeeId: 'JNTUH009', departmentId: mechDept.id, department: 'Mechanical Engineering', role: 'hod' as const, status: 'active', phone: '+91-9876543209' },
+    { email: 'hod.civil@jntuh.ac.in', name: 'Dr. H. Ramesh Kumar', employeeId: 'JNTUH010', departmentId: civilDept.id, department: 'Civil Engineering', role: 'hod' as const, status: 'active', phone: '+91-9876543210' },
+    { email: 'hod.it@jntuh.ac.in', name: 'Dr. I. Ramesh Reddy', employeeId: 'JNTUH011', departmentId: itDept.id, department: 'Information Technology', role: 'hod' as const, status: 'active', phone: '+91-9876543211' },
+    { email: 'hod.csam@jntuh.ac.in', name: 'Dr. J. Srinivasa Rao', employeeId: 'JNTUH012', departmentId: csamDept.id, department: 'Computer Science & Applied Mathematics', role: 'hod' as const, status: 'active', phone: '+91-9876543212' },
+    // Faculty
+    { email: 'faculty.venkat@jntuh.ac.in', name: 'Prof. Venkat Ramana', employeeId: 'JNTUH013', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'faculty' as const, status: 'active', phone: '+91-9876543213' },
+    { email: 'faculty.lakshmi@jntuh.ac.in', name: 'Dr. Lakshmi Devi', employeeId: 'JNTUH014', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'faculty' as const, status: 'active', phone: '+91-9876543214' },
+    { email: 'faculty.srinivas@jntuh.ac.in', name: 'Dr. Srinivas Reddy', employeeId: 'JNTUH015', departmentId: eceDept.id, department: 'Electronics & Communication Engineering', role: 'faculty' as const, status: 'active', phone: '+91-9876543215' },
+    { email: 'faculty.padma@jntuh.ac.in', name: 'Prof. Padmavathi', employeeId: 'JNTUH016', departmentId: eceDept.id, department: 'Electronics & Communication Engineering', role: 'faculty' as const, status: 'active', phone: '+91-9876543216' },
+    // Lab Assistant
+    { email: 'lab.ravi@jntuh.ac.in', name: 'Ravi Teja K.', employeeId: 'JNTUH017', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'lab_assistant' as const, status: 'active', phone: '+91-9876543217' },
+    // Students
+    { email: 'student.ravi@jntuh.ac.in', name: 'Ravi Kiran', employeeId: 'STU001', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'student' as const, status: 'active', phone: '+91-9876543218' },
+    { email: 'student.divya@jntuh.ac.in', name: 'Divya Sri', employeeId: 'STU002', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'student' as const, status: 'active', phone: '+91-9876543219' },
+    { email: 'student.sai@jntuh.ac.in', name: 'Sai Prasad', employeeId: 'STU003', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'student' as const, status: 'active', phone: '+91-9876543220' },
+    { email: 'student.priyanka@jntuh.ac.in', name: 'Priyanka Reddy', employeeId: 'STU004', departmentId: eceDept.id, department: 'Electronics & Communication Engineering', role: 'student' as const, status: 'active', phone: '+91-9876543221' },
+    { email: 'student.naveen@jntuh.ac.in', name: 'Naveen Kumar', employeeId: 'STU005', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'student' as const, status: 'active', phone: '+91-9876543222' },
+    { email: 'student.anusha@jntuh.ac.in', name: 'Anusha Devi', employeeId: 'STU006', departmentId: eceDept.id, department: 'Electronics & Communication Engineering', role: 'student' as const, status: 'active', phone: '+91-9876543223' },
+    { email: 'student.mahesh@jntuh.ac.in', name: 'Mahesh Babu', employeeId: 'STU007', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'student' as const, status: 'active', phone: '+91-9876543224' },
+    { email: 'student.sireesha@jntuh.ac.in', name: 'Sireesha Kumari', employeeId: 'STU008', departmentId: itDept.id, department: 'Information Technology', role: 'student' as const, status: 'active', phone: '+91-9876543225' },
+    { email: 'student.irfan@jntuh.ac.in', name: 'Irfan Khan', employeeId: 'STU009', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'student' as const, status: 'suspended', phone: '+91-9876543226' },
+    // Parent
+    { email: 'parent.rajesh@jntuh.ac.in', name: 'Mr. Rajesh Kumar', department: 'N/A', role: 'parent' as const, status: 'active', phone: '+91-9876543227' },
+    // Visitor
+    { email: 'visitor.john@jntuh.ac.in', name: 'John Smith', department: 'External', role: 'visitor' as const, status: 'active', phone: '+91-9876543228' },
+    // Security
+    { email: 'security.murthy@jntuh.ac.in', name: 'Murthy Garu', employeeId: 'SEC001', department: 'Security', role: 'security' as const, status: 'active', phone: '+91-9876543229' },
+  ];
+
+  const users = await Promise.all(
+    usersData.map(u => db.user.create({ data: u }))
+  );
+
+  const [superAdmin, adminUser, hodCSE, , , , , , , , , , faculty1, faculty2, faculty3, faculty4, labAssist, s1, s2, s3, s4, s5, s6, s7, s8, s9, parentUser, visitorUser, securityUser] = users;
   const students = users.filter(u => u.role === 'student' && u.status === 'active');
 
-  // ==========================================
-  // 2. GEOFENCES
-  // ==========================================
-  const geofences = await Promise.all([
-    db.geofence.create({ data: { name: 'School of Computer Science', type: 'circle', centerLat: 17.4563, centerLng: 78.6698, radiusMtrs: 200, building: 'CSE Building', isActive: true } }),
-    db.geofence.create({ data: { name: 'School of Mathematics', type: 'circle', centerLat: 17.4575, centerLng: 78.6710, radiusMtrs: 150, building: 'Math Building', isActive: true } }),
-    db.geofence.create({ data: { name: 'Central Library', type: 'circle', centerLat: 17.4550, centerLng: 78.6685, radiusMtrs: 100, building: 'Main Library', isActive: true } }),
-    db.geofence.create({ data: { name: 'Science Auditorium', type: 'polygon', polygonData: JSON.stringify([{lat:17.4540,lng:78.6670},{lat:17.4540,lng:78.6690},{lat:17.4555,lng:78.6690},{lat:17.4555,lng:78.6670}]), building: 'Auditorium Block', isActive: true } }),
-    db.geofence.create({ data: { name: 'Electronics Lab Complex', type: 'circle', centerLat: 17.4580, centerLng: 78.6720, radiusMtrs: 120, building: 'ECE Building', isActive: true } }),
-  ]);
+  // Set HOD references for departments
+  await db.department.update({ where: { id: cseDept.id }, data: { hodId: hodCSE.id } });
+
+  console.log(`   Created ${users.length} users`);
 
   // ==========================================
-  // 3. PROGRAMS & COURSES (LMS)
+  // 6. PROGRAMS (B.Tech programs)
   // ==========================================
+  console.log('📦 Creating programs...');
   const programs = await Promise.all([
-    db.program.create({ data: { name: 'M.Tech Computer Science', code: 'MTCS', department: 'Computer Science', duration: 2, type: 'pg', description: 'Master of Technology in Computer Science', isActive: true } }),
-    db.program.create({ data: { name: 'M.Sc Mathematics', code: 'MSMA', department: 'Mathematics', duration: 2, type: 'pg', description: 'Master of Science in Mathematics', isActive: true } }),
-    db.program.create({ data: { name: 'M.Tech Electronics', code: 'MTEC', department: 'Electronics', duration: 2, type: 'pg', description: 'Master of Technology in Electronics', isActive: true } }),
-    db.program.create({ data: { name: 'Ph.D Computer Science', code: 'PHDCS', department: 'Computer Science', duration: 5, type: 'phd', description: 'Doctor of Philosophy in Computer Science', isActive: true } }),
+    db.program.create({ data: { name: 'B.Tech Computer Science & Engineering', code: 'BT-CSE', departmentId: cseDept.id, duration: 4, type: 'ug', description: 'Bachelor of Technology in Computer Science & Engineering (R22 Regulation)', isActive: true } }),
+    db.program.create({ data: { name: 'B.Tech CSE (AI & ML)', code: 'BT-CSEAIML', departmentId: aimlDept.id, duration: 4, type: 'ug', description: 'Bachelor of Technology in CSE with specialization in AI & ML (R22 Regulation)', isActive: true } }),
+    db.program.create({ data: { name: 'B.Tech CSE (Data Science)', code: 'BT-CSEDS', departmentId: dsDept.id, duration: 4, type: 'ug', description: 'Bachelor of Technology in CSE with specialization in Data Science (R22 Regulation)', isActive: true } }),
+    db.program.create({ data: { name: 'B.Tech Electronics & Communication Engineering', code: 'BT-ECE', departmentId: eceDept.id, duration: 4, type: 'ug', description: 'Bachelor of Technology in Electronics & Communication Engineering (R22 Regulation)', isActive: true } }),
+    db.program.create({ data: { name: 'B.Tech Electrical & Electronics Engineering', code: 'BT-EEE', departmentId: eeeDept.id, duration: 4, type: 'ug', description: 'Bachelor of Technology in Electrical & Electronics Engineering (R22 Regulation)', isActive: true } }),
+    db.program.create({ data: { name: 'B.Tech Mechanical Engineering', code: 'BT-MECH', departmentId: mechDept.id, duration: 4, type: 'ug', description: 'Bachelor of Technology in Mechanical Engineering (R22 Regulation)', isActive: true } }),
+    db.program.create({ data: { name: 'B.Tech Civil Engineering', code: 'BT-CIVIL', departmentId: civilDept.id, duration: 4, type: 'ug', description: 'Bachelor of Technology in Civil Engineering (R22 Regulation)', isActive: true } }),
+    db.program.create({ data: { name: 'B.Tech Information Technology', code: 'BT-IT', departmentId: itDept.id, duration: 4, type: 'ug', description: 'Bachelor of Technology in Information Technology (R22 Regulation)', isActive: true } }),
   ]);
 
-  const courses = await Promise.all([
-    db.course.create({ data: { programId: programs[0].id, code: 'CS501', name: 'Advanced Algorithms', credits: 4, semester: 1, type: 'core', description: 'Design and analysis of advanced algorithms', instructorId: faculty1.id, syllabus: '## Unit 1: Graph Algorithms\n- Shortest paths\n- Network flow\n- Matching\n\n## Unit 2: NP-Completeness\n- P vs NP\n- NP-complete problems\n- Approximation algorithms', isActive: true } }),
-    db.course.create({ data: { programId: programs[0].id, code: 'CS502', name: 'Machine Learning', credits: 4, semester: 1, type: 'core', description: 'Foundations and applications of machine learning', instructorId: faculty1.id, syllabus: '## Unit 1: Supervised Learning\n- Linear regression\n- Classification\n- Neural networks\n\n## Unit 2: Unsupervised Learning\n- Clustering\n- Dimensionality reduction', isActive: true } }),
-    db.course.create({ data: { programId: programs[0].id, code: 'CS503', name: 'Database Systems', credits: 3, semester: 1, type: 'core', description: 'Advanced database concepts and systems', instructorId: faculty3.id, syllabus: '## Unit 1: Relational Model\n- SQL\n- Normalization\n\n## Unit 2: Transaction Processing\n- ACID properties\n- Concurrency control', isActive: true } }),
-    db.course.create({ data: { programId: programs[1].id, code: 'MA501', name: 'Linear Algebra', credits: 4, semester: 1, type: 'core', description: 'Advanced linear algebra for applications', instructorId: faculty2.id, isActive: true } }),
-    db.course.create({ data: { programId: programs[1].id, code: 'MA502', name: 'Probability & Statistics', credits: 3, semester: 1, type: 'core', description: 'Probability theory and statistical methods', instructorId: faculty2.id, isActive: true } }),
-    db.course.create({ data: { programId: programs[2].id, code: 'EC501', name: 'Digital Signal Processing', credits: 4, semester: 1, type: 'core', description: 'DSP fundamentals and applications', instructorId: faculty3.id, isActive: true } }),
-    db.course.create({ data: { programId: programs[0].id, code: 'CS504', name: 'Computer Networks', credits: 3, semester: 2, type: 'elective', description: 'Network architectures and protocols', instructorId: faculty3.id, isActive: true } }),
-    db.course.create({ data: { programId: programs[0].id, code: 'CS505', name: 'AI Lab', credits: 2, semester: 1, type: 'lab', description: 'Hands-on AI/ML experiments', instructorId: faculty1.id, isActive: true } }),
-  ]);
+  const [btCSE] = programs;
 
   // ==========================================
-  // 4. COURSE ENROLLMENTS
+  // 7. COURSES (from subjects, linked to B.Tech CSE program)
   // ==========================================
-  const enrollmentData: {courseId: string; studentId: string; status: string}[] = [];
-  for (const student of students) {
-    // Each student enrolls in 3-5 courses based on department
-    let courseIndices: number[];
-    if (student.department === 'Computer Science') {
-      courseIndices = [0, 1, 2, 4, 7]; // CS501, CS502, CS503, MA502, CS505
-    } else if (student.department === 'Mathematics') {
-      courseIndices = [3, 4]; // MA501, MA502
-    } else {
-      courseIndices = [5]; // EC501
+  console.log('📦 Creating courses...');
+  const cseSubjects = subjects.filter(s => s.departmentId === cseDept.id);
+  const courseData = cseSubjects.map((subject, idx) => {
+    // Map subject semester to course semester
+    const semMap: Record<string, number> = {
+      'I-I': 1, 'I-II': 2, 'II-I': 3, 'II-II': 4,
+      'III-I': 5, 'III-II': 6, 'IV-I': 7, 'IV-II': 8,
+    };
+    let semNum = 1;
+    if (subject.semesterId) {
+      const sem = semesters.find(s => s.id === subject.semesterId);
+      if (sem) semNum = semMap[sem.code] || 1;
     }
-    for (const idx of courseIndices) {
-      enrollmentData.push({ courseId: courses[idx].id, studentId: student.id, status: 'enrolled' });
+    // Assign instructor for some courses
+    const instructorId = idx % 3 === 0 ? faculty1.id : idx % 3 === 1 ? faculty2.id : faculty1.id;
+
+    return {
+      programId: btCSE.id,
+      subjectId: subject.id,
+      code: subject.code,
+      name: subject.name,
+      credits: subject.credits,
+      semester: semNum,
+      type: subject.type,
+      description: `${subject.name} - ${subject.category || 'PC'} course as per JNTUH R22 Regulation`,
+      instructorId: subject.type === 'project' || subject.type === 'audit' ? undefined : instructorId,
+      syllabus: subject.syllabus,
+      isActive: true,
+    };
+  });
+
+  // Also create ECE courses
+  const eceSubjects = subjects.filter(s => s.departmentId === eceDept.id);
+  const eceProgram = programs[3]; // BT-ECE
+  const eceCourseData = eceSubjects.map((subject) => {
+    const semMap: Record<string, number> = {
+      'I-I': 1, 'I-II': 2, 'II-I': 3, 'II-II': 4,
+      'III-I': 5, 'III-II': 6, 'IV-I': 7, 'IV-II': 8,
+    };
+    let semNum = 1;
+    if (subject.semesterId) {
+      const sem = semesters.find(s => s.id === subject.semesterId);
+      if (sem) semNum = semMap[sem.code] || 1;
+    }
+    return {
+      programId: eceProgram.id,
+      subjectId: subject.id,
+      code: subject.code,
+      name: subject.name,
+      credits: subject.credits,
+      semester: semNum,
+      type: subject.type,
+      description: `${subject.name} - ${subject.category || 'PC'} course as per JNTUH R22 Regulation`,
+      instructorId: faculty3.id,
+      syllabus: subject.syllabus,
+      isActive: true,
+    };
+  });
+
+  const allCourseData = [...courseData, ...eceCourseData];
+  const courses = await Promise.all(
+    allCourseData.map(c => db.course.create({ data: c }))
+  );
+
+  console.log(`   Created ${courses.length} courses`);
+
+  // ==========================================
+  // 8. GEOFENCES (4 campus zones)
+  // ==========================================
+  console.log('📦 Creating geofences...');
+  const geofences = await Promise.all([
+    db.geofence.create({ data: { name: 'CSE Block Zone', type: 'circle', centerLat: 17.4497, centerLng: 78.6674, radiusMtrs: 200, building: 'CSE Block', floor: 'All', isActive: true } }),
+    db.geofence.create({ data: { name: 'ECE Block Zone', type: 'circle', centerLat: 17.4505, centerLng: 78.6685, radiusMtrs: 180, building: 'ECE Block', floor: 'All', isActive: true } }),
+    db.geofence.create({ data: { name: 'Central Library Zone', type: 'circle', centerLat: 17.4485, centerLng: 78.6690, radiusMtrs: 120, building: 'Central Library', isActive: true } }),
+    db.geofence.create({ data: { name: 'Main Auditorium Zone', type: 'polygon', polygonData: JSON.stringify([{ lat: 17.4490, lng: 78.6655 }, { lat: 17.4490, lng: 78.6675 }, { lat: 17.4508, lng: 78.6675 }, { lat: 17.4508, lng: 78.6655 }]), building: 'Main Auditorium', isActive: true } }),
+  ]);
+
+  // ==========================================
+  // 9. COURSE ENROLLMENTS
+  // ==========================================
+  console.log('📦 Creating course enrollments...');
+  const cseStudentIds = students.filter(s => s.departmentId === cseDept.id || s.department === 'Computer Science & Engineering').map(s => s.id);
+  const eceStudentIds = students.filter(s => s.departmentId === eceDept.id || s.department === 'Electronics & Communication Engineering').map(s => s.id);
+  const itStudentIds = students.filter(s => s.departmentId === itDept.id || s.department === 'Information Technology').map(s => s.id);
+
+  // CSE courses (first batch)
+  const cseCourses = courses.filter(c => c.programId === btCSE.id);
+  const eceCourses = courses.filter(c => c.programId === eceProgram.id);
+
+  const enrollmentData: { courseId: string; studentId: string; status: string }[] = [];
+  // CSE students enroll in CSE courses (first 10 courses for semester I-I and II-I)
+  const cseCourseSubset = cseCourses.slice(0, 10);
+  for (const studentId of cseStudentIds) {
+    for (const course of cseCourseSubset) {
+      enrollmentData.push({ courseId: course.id, studentId, status: 'enrolled' });
+    }
+  }
+  // ECE students enroll in ECE courses
+  for (const studentId of eceStudentIds) {
+    for (const course of eceCourses) {
+      enrollmentData.push({ courseId: course.id, studentId, status: 'enrolled' });
+    }
+  }
+  // IT students also enroll in some CSE courses
+  for (const studentId of itStudentIds) {
+    for (const course of cseCourseSubset.slice(0, 5)) {
+      enrollmentData.push({ courseId: course.id, studentId, status: 'enrolled' });
     }
   }
   await db.courseEnrollment.createMany({ data: enrollmentData });
 
   // ==========================================
-  // 5. MODULES & LESSONS
+  // 10. MODULES & LESSONS
   // ==========================================
-  const modulesData = [
-    { courseId: courses[0].id, title: 'Graph Algorithms', orderIndex: 0 },
-    { courseId: courses[0].id, title: 'Network Flow', orderIndex: 1 },
-    { courseId: courses[0].id, title: 'NP-Completeness', orderIndex: 2 },
-    { courseId: courses[1].id, title: 'Supervised Learning', orderIndex: 0 },
-    { courseId: courses[1].id, title: 'Unsupervised Learning', orderIndex: 1 },
-    { courseId: courses[1].id, title: 'Deep Learning', orderIndex: 2 },
-    { courseId: courses[2].id, title: 'Relational Model & SQL', orderIndex: 0 },
-    { courseId: courses[2].id, title: 'Transaction Processing', orderIndex: 1 },
-    { courseId: courses[3].id, title: 'Vector Spaces', orderIndex: 0 },
-    { courseId: courses[3].id, title: 'Eigenvalues & Eigenvectors', orderIndex: 1 },
-    { courseId: courses[4].id, title: 'Probability Foundations', orderIndex: 0 },
-    { courseId: courses[4].id, title: 'Statistical Inference', orderIndex: 1 },
-    { courseId: courses[5].id, title: 'Discrete-Time Signals', orderIndex: 0 },
-    { courseId: courses[5].id, title: 'Z-Transform', orderIndex: 1 },
-  ];
-
-  const modules = await Promise.all(modulesData.map(m =>
-    db.module.create({ data: { ...m, isPublished: true, description: `Module covering ${m.title}` } })
-  ));
-
-  const lessonsData: {moduleId: string; title: string; type: string; orderIndex: number; duration: number; isPublished: boolean}[] = [];
-  modules.forEach((mod, idx) => {
-    lessonsData.push(
-      { moduleId: mod.id, title: `Introduction to ${mod.title}`, type: 'video', orderIndex: 0, duration: 45, isPublished: true },
-      { moduleId: mod.id, title: `${mod.title} - Core Concepts`, type: 'video', orderIndex: 1, duration: 60, isPublished: true },
-      { moduleId: mod.id, title: `${mod.title} - Practice Problems`, type: 'document', orderIndex: 2, duration: 30, isPublished: true },
-      { moduleId: mod.id, title: `${mod.title} - Quiz`, type: 'quiz', orderIndex: 3, duration: 20, isPublished: true },
+  console.log('📦 Creating modules and lessons...');
+  const modulesData: { courseId: string; title: string; description: string; orderIndex: number; isPublished: boolean }[] = [];
+  // Create modules for first few courses
+  const courseSubsetForModules = courses.slice(0, 8);
+  for (const course of courseSubsetForModules) {
+    modulesData.push(
+      { courseId: course.id, title: `Unit 1: Introduction to ${course.name}`, description: `Introduction and fundamentals of ${course.name}`, orderIndex: 0, isPublished: true },
+      { courseId: course.id, title: `Unit 2: Core Concepts`, description: `Core concepts and principles of ${course.name}`, orderIndex: 1, isPublished: true },
+      { courseId: course.id, title: `Unit 3: Advanced Topics`, description: `Advanced topics in ${course.name}`, orderIndex: 2, isPublished: true },
+      { courseId: course.id, title: `Unit 4: Applications & Practice`, description: `Applications and practice problems for ${course.name}`, orderIndex: 3, isPublished: false },
     );
-  });
+  }
+
+  const modules = await Promise.all(
+    modulesData.map(m => db.module.create({ data: m }))
+  );
+
+  const lessonsData: { moduleId: string; title: string; type: string; contentBody: string; orderIndex: number; duration: number; isPublished: boolean }[] = [];
+  for (const mod of modules) {
+    lessonsData.push(
+      { moduleId: mod.id, title: `Introduction`, type: 'video', contentBody: `Video lecture on ${mod.title}`, orderIndex: 0, duration: 45, isPublished: true },
+      { moduleId: mod.id, title: `Detailed Explanation`, type: 'video', contentBody: `Detailed explanation of ${mod.title}`, orderIndex: 1, duration: 60, isPublished: true },
+      { moduleId: mod.id, title: `Practice Problems`, type: 'document', contentBody: `Practice problems for ${mod.title}`, orderIndex: 2, duration: 30, isPublished: true },
+      { moduleId: mod.id, title: `Quiz`, type: 'quiz', contentBody: `Assessment quiz for ${mod.title}`, orderIndex: 3, duration: 20, isPublished: true },
+    );
+  }
   await db.lesson.createMany({ data: lessonsData });
 
   // ==========================================
-  // 6. TIMETABLE SLOTS
+  // 11. TIMETABLE SLOTS
   // ==========================================
+  console.log('📦 Creating timetable slots...');
   const timetableSlots = await Promise.all([
-    db.timetableSlot.create({ data: { courseId: courses[0].id, dayOfWeek: 1, startTime: '09:00', endTime: '10:30', roomNumber: 'CSE-301', building: 'CSE Building', semester: '1', academicYear: '2025-26', isActive: true } }),
-    db.timetableSlot.create({ data: { courseId: courses[1].id, dayOfWeek: 1, startTime: '11:00', endTime: '12:30', roomNumber: 'CSE-302', building: 'CSE Building', semester: '1', academicYear: '2025-26', isActive: true } }),
-    db.timetableSlot.create({ data: { courseId: courses[2].id, dayOfWeek: 2, startTime: '09:00', endTime: '10:30', roomNumber: 'CSE-303', building: 'CSE Building', semester: '1', academicYear: '2025-26', isActive: true } }),
-    db.timetableSlot.create({ data: { courseId: courses[3].id, dayOfWeek: 2, startTime: '14:00', endTime: '15:30', roomNumber: 'MATH-201', building: 'Math Building', semester: '1', academicYear: '2025-26', isActive: true } }),
-    db.timetableSlot.create({ data: { courseId: courses[4].id, dayOfWeek: 3, startTime: '09:00', endTime: '10:30', roomNumber: 'MATH-202', building: 'Math Building', semester: '1', academicYear: '2025-26', isActive: true } }),
-    db.timetableSlot.create({ data: { courseId: courses[0].id, dayOfWeek: 3, startTime: '14:00', endTime: '15:30', roomNumber: 'CSE-301', building: 'CSE Building', semester: '1', academicYear: '2025-26', isActive: true } }),
-    db.timetableSlot.create({ data: { courseId: courses[5].id, dayOfWeek: 4, startTime: '09:00', endTime: '10:30', roomNumber: 'ECE-LAB1', building: 'ECE Building', semester: '1', academicYear: '2025-26', isActive: true } }),
-    db.timetableSlot.create({ data: { courseId: courses[7].id, dayOfWeek: 4, startTime: '14:00', endTime: '17:00', roomNumber: 'AI-LAB1', building: 'CSE Building', semester: '1', academicYear: '2025-26', isActive: true } }),
+    db.timetableSlot.create({ data: { courseId: courses[0].id, semesterId: semI1.id, dayOfWeek: 1, startTime: '09:00', endTime: '09:50', roomNumber: 'CSE-301', building: 'CSE Block', semester: 'I-I', academicYear: '2025-2026', isActive: true } }),
+    db.timetableSlot.create({ data: { courseId: courses[1].id, semesterId: semI1.id, dayOfWeek: 1, startTime: '10:00', endTime: '10:50', roomNumber: 'CSE-302', building: 'CSE Block', semester: 'I-I', academicYear: '2025-2026', isActive: true } }),
+    db.timetableSlot.create({ data: { courseId: courses[2].id, semesterId: semI1.id, dayOfWeek: 1, startTime: '11:00', endTime: '11:50', roomNumber: 'CSE-303', building: 'CSE Block', semester: 'I-I', academicYear: '2025-2026', isActive: true } }),
+    db.timetableSlot.create({ data: { courseId: courses[3].id, semesterId: semI1.id, dayOfWeek: 2, startTime: '09:00', endTime: '09:50', roomNumber: 'CSE-304', building: 'CSE Block', semester: 'I-I', academicYear: '2025-2026', isActive: true } }),
+    db.timetableSlot.create({ data: { courseId: courses[4].id, semesterId: semI1.id, dayOfWeek: 2, startTime: '10:00', endTime: '10:50', roomNumber: 'CSE-305', building: 'CSE Block', semester: 'I-I', academicYear: '2025-2026', isActive: true } }),
+    db.timetableSlot.create({ data: { courseId: courses[5].id, semesterId: semI1.id, dayOfWeek: 2, startTime: '14:00', endTime: '16:50', roomNumber: 'PHY-LAB', building: 'Physics Block', semester: 'I-I', academicYear: '2025-2026', isActive: true } }),
+    db.timetableSlot.create({ data: { courseId: courses[6].id, semesterId: semI1.id, dayOfWeek: 3, startTime: '14:00', endTime: '16:50', roomNumber: 'CSE-LAB1', building: 'CSE Block', semester: 'I-I', academicYear: '2025-2026', isActive: true } }),
+    db.timetableSlot.create({ data: { courseId: courses[10].id, semesterId: semII1.id, dayOfWeek: 3, startTime: '09:00', endTime: '09:50', roomNumber: 'CSE-401', building: 'CSE Block', semester: 'II-I', academicYear: '2025-2026', isActive: true } }),
+    db.timetableSlot.create({ data: { courseId: courses[11].id, semesterId: semII1.id, dayOfWeek: 3, startTime: '10:00', endTime: '10:50', roomNumber: 'CSE-402', building: 'CSE Block', semester: 'II-I', academicYear: '2025-2026', isActive: true } }),
+    db.timetableSlot.create({ data: { courseId: courses[12].id, semesterId: semII1.id, dayOfWeek: 4, startTime: '09:00', endTime: '09:50', roomNumber: 'CSE-403', building: 'CSE Block', semester: 'II-I', academicYear: '2025-2026', isActive: true } }),
+    // ECE timetable
+    db.timetableSlot.create({ data: { courseId: eceCourses[0]?.id || courses[0].id, semesterId: semI1.id, dayOfWeek: 1, startTime: '14:00', endTime: '14:50', roomNumber: 'ECE-201', building: 'ECE Block', semester: 'I-I', academicYear: '2025-2026', isActive: true } }),
+    db.timetableSlot.create({ data: { courseId: eceCourses[1]?.id || courses[0].id, semesterId: semI1.id, dayOfWeek: 2, startTime: '14:00', endTime: '14:50', roomNumber: 'ECE-202', building: 'ECE Block', semester: 'I-I', academicYear: '2025-2026', isActive: true } }),
   ]);
 
   // ==========================================
-  // 7. ATTENDANCE SESSIONS & RECORDS
+  // 12. ATTENDANCE SESSIONS & RECORDS
   // ==========================================
+  console.log('📦 Creating attendance sessions...');
   const today = new Date();
-  const dates = [];
+  const dates: string[] = [];
   for (let i = 0; i < 14; i++) {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
@@ -169,16 +438,15 @@ async function main() {
   const sessions: Awaited<ReturnType<typeof db.attendanceSession.create>>[] = [];
   const captureMethods = ['manual', 'face', 'gps', 'qrcode', 'biometric'];
 
-  // Create sessions for past dates
   for (let i = 0; i < Math.min(dates.length, 10); i++) {
     const dateStr = dates[i];
     const slotIdx = i % timetableSlots.length;
     const slot = timetableSlots[slotIdx];
     const method = captureMethods[i % captureMethods.length];
-    const expectedCount = 8 + Math.floor(Math.random() * 5);
+    const expectedCount = 6 + Math.floor(Math.random() * 5);
     const presentCount = Math.floor(expectedCount * (0.65 + Math.random() * 0.3));
     const lateCount = Math.floor(Math.random() * 3);
-    const absentCount = expectedCount - presentCount - lateCount;
+    const absentCount = Math.max(0, expectedCount - presentCount - lateCount);
 
     const session = await db.attendanceSession.create({
       data: {
@@ -193,13 +461,13 @@ async function main() {
         captureMethod: method,
         expectedCount,
         presentCount: Math.max(0, presentCount),
-        absentCount: Math.max(0, absentCount),
+        absentCount,
         lateCount,
       }
     });
     sessions.push(session);
 
-    // Create attendance records for this session
+    // Create attendance records
     const enrolledStudents = students.slice(0, expectedCount);
     for (const student of enrolledStudents) {
       const rand = Math.random();
@@ -216,14 +484,14 @@ async function main() {
           markedAt: status !== 'absent' ? new Date(`${dateStr}T${slot.startTime}:00`) : null,
           captureMethod: method,
           confidence: method === 'face' ? 0.85 + Math.random() * 0.13 : null,
-          gpsLat: method === 'gps' ? 17.4563 + (Math.random() - 0.5) * 0.002 : null,
-          gpsLng: method === 'gps' ? 78.6698 + (Math.random() - 0.5) * 0.002 : null,
+          gpsLat: method === 'gps' ? 17.4497 + (Math.random() - 0.5) * 0.002 : null,
+          gpsLng: method === 'gps' ? 78.6674 + (Math.random() - 0.5) * 0.002 : null,
         }
       });
     }
   }
 
-  // Create a live "active" session for today
+  // Live session
   const liveSession = await db.attendanceSession.create({
     data: {
       timetableSlotId: timetableSlots[0].id,
@@ -232,37 +500,38 @@ async function main() {
       geofenceId: geofences[0].id,
       sessionDate: today.toISOString().split('T')[0],
       startTime: '09:00',
-      endTime: '10:30',
+      endTime: '09:50',
       status: 'active',
       captureMethod: 'face',
-      expectedCount: 9,
-      presentCount: 6,
+      expectedCount: 7,
+      presentCount: 5,
       absentCount: 1,
-      lateCount: 2,
+      lateCount: 1,
     }
   });
 
   // ==========================================
-  // 8. ASSIGNMENTS & SUBMISSIONS
+  // 13. ASSIGNMENTS & SUBMISSIONS
   // ==========================================
+  console.log('📦 Creating assignments...');
   const assignments = await Promise.all([
-    db.assignment.create({ data: { courseId: courses[0].id, title: 'Dijkstra Algorithm Implementation', description: 'Implement Dijkstra\'s shortest path algorithm with min-heap optimization', type: 'individual', maxScore: 100, dueDate: new Date(today.getTime() + 7 * 86400000), allowLate: true, latePenalty: 10, status: 'published' } }),
-    db.assignment.create({ data: { courseId: courses[0].id, title: 'Network Flow Problem Set', description: 'Solve 5 network flow problems from the textbook', type: 'individual', maxScore: 50, dueDate: new Date(today.getTime() + 14 * 86400000), allowLate: true, latePenalty: 15, status: 'published' } }),
-    db.assignment.create({ data: { courseId: courses[1].id, title: 'ML Classification Project', description: 'Build a classifier using scikit-learn on the provided dataset', type: 'individual', maxScore: 100, dueDate: new Date(today.getTime() + 10 * 86400000), allowLate: true, latePenalty: 10, status: 'published' } }),
-    db.assignment.create({ data: { courseId: courses[1].id, title: 'Neural Network from Scratch', description: 'Implement a 3-layer neural network without using ML frameworks', type: 'individual', maxScore: 100, dueDate: new Date(today.getTime() - 3 * 86400000), allowLate: false, status: 'grading' } }),
-    db.assignment.create({ data: { courseId: courses[2].id, title: 'SQL Query Optimization', description: 'Optimize given SQL queries and explain the improvement strategies', type: 'individual', maxScore: 75, dueDate: new Date(today.getTime() + 5 * 86400000), allowLate: true, latePenalty: 20, status: 'published' } }),
-    db.assignment.create({ data: { courseId: courses[3].id, title: 'Eigenvalue Problems', description: 'Solve eigenvalue problems from Chapters 5 and 6', type: 'individual', maxScore: 50, dueDate: new Date(today.getTime() - 7 * 86400000), allowLate: false, status: 'closed' } }),
+    db.assignment.create({ data: { courseId: courses[0].id, title: 'Matrices and Eigen Values Problem Set', description: 'Solve problems on matrices, eigen values and eigen vectors from Chapter 1', type: 'individual', maxScore: 100, dueDate: new Date(today.getTime() + 7 * 86400000), allowLate: true, latePenalty: 10, status: 'published' } }),
+    db.assignment.create({ data: { courseId: courses[2].id, title: 'C Programming Lab Exercises', description: 'Write C programs for arrays, strings, and functions as discussed in class', type: 'individual', maxScore: 50, dueDate: new Date(today.getTime() + 14 * 86400000), allowLate: true, latePenalty: 15, status: 'published' } }),
+    db.assignment.create({ data: { courseId: courses[10].id, title: 'Mathematical Foundations Assignment', description: 'Solve problems on probability and information theory', type: 'individual', maxScore: 100, dueDate: new Date(today.getTime() + 10 * 86400000), allowLate: true, latePenalty: 10, status: 'published' } }),
+    db.assignment.create({ data: { courseId: courses[11].id, title: 'Computer Organization Assignment', description: 'Design a simple CPU datapath and control unit', type: 'individual', maxScore: 100, dueDate: new Date(today.getTime() - 3 * 86400000), allowLate: false, status: 'grading' } }),
+    db.assignment.create({ data: { courseId: courses[12].id, title: 'OS Scheduling Simulation', description: 'Implement FCFS, SJF, Round Robin scheduling algorithms', type: 'individual', maxScore: 75, dueDate: new Date(today.getTime() + 5 * 86400000), allowLate: true, latePenalty: 20, status: 'published' } }),
+    db.assignment.create({ data: { courseId: courses[13].id, title: 'SQL Query Optimization', description: 'Optimize given SQL queries and explain the improvement strategies', type: 'individual', maxScore: 50, dueDate: new Date(today.getTime() - 7 * 86400000), allowLate: false, status: 'closed' } }),
   ]);
 
   // Submissions for past assignments
-  for (const student of students.slice(0, 6)) {
+  for (const student of students.slice(0, 5)) {
     await db.submission.create({
       data: {
         assignmentId: assignments[3].id,
         studentId: student.id,
-        content: 'Neural network implementation with backpropagation',
+        content: 'CPU datapath design with control signals',
         score: 65 + Math.floor(Math.random() * 35),
-        feedback: 'Good implementation. Consider adding dropout for regularization.',
+        feedback: 'Good design. Consider pipelining for better throughput.',
         status: 'graded',
         gradedAt: new Date(),
       }
@@ -271,9 +540,9 @@ async function main() {
       data: {
         assignmentId: assignments[5].id,
         studentId: student.id,
-        content: 'Eigenvalue solutions submitted',
+        content: 'SQL optimization solutions submitted',
         score: 35 + Math.floor(Math.random() * 15),
-        feedback: 'Correct approach on problems 1-4. Review problem 5.',
+        feedback: 'Correct approach on queries 1-3. Review query 4.',
         status: 'graded',
         gradedAt: new Date(),
       }
@@ -281,33 +550,34 @@ async function main() {
   }
 
   // ==========================================
-  // 9. QUIZ QUESTIONS & ATTEMPTS
+  // 14. QUIZ QUESTIONS & ATTEMPTS
   // ==========================================
+  console.log('📦 Creating quiz questions...');
   const quizQuestions = await Promise.all([
-    db.quizQuestion.create({ data: { courseId: courses[0].id, question: 'What is the time complexity of Dijkstra\'s algorithm with a binary heap?', type: 'mcq', options: JSON.stringify(['O(V²)', 'O(E log V)', 'O(V log V)', 'O(E + V)']), correctAnswer: 'O(E log V)', points: 2, difficulty: 'medium' } }),
-    db.quizQuestion.create({ data: { courseId: courses[0].id, question: 'The Ford-Fulkerson algorithm is used to solve which problem?', type: 'mcq', options: JSON.stringify(['Shortest path', 'Maximum flow', 'Minimum spanning tree', 'Graph coloring']), correctAnswer: 'Maximum flow', points: 2, difficulty: 'easy' } }),
-    db.quizQuestion.create({ data: { courseId: courses[0].id, question: 'NP stands for Non-deterministic Polynomial time.', type: 'true_false', options: JSON.stringify(['True', 'False']), correctAnswer: 'True', points: 1, difficulty: 'easy' } }),
-    db.quizQuestion.create({ data: { courseId: courses[1].id, question: 'Which activation function is most commonly used in hidden layers of deep networks?', type: 'mcq', options: JSON.stringify(['Sigmoid', 'Tanh', 'ReLU', 'Softmax']), correctAnswer: 'ReLU', points: 2, difficulty: 'easy' } }),
-    db.quizQuestion.create({ data: { courseId: courses[1].id, question: 'Overfitting can be reduced by using regularization techniques.', type: 'true_false', options: JSON.stringify(['True', 'False']), correctAnswer: 'True', points: 1, difficulty: 'easy' } }),
-    db.quizQuestion.create({ data: { courseId: courses[1].id, question: 'Explain the bias-variance tradeoff.', type: 'short_answer', points: 5, difficulty: 'hard' } }),
-    db.quizQuestion.create({ data: { courseId: courses[2].id, question: 'Which normal form eliminates transitive dependencies?', type: 'mcq', options: JSON.stringify(['1NF', '2NF', '3NF', 'BCNF']), correctAnswer: '3NF', points: 2, difficulty: 'medium' } }),
-    db.quizQuestion.create({ data: { courseId: courses[3].id, question: 'Every square matrix has at least one eigenvalue over the complex field.', type: 'true_false', options: JSON.stringify(['True', 'False']), correctAnswer: 'True', points: 1, difficulty: 'medium' } }),
+    db.quizQuestion.create({ data: { courseId: courses[2].id, question: 'Which header file is required for printf() in C?', type: 'mcq', options: JSON.stringify(['<stdio.h>', '<conio.h>', '<math.h>', '<string.h>']), correctAnswer: '<stdio.h>', points: 2, difficulty: 'easy' } }),
+    db.quizQuestion.create({ data: { courseId: courses[2].id, question: 'An array index in C starts from 0.', type: 'true_false', options: JSON.stringify(['True', 'False']), correctAnswer: 'True', points: 1, difficulty: 'easy' } }),
+    db.quizQuestion.create({ data: { courseId: courses[10].id, question: 'What is the time complexity of binary search?', type: 'mcq', options: JSON.stringify(['O(n)', 'O(log n)', 'O(n log n)', 'O(1)']), correctAnswer: 'O(log n)', points: 2, difficulty: 'medium' } }),
+    db.quizQuestion.create({ data: { courseId: courses[10].id, question: 'Bayes theorem is used for computing conditional probabilities.', type: 'true_false', options: JSON.stringify(['True', 'False']), correctAnswer: 'True', points: 1, difficulty: 'easy' } }),
+    db.quizQuestion.create({ data: { courseId: courses[12].id, question: 'Which scheduling algorithm may cause starvation?', type: 'mcq', options: JSON.stringify(['FCFS', 'SJF', 'Round Robin', 'All of the above']), correctAnswer: 'SJF', points: 2, difficulty: 'medium' } }),
+    db.quizQuestion.create({ data: { courseId: courses[12].id, question: 'A deadlock requires four conditions to hold simultaneously.', type: 'true_false', options: JSON.stringify(['True', 'False']), correctAnswer: 'True', points: 1, difficulty: 'easy' } }),
+    db.quizQuestion.create({ data: { courseId: courses[13].id, question: 'Which normal form eliminates transitive dependencies?', type: 'mcq', options: JSON.stringify(['1NF', '2NF', '3NF', 'BCNF']), correctAnswer: '3NF', points: 2, difficulty: 'medium' } }),
+    db.quizQuestion.create({ data: { courseId: courses[14].id, question: 'Java supports multiple inheritance through classes.', type: 'true_false', options: JSON.stringify(['True', 'False']), correctAnswer: 'False', points: 1, difficulty: 'easy' } }),
   ]);
 
   // Quiz attempts
   for (const student of students.slice(0, 5)) {
-    const csQs = quizQuestions.filter(q => q.courseId === courses[0].id);
-    const score = 2 + Math.floor(Math.random() * 3);
+    const csQs = quizQuestions.filter(q => q.courseId === courses[2].id);
+    const score = 1 + Math.floor(Math.random() * 2);
     await db.quizAttempt.create({
       data: {
         studentId: student.id,
-        courseId: courses[0].id,
+        courseId: courses[2].id,
         questions: JSON.stringify(csQs.map(q => q.id)),
-        answers: JSON.stringify({ [csQs[0]?.id || '']: 'O(E log V)', [csQs[1]?.id || '']: 'Maximum flow', [csQs[2]?.id || '']: 'True' }),
+        answers: JSON.stringify({ [csQs[0]?.id || '']: '<stdio.h>', [csQs[1]?.id || '']: 'True' }),
         score,
-        totalPoints: 5,
-        percentage: (score / 5) * 100,
-        timeTaken: 300 + Math.floor(Math.random() * 600),
+        totalPoints: 3,
+        percentage: (score / 3) * 100,
+        timeTaken: 180 + Math.floor(Math.random() * 300),
         status: 'completed',
         completedAt: new Date(),
       }
@@ -315,18 +585,19 @@ async function main() {
   }
 
   // ==========================================
-  // 10. GRADE BOOK
+  // 15. GRADE BOOK
   // ==========================================
+  console.log('📦 Creating grade book entries...');
   const gradeComponents = ['assignment', 'quiz', 'midterm', 'final', 'participation'];
   for (const student of students.slice(0, 6)) {
-    for (const course of courses.slice(0, 3)) {
+    for (const course of courses.slice(0, 5)) {
       for (const component of gradeComponents) {
         await db.gradeBook.create({
           data: {
             courseId: course.id,
             studentId: student.id,
             component,
-            score: component === 'participation' ? 8 + Math.random() * 2 : 50 + Math.random() * 45,
+            score: component === 'participation' ? 7 + Math.random() * 3 : 45 + Math.random() * 50,
             maxScore: component === 'participation' ? 10 : 100,
             weightage: component === 'assignment' ? 25 : component === 'quiz' ? 15 : component === 'midterm' ? 20 : component === 'final' ? 30 : 10,
             gradedBy: faculty1.id,
@@ -337,8 +608,9 @@ async function main() {
   }
 
   // ==========================================
-  // 11. VIOLATIONS
+  // 16. VIOLATIONS
   // ==========================================
+  console.log('📦 Creating violations...');
   const violationTypes = ['spoofing', 'proxy', 'out_of_geofence', 'face_mismatch'];
   const severities = ['low', 'medium', 'high', 'critical'];
 
@@ -352,7 +624,6 @@ async function main() {
     });
     if (!record) continue;
 
-    // Check if violation already exists for this record
     const existing = await db.attendanceViolation.findUnique({ where: { recordId: record.id } });
     if (existing) continue;
 
@@ -364,54 +635,113 @@ async function main() {
         severity: severities[i % severities.length],
         description: `${violationTypes[i % violationTypes.length]} detected during attendance session on ${randomSession.sessionDate}`,
         reviewStatus: i < 4 ? 'pending' : i < 6 ? 'confirmed' : 'dismissed',
-        reviewedBy: i >= 4 ? hod.id : undefined,
+        reviewedBy: i >= 4 ? hodCSE.id : undefined,
         reviewNotes: i >= 4 ? (i < 6 ? 'Violation confirmed after review' : 'False positive - student was present') : undefined,
       }
     });
   }
 
   // ==========================================
-  // 12. NOTIFICATIONS
+  // 17. CALENDAR EVENTS (Academic Calendar)
   // ==========================================
+  console.log('📦 Creating calendar events...');
+  const calendarEventsData = [
+    // Academic Events
+    { userId: superAdmin.id, title: 'I Year I Semester Begins', description: 'Start of I Year I Semester classes for AY 2025-2026', type: 'academic', startDate: '2025-07-01', endDate: null, startTime: '09:00', endTime: null, location: 'All Blocks', color: '#22c55e', isAllDay: true, academicYearId: academicYear.id },
+    { userId: superAdmin.id, title: 'I Year II Semester Begins', description: 'Start of I Year II Semester classes', type: 'academic', startDate: '2025-12-01', endDate: null, startTime: '09:00', endTime: null, location: 'All Blocks', color: '#22c55e', isAllDay: true, academicYearId: academicYear.id },
+    { userId: superAdmin.id, title: 'II Year I Semester Begins', description: 'Start of II Year I Semester classes', type: 'academic', startDate: '2025-07-01', endDate: null, startTime: '09:00', endTime: null, location: 'All Blocks', color: '#22c55e', isAllDay: true, academicYearId: academicYear.id },
+    // Exam Events
+    { userId: superAdmin.id, title: 'I Year I Sem Mid Examinations', description: 'Mid semester examinations for I Year I Semester', type: 'exam', startDate: '2025-09-15', endDate: '2025-09-25', startTime: '10:00', endTime: '13:00', location: 'Examination Hall', color: '#ef4444', isAllDay: false, academicYearId: academicYear.id },
+    { userId: superAdmin.id, title: 'I Year I Sem End Examinations', description: 'End semester examinations for I Year I Semester', type: 'exam', startDate: '2025-11-15', endDate: '2025-11-30', startTime: '10:00', endTime: '13:00', location: 'Examination Hall', color: '#ef4444', isAllDay: false, academicYearId: academicYear.id },
+    { userId: superAdmin.id, title: 'II Year I Sem Mid Examinations', description: 'Mid semester examinations for II Year I Semester', type: 'exam', startDate: '2025-09-15', endDate: '2025-09-25', startTime: '14:00', endTime: '17:00', location: 'Examination Hall', color: '#ef4444', isAllDay: false, academicYearId: academicYear.id },
+    { userId: superAdmin.id, title: 'III Year I Sem End Examinations', description: 'End semester examinations for III Year I Semester', type: 'exam', startDate: '2025-11-20', endDate: '2025-12-05', startTime: '10:00', endTime: '13:00', location: 'Examination Hall', color: '#ef4444', isAllDay: false, academicYearId: academicYear.id },
+    // Holidays
+    { userId: superAdmin.id, title: 'Independence Day', description: 'National Holiday - Independence Day', type: 'holiday', startDate: '2025-08-15', endDate: null, startTime: null, endTime: null, color: '#f59e0b', isAllDay: true, academicYearId: academicYear.id },
+    { userId: superAdmin.id, title: 'Ganesh Chaturthi', description: 'Festival Holiday - Ganesh Chaturthi', type: 'holiday', startDate: '2025-08-27', endDate: '2025-08-28', startTime: null, endTime: null, color: '#f59e0b', isAllDay: true, academicYearId: academicYear.id },
+    { userId: superAdmin.id, title: 'Dussehra Holidays', description: 'Festival Holidays - Dussehra / Vijaya Dashami', type: 'holiday', startDate: '2025-10-01', endDate: '2025-10-10', startTime: null, endTime: null, color: '#f59e0b', isAllDay: true, academicYearId: academicYear.id },
+    { userId: superAdmin.id, title: 'Diwali', description: 'Festival Holiday - Diwali', type: 'holiday', startDate: '2025-10-20', endDate: '2025-10-22', startTime: null, endTime: null, color: '#f59e0b', isAllDay: true, academicYearId: academicYear.id },
+    { userId: superAdmin.id, title: 'Christmas Holidays', description: 'Christmas and New Year Holidays', type: 'holiday', startDate: '2025-12-24', endDate: '2026-01-02', startTime: null, endTime: null, color: '#f59e0b', isAllDay: true, academicYearId: academicYear.id },
+    { userId: superAdmin.id, title: 'Republic Day', description: 'National Holiday - Republic Day', type: 'holiday', startDate: '2026-01-26', endDate: null, startTime: null, endTime: null, color: '#f59e0b', isAllDay: true, academicYearId: academicYear.id },
+    { userId: superAdmin.id, title: 'Holi', description: 'Festival Holiday - Holi', type: 'holiday', startDate: '2026-03-10', endDate: null, startTime: null, endTime: null, color: '#f59e0b', isAllDay: true, academicYearId: academicYear.id },
+    // Campus Events
+    { userId: adminUser.id, title: 'Annual Technical Fest - SUDHEE', description: 'JNTUH Annual Technical Festival - SUDHEE 2025', type: 'event', startDate: '2025-10-15', endDate: '2025-10-18', startTime: '09:00', endTime: '18:00', location: 'Main Auditorium', color: '#8b5cf6', isAllDay: false, academicYearId: academicYear.id },
+    { userId: adminUser.id, title: 'Sports Week', description: 'Annual Sports Week celebrations', type: 'event', startDate: '2025-11-01', endDate: '2025-11-07', startTime: '09:00', endTime: '17:00', location: 'Sports Ground', color: '#06b6d4', isAllDay: false, academicYearId: academicYear.id },
+    { userId: adminUser.id, title: 'Industry Connect Day', description: 'Industry connect and placement drive', type: 'event', startDate: '2025-09-05', endDate: null, startTime: '10:00', endTime: '16:00', location: 'Seminar Hall', color: '#8b5cf6', isAllDay: false, academicYearId: academicYear.id },
+    // Deadlines
+    { userId: hodCSE.id, title: 'Assignment Submission Deadline', description: 'Deadline for MA101BS Mathematics-I Assignment', type: 'deadline', startDate: '2025-08-30', endDate: null, startTime: '23:59', endTime: null, location: null, color: '#ec4899', isAllDay: false, courseId: courses[0].id },
+    { userId: hodCSE.id, title: 'Project Phase-I Synopsis Submission', description: 'Last date for IV Year Project Phase-I synopsis submission', type: 'deadline', startDate: '2025-09-30', endDate: null, startTime: '17:00', endTime: null, location: 'CSE Department Office', color: '#ec4899', isAllDay: false },
+    // Personal events for faculty
+    { userId: faculty1.id, title: 'Faculty Development Program', description: 'FDP on AI/ML at CSE Department', type: 'personal', startDate: '2025-08-10', endDate: '2025-08-14', startTime: '09:00', endTime: '17:00', location: 'CSE Block - Room 401', color: '#6366f1', isAllDay: false },
+    { userId: faculty2.id, title: 'Research Paper Review Meeting', description: 'Review meeting for research publications', type: 'personal', startDate: '2025-08-20', endDate: null, startTime: '14:00', endTime: '16:00', location: 'Conference Room', color: '#6366f1', isAllDay: false },
+  ];
+
+  await db.calendarEvent.createMany({ data: calendarEventsData });
+
+  // ==========================================
+  // 18. NOTIFICATIONS
+  // ==========================================
+  console.log('📦 Creating notifications...');
   await db.notification.createMany({
     data: [
-      { userId: hod.id, title: 'Attendance Alert', message: 'Low attendance detected for CS501 - Advanced Algorithms (67% average)', type: 'warning', channel: 'in_app', isRead: false },
-      { userId: faculty1.id, title: 'Session Completed', message: 'Attendance session for CS501 has been completed. 8/10 present.', type: 'success', channel: 'in_app', isRead: true },
-      { userId: admin.id, title: 'Violation Reported', message: '3 new attendance violations require your review', type: 'warning', channel: 'in_app', isRead: false },
-      { userId: students[0].id, title: 'Assignment Due', message: 'ML Classification Project is due in 10 days', type: 'info', channel: 'in_app', isRead: false },
-      { userId: students[1].id, title: 'Grade Published', message: 'Your Neural Network assignment has been graded: 87/100', type: 'success', channel: 'in_app', isRead: false },
-      { userId: faculty1.id, title: 'New Enrollment', message: '2 new students enrolled in Advanced Algorithms', type: 'info', channel: 'in_app', isRead: true },
-      { userId: admin.id, title: 'System Update', message: 'Face recognition model updated to ArcFace v3.0', type: 'info', channel: 'in_app', isRead: false },
-      { userId: students[2].id, title: 'Low Attendance Warning', message: 'Your attendance in CS502 is below 75%. Please improve attendance.', type: 'warning', channel: 'in_app', isRead: false },
+      { userId: hodCSE.id, title: 'Attendance Alert', message: 'Low attendance detected for MA101BS Mathematics-I (67% average)', type: 'warning', channel: 'in_app', isRead: false },
+      { userId: faculty1.id, title: 'Session Completed', message: 'Attendance session for CS101ES has been completed. 8/10 present.', type: 'success', channel: 'in_app', isRead: true },
+      { userId: adminUser.id, title: 'Violation Reported', message: '3 new attendance violations require your review', type: 'warning', channel: 'in_app', isRead: false },
+      { userId: s1.id, title: 'Assignment Due', message: 'C Programming Lab Exercises due in 14 days', type: 'info', channel: 'in_app', isRead: false },
+      { userId: s2.id, title: 'Grade Published', message: 'Your Computer Organization assignment has been graded: 87/100', type: 'success', channel: 'in_app', isRead: false },
+      { userId: faculty1.id, title: 'New Enrollment', message: '2 new students enrolled in Programming for Problem Solving', type: 'info', channel: 'in_app', isRead: true },
+      { userId: adminUser.id, title: 'System Update', message: 'Face recognition model updated to ArcFace v3.0', type: 'info', channel: 'in_app', isRead: false },
+      { userId: s3.id, title: 'Low Attendance Warning', message: 'Your attendance in CS201ES Data Structures is below 75%. Please improve attendance.', type: 'warning', channel: 'in_app', isRead: false },
+      { userId: superAdmin.id, title: 'Academic Calendar Published', message: 'Academic Calendar for AY 2025-2026 has been published under R22 regulation', type: 'info', channel: 'in_app', isRead: true },
+      { userId: parentUser.id, title: 'Attendance Update', message: 'Your ward Ravi Kiran has 82% attendance this month', type: 'info', channel: 'in_app', isRead: false },
+      { userId: securityUser.id, title: 'Security Alert', message: 'Unauthorized entry attempt detected at ECE Block entrance', type: 'warning', channel: 'in_app', isRead: false },
     ]
   });
 
   // ==========================================
-  // 13. AUDIT LOGS
+  // 19. AUDIT LOGS
   // ==========================================
+  console.log('📦 Creating audit logs...');
   await db.auditLog.createMany({
     data: [
-      { userId: admin.id, action: 'CREATE', resource: 'geofence', details: 'Created geofence: School of Computer Science', ipAddress: '192.168.1.100' },
-      { userId: faculty1.id, action: 'CREATE', resource: 'attendance_session', details: 'Created attendance session for CS501', ipAddress: '192.168.1.101' },
-      { userId: hod.id, action: 'REVIEW', resource: 'violation', details: 'Reviewed violation: confirmed proxy attempt', ipAddress: '192.168.1.102' },
-      { userId: admin.id, action: 'UPDATE', resource: 'user', details: 'Updated role for Dr. Priya Menon to faculty', ipAddress: '192.168.1.100' },
-      { userId: admin.id, action: 'CONFIG', resource: 'system', details: 'Updated face recognition threshold to 0.92', ipAddress: '192.168.1.100' },
+      { userId: superAdmin.id, action: 'CREATE', resource: 'academic_year', details: 'Created Academic Year 2025-2026 with R22 regulation', ipAddress: '192.168.1.100' },
+      { userId: adminUser.id, action: 'CREATE', resource: 'department', details: 'Created 10 departments for JNTUH Engineering College', ipAddress: '192.168.1.100' },
+      { userId: adminUser.id, action: 'CREATE', resource: 'semester', details: 'Created 8 semesters for AY 2025-2026', ipAddress: '192.168.1.100' },
+      { userId: adminUser.id, action: 'CREATE', resource: 'subject', details: 'Created subjects as per JNTU R22 Regulation CSE pattern', ipAddress: '192.168.1.100' },
+      { userId: hodCSE.id, action: 'CREATE', resource: 'program', details: 'Created B.Tech CSE program under R22 Regulation', ipAddress: '192.168.1.102' },
+      { userId: faculty1.id, action: 'CREATE', resource: 'attendance_session', details: 'Created attendance session for CS101ES', ipAddress: '192.168.1.101' },
+      { userId: hodCSE.id, action: 'REVIEW', resource: 'violation', details: 'Reviewed violation: confirmed proxy attempt', ipAddress: '192.168.1.102' },
+      { userId: adminUser.id, action: 'UPDATE', resource: 'user', details: 'Updated role for Dr. Lakshmi Devi to faculty', ipAddress: '192.168.1.100' },
+      { userId: superAdmin.id, action: 'CONFIG', resource: 'system', details: 'Updated face recognition threshold to 0.92', ipAddress: '192.168.1.100' },
+      { userId: adminUser.id, action: 'CREATE', resource: 'calendar_event', details: 'Published academic calendar events for AY 2025-2026', ipAddress: '192.168.1.100' },
     ]
   });
 
-  // Stats summary
+  // ==========================================
+  // STATS SUMMARY
+  // ==========================================
+  const deptCount = await db.department.count();
   const userCount = await db.user.count();
+  const subjectCount = await db.subject.count();
+  const semesterCount = await db.semester.count();
   const courseCount = await db.course.count();
   const sessionCount = await db.attendanceSession.count();
   const recordCount = await db.attendanceRecord.count();
   const violationCount = await db.attendanceViolation.count();
+  const eventCount = await db.calendarEvent.count();
+  const programCount = await db.program.count();
 
-  console.log('✅ Seed completed successfully!');
+  console.log('✅ JNTUH SCMS Seed completed successfully!');
+  console.log(`   Departments: ${deptCount}`);
+  console.log(`   Academic Years: 1`);
+  console.log(`   Semesters: ${semesterCount}`);
+  console.log(`   Subjects: ${subjectCount}`);
   console.log(`   Users: ${userCount}`);
+  console.log(`   Programs: ${programCount}`);
   console.log(`   Courses: ${courseCount}`);
   console.log(`   Attendance Sessions: ${sessionCount}`);
   console.log(`   Attendance Records: ${recordCount}`);
   console.log(`   Violations: ${violationCount}`);
+  console.log(`   Calendar Events: ${eventCount}`);
 }
 
 main()

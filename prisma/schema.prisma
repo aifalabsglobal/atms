@@ -8,9 +8,89 @@ datasource db {
 }
 
 // ============================================
-// UoH Smart Campus Management System (SCMS)
-// AMS + LMS Database Schema
+// JNTUH Engineering College Smart Campus Management System (SCMS)
+// AMS + LMS Database Schema — R22 Regulation
 // ============================================
+
+// --- CORE: Masters ---
+model Department {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  code        String   @unique  // CSE, ECE, EEE, MECH, CIVIL, IT, CSE-AIML, CSE-DS, CSE-NT
+  hodId       String?  @unique
+  building    String?
+  floor       String?
+  phone       String?
+  email       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  hod         User?    @relation("DepartmentHOD", fields: [hodId], references: [id])
+  programs    Program[]
+  subjects    Subject[]
+}
+
+model AcademicYear {
+  id          String   @id @default(cuid())
+  name        String   @unique  // "2025-2026"
+  code        String   @unique  // "AY2526"
+  startDate   String   // YYYY-MM-DD
+  endDate     String   // YYYY-MM-DD
+  status      String   @default("upcoming") // upcoming, active, completed
+  regulation  String?  // R22, R25
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  semesters   Semester[]
+  calendarEvents CalendarEvent[]
+}
+
+model Semester {
+  id            String   @id @default(cuid())
+  academicYearId String
+  name          String   // "I Year I Sem", "II Year II Sem"
+  code          String   // "I-I", "I-II", "II-I", "II-II", "III-I", "III-II", "IV-I", "IV-II"
+  year          Int      @default(1)  // 1, 2, 3, 4
+  semester      Int      @default(1)  // 1 or 2
+  startDate     String
+  endDate       String
+  status        String   @default("upcoming") // upcoming, active, completed
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  academicYear  AcademicYear @relation(fields: [academicYearId], references: [id])
+  subjects      Subject[]
+  timetableSlots TimetableSlot[]
+
+  @@unique([academicYearId, code])
+}
+
+model Subject {
+  id            String   @id @default(cuid())
+  code          String   @unique  // MA101BS, CS201ES, etc. (JNTU R22 pattern)
+  name          String
+  departmentId  String
+  semesterId    String?
+  credits       Int      @default(3)
+  lectureHours  Int      @default(3)  // L
+  tutorialHours Int      @default(0)  // T
+  labHours      Int      @default(0)  // P
+  type          String   @default("core") // core, elective, audit, lab, project, open_elective, professional_elective
+  category      String?  // BS, ES, PC, PE, OE, HS (JNTU category codes)
+  syllabus      String?  // Full syllabus text
+  textbooks     String?  // JSON array of textbooks
+  referenceBooks String? // JSON array of reference books
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  department    Department @relation(fields: [departmentId], references: [id])
+  semester      Semester?  @relation(fields: [semesterId], references: [id])
+  courses       Course[]
+}
 
 // --- CORE: Users & RBAC ---
 model User {
@@ -18,6 +98,7 @@ model User {
   email         String   @unique
   name          String
   employeeId    String?  @unique
+  departmentId  String?
   department    String?
   phone         String?
   avatarUrl     String?
@@ -29,24 +110,26 @@ model User {
   updatedAt     DateTime @updatedAt
 
   // Relations
-  faceEmbeddings      FaceEmbedding[]
-  biometricRecords    BiometricRecord[]
-  attendanceRecords   AttendanceRecord[]
-  attendanceSessions  AttendanceSession[] @relation("SessionCreator")
-  courseEnrollments   CourseEnrollment[]
-  submissions         Submission[]
-  quizAttempts        QuizAttempt[]
-  violations          AttendanceViolation[] @relation("Violator")
-  reviewedViolations  AttendanceViolation[] @relation("Reviewer")
-  taughtCourses       Course[]             @relation("CourseInstructor")
-  gradedEntries       GradeBook[]          @relation("GradeGrader")
-  studentGrades       GradeBook[]          @relation("GradeStudent")
+  departmentRef      Department?         @relation("DepartmentHOD")
+  faceEmbeddings     FaceEmbedding[]
+  biometricRecords   BiometricRecord[]
+  attendanceRecords  AttendanceRecord[]
+  attendanceSessions AttendanceSession[] @relation("SessionCreator")
+  courseEnrollments  CourseEnrollment[]
+  submissions        Submission[]
+  quizAttempts       QuizAttempt[]
+  violations         AttendanceViolation[] @relation("Violator")
+  reviewedViolations AttendanceViolation[] @relation("Reviewer")
+  taughtCourses      Course[]            @relation("CourseInstructor")
+  gradedEntries      GradeBook[]         @relation("GradeGrader")
+  studentGrades      GradeBook[]         @relation("GradeStudent")
+  calendarEvents     CalendarEvent[]
 }
 
 model FaceEmbedding {
   id           String   @id @default(cuid())
   userId       String
-  embedding    String   // JSON array of floats
+  embedding    String
   model        String   @default("ArcFace")
   qualityScore Float    @default(0)
   isActive     Boolean  @default(true)
@@ -58,8 +141,8 @@ model FaceEmbedding {
 model BiometricRecord {
   id         String   @id @default(cuid())
   userId     String
-  type       String   // face, fingerprint, iris
-  template   String   // Base64 encoded biometric template
+  type       String
+  template   String
   deviceId   String?
   verified   Boolean  @default(false)
   createdAt  DateTime @default(now())
@@ -71,6 +154,7 @@ model BiometricRecord {
 model TimetableSlot {
   id           String   @id @default(cuid())
   courseId     String
+  semesterId   String?
   dayOfWeek    Int      // 0=Sunday, 6=Saturday
   startTime    String   // HH:mm format
   endTime      String   // HH:mm format
@@ -82,18 +166,19 @@ model TimetableSlot {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  course              Course              @relation(fields: [courseId], references: [id])
-  attendanceSessions  AttendanceSession[]
+  course             Course              @relation(fields: [courseId], references: [id])
+  semesterRef        Semester?           @relation(fields: [semesterId], references: [id])
+  attendanceSessions AttendanceSession[]
 }
 
 model Geofence {
   id          String   @id @default(cuid())
   name        String
-  type        String   @default("circle") // circle, polygon
+  type        String   @default("circle")
   centerLat   Float?
   centerLng   Float?
   radiusMtrs  Float?
-  polygonData String?  // JSON array of {lat, lng} for polygon type
+  polygonData String?
   building    String?
   floor       String?
   isActive    Boolean  @default(true)
@@ -109,11 +194,11 @@ model AttendanceSession {
   courseId       String
   createdBy      String
   geofenceId     String?
-  sessionDate    String   // YYYY-MM-DD
-  startTime      String   // HH:mm
-  endTime        String?  // HH:mm
-  status         String   @default("upcoming") // upcoming, active, completed, cancelled
-  captureMethod  String   @default("manual") // manual, face, gps, qrcode, biometric, beacon
+  sessionDate    String
+  startTime      String
+  endTime        String?
+  status         String   @default("upcoming")
+  captureMethod  String   @default("manual")
   expectedCount  Int      @default(0)
   presentCount   Int      @default(0)
   absentCount    Int      @default(0)
@@ -133,9 +218,9 @@ model AttendanceRecord {
   id           String   @id @default(cuid())
   sessionId    String
   studentId    String
-  status       String   @default("absent") // present, absent, late, excused
+  status       String   @default("absent")
   markedAt     DateTime?
-  captureMethod String  @default("manual") // manual, face, gps, qrcode, biometric, beacon
+  captureMethod String  @default("manual")
   confidence   Float?
   gpsLat       Float?
   gpsLng       Float?
@@ -154,11 +239,11 @@ model AttendanceViolation {
   id           String   @id @default(cuid())
   recordId     String   @unique
   studentId    String
-  type         String   // spoofing, proxy, out_of_geofence, multiple_marking, face_mismatch
-  severity     String   @default("medium") // low, medium, high, critical
+  type         String
+  severity     String   @default("medium")
   description  String?
   reviewedBy   String?
-  reviewStatus String   @default("pending") // pending, confirmed, dismissed
+  reviewStatus String   @default("pending")
   reviewNotes  String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -173,25 +258,27 @@ model Program {
   id          String   @id @default(cuid())
   name        String
   code        String   @unique
-  department  String
+  departmentId String
   duration    Int      @default(4)
-  type        String   @default("ug") // ug, pg, phd, diploma, certificate
+  type        String   @default("ug")
   description String?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  courses Course[]
+  department Department @relation(fields: [departmentId], references: [id])
+  courses    Course[]
 }
 
 model Course {
   id           String   @id @default(cuid())
   programId    String
+  subjectId    String?
   code         String   @unique
   name         String
   credits      Int      @default(3)
   semester     Int      @default(1)
-  type         String   @default("core") // core, elective, lab, project
+  type         String   @default("core")
   description  String?
   instructorId String?
   syllabus     String?
@@ -200,6 +287,7 @@ model Course {
   updatedAt    DateTime @updatedAt
 
   program             Program              @relation(fields: [programId], references: [id])
+  subject             Subject?             @relation(fields: [subjectId], references: [id])
   instructor          User?                @relation("CourseInstructor", fields: [instructorId], references: [id])
   enrollments         CourseEnrollment[]
   modules             Module[]
@@ -215,7 +303,7 @@ model CourseEnrollment {
   id          String    @id @default(cuid())
   courseId    String
   studentId   String
-  status      String    @default("enrolled") // enrolled, completed, dropped, failed
+  status      String    @default("enrolled")
   enrolledAt  DateTime  @default(now())
   completedAt DateTime?
 
@@ -243,10 +331,10 @@ model Lesson {
   id          String   @id @default(cuid())
   moduleId    String
   title       String
-  type        String   @default("video") // video, document, link, quiz, live_class
+  type        String   @default("video")
   contentUrl  String?
   contentBody String?
-  duration    Int?     // minutes
+  duration    Int?
   orderIndex  Int      @default(0)
   isPublished Boolean  @default(false)
   createdAt   DateTime @default(now())
@@ -260,13 +348,13 @@ model Assignment {
   courseId    String
   title       String
   description String?
-  type        String   @default("individual") // individual, group
+  type        String   @default("individual")
   maxScore    Float    @default(100)
   dueDate     DateTime
   allowLate   Boolean  @default(true)
   latePenalty Float    @default(0)
   attachments String?
-  status      String   @default("published") // draft, published, grading, closed
+  status      String   @default("published")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -282,7 +370,7 @@ model Submission {
   fileUrls     String?
   score        Float?
   feedback     String?
-  status       String   @default("submitted") // submitted, graded, returned, resubmitted
+  status       String   @default("submitted")
   submittedAt  DateTime @default(now())
   gradedAt     DateTime?
 
@@ -296,11 +384,11 @@ model QuizQuestion {
   id            String   @id @default(cuid())
   courseId      String
   question      String
-  type          String   @default("mcq") // mcq, true_false, short_answer, essay
-  options       String?  // JSON array of options
+  type          String   @default("mcq")
+  options       String?
   correctAnswer String?
   points        Float    @default(1)
-  difficulty    String   @default("medium") // easy, medium, hard
+  difficulty    String   @default("medium")
   explanation   String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
@@ -312,13 +400,13 @@ model QuizAttempt {
   id           String    @id @default(cuid())
   studentId    String
   courseId     String
-  questions    String    // JSON array of question IDs
-  answers      String    // JSON object { questionId: answer }
+  questions    String
+  answers      String
   score        Float     @default(0)
   totalPoints  Float     @default(0)
   percentage   Float     @default(0)
   timeTaken    Int?
-  status       String    @default("completed") // in_progress, completed, timed_out
+  status       String    @default("completed")
   startedAt    DateTime  @default(now())
   completedAt  DateTime?
 
@@ -330,7 +418,7 @@ model GradeBook {
   id          String   @id @default(cuid())
   courseId     String
   studentId    String
-  component    String   // assignment, quiz, midterm, final, participation, lab
+  component    String
   componentId  String?
   score        Float
   maxScore     Float
@@ -342,6 +430,29 @@ model GradeBook {
   course   Course @relation(fields: [courseId], references: [id])
   student  User   @relation("GradeStudent", fields: [studentId], references: [id])
   grader   User?  @relation("GradeGrader", fields: [gradedBy], references: [id])
+}
+
+// --- CALENDAR ---
+model CalendarEvent {
+  id          String   @id @default(cuid())
+  userId      String
+  title       String
+  description String?
+  type        String   @default("personal") // personal, academic, exam, holiday, event, deadline, class
+  startDate   String   // YYYY-MM-DD
+  endDate     String?  // YYYY-MM-DD
+  startTime   String?  // HH:mm
+  endTime     String?  // HH:mm
+  location    String?
+  color       String?  // hex color
+  isAllDay    Boolean  @default(false)
+  courseId    String?
+  academicYearId String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id])
+  academicYear AcademicYear? @relation(fields: [academicYearId], references: [id])
 }
 
 // --- System: Audit & Notifications ---
