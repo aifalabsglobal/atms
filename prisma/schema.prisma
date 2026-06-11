@@ -1,0 +1,368 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// UoH Smart Campus Management System (SCMS)
+// AMS + LMS Database Schema
+// ============================================
+
+// --- CORE: Users & RBAC ---
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String
+  employeeId    String?  @unique
+  department    String?
+  phone         String?
+  avatarUrl     String?
+  role          String   @default("student") // super_admin, admin, hod, faculty, lab_assistant, student, parent, visitor, security
+  status        String   @default("active")  // active, inactive, suspended
+  passwordHash  String   @default("$2a$10$placeholder")
+  lastLoginAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relations
+  faceEmbeddings      FaceEmbedding[]
+  biometricRecords    BiometricRecord[]
+  attendanceRecords   AttendanceRecord[]
+  attendanceSessions  AttendanceSession[] @relation("SessionCreator")
+  courseEnrollments   CourseEnrollment[]
+  submissions         Submission[]
+  quizAttempts        QuizAttempt[]
+  violations          AttendanceViolation[] @relation("Violator")
+  reviewedViolations  AttendanceViolation[] @relation("Reviewer")
+  taughtCourses       Course[]             @relation("CourseInstructor")
+  gradedEntries       GradeBook[]          @relation("GradeGrader")
+  studentGrades       GradeBook[]          @relation("GradeStudent")
+}
+
+model FaceEmbedding {
+  id           String   @id @default(cuid())
+  userId       String
+  embedding    String   // JSON array of floats
+  model        String   @default("ArcFace")
+  qualityScore Float    @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model BiometricRecord {
+  id         String   @id @default(cuid())
+  userId     String
+  type       String   // face, fingerprint, iris
+  template   String   // Base64 encoded biometric template
+  deviceId   String?
+  verified   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// --- AMS: Attendance Management ---
+model TimetableSlot {
+  id           String   @id @default(cuid())
+  courseId     String
+  dayOfWeek    Int      // 0=Sunday, 6=Saturday
+  startTime    String   // HH:mm format
+  endTime      String   // HH:mm format
+  roomNumber   String?
+  building     String?
+  semester     String?
+  academicYear String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  course              Course              @relation(fields: [courseId], references: [id])
+  attendanceSessions  AttendanceSession[]
+}
+
+model Geofence {
+  id          String   @id @default(cuid())
+  name        String
+  type        String   @default("circle") // circle, polygon
+  centerLat   Float?
+  centerLng   Float?
+  radiusMtrs  Float?
+  polygonData String?  // JSON array of {lat, lng} for polygon type
+  building    String?
+  floor       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  attendanceSessions AttendanceSession[]
+}
+
+model AttendanceSession {
+  id             String   @id @default(cuid())
+  timetableSlotId String?
+  courseId       String
+  createdBy      String
+  geofenceId     String?
+  sessionDate    String   // YYYY-MM-DD
+  startTime      String   // HH:mm
+  endTime        String?  // HH:mm
+  status         String   @default("upcoming") // upcoming, active, completed, cancelled
+  captureMethod  String   @default("manual") // manual, face, gps, qrcode, biometric, beacon
+  expectedCount  Int      @default(0)
+  presentCount   Int      @default(0)
+  absentCount    Int      @default(0)
+  lateCount      Int      @default(0)
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  timetableSlot  TimetableSlot?       @relation(fields: [timetableSlotId], references: [id])
+  course         Course               @relation(fields: [courseId], references: [id])
+  creator        User                 @relation("SessionCreator", fields: [createdBy], references: [id])
+  geofence       Geofence?            @relation(fields: [geofenceId], references: [id])
+  records        AttendanceRecord[]
+}
+
+model AttendanceRecord {
+  id           String   @id @default(cuid())
+  sessionId    String
+  studentId    String
+  status       String   @default("absent") // present, absent, late, excused
+  markedAt     DateTime?
+  captureMethod String  @default("manual") // manual, face, gps, qrcode, biometric, beacon
+  confidence   Float?
+  gpsLat       Float?
+  gpsLng       Float?
+  ipAddress    String?
+  deviceId     String?
+  remarks      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  session   AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student   User              @relation(fields: [studentId], references: [id])
+  violation AttendanceViolation?
+}
+
+model AttendanceViolation {
+  id           String   @id @default(cuid())
+  recordId     String   @unique
+  studentId    String
+  type         String   // spoofing, proxy, out_of_geofence, multiple_marking, face_mismatch
+  severity     String   @default("medium") // low, medium, high, critical
+  description  String?
+  reviewedBy   String?
+  reviewStatus String   @default("pending") // pending, confirmed, dismissed
+  reviewNotes  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  record    AttendanceRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  violator  User             @relation("Violator", fields: [studentId], references: [id])
+  reviewer  User?            @relation("Reviewer", fields: [reviewedBy], references: [id])
+}
+
+// --- LMS: Learning Management System ---
+model Program {
+  id          String   @id @default(cuid())
+  name        String
+  code        String   @unique
+  department  String
+  duration    Int      @default(4)
+  type        String   @default("ug") // ug, pg, phd, diploma, certificate
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  courses Course[]
+}
+
+model Course {
+  id           String   @id @default(cuid())
+  programId    String
+  code         String   @unique
+  name         String
+  credits      Int      @default(3)
+  semester     Int      @default(1)
+  type         String   @default("core") // core, elective, lab, project
+  description  String?
+  instructorId String?
+  syllabus     String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  program             Program              @relation(fields: [programId], references: [id])
+  instructor          User?                @relation("CourseInstructor", fields: [instructorId], references: [id])
+  enrollments         CourseEnrollment[]
+  modules             Module[]
+  timetableSlots      TimetableSlot[]
+  attendanceSessions  AttendanceSession[]
+  assignments         Assignment[]
+  quizQuestions       QuizQuestion[]
+  quizAttempts        QuizAttempt[]
+  gradeBooks          GradeBook[]
+}
+
+model CourseEnrollment {
+  id          String    @id @default(cuid())
+  courseId    String
+  studentId   String
+  status      String    @default("enrolled") // enrolled, completed, dropped, failed
+  enrolledAt  DateTime  @default(now())
+  completedAt DateTime?
+
+  course   Course @relation(fields: [courseId], references: [id])
+  student  User   @relation(fields: [studentId], references: [id])
+
+  @@unique([courseId, studentId])
+}
+
+model Module {
+  id          String   @id @default(cuid())
+  courseId    String
+  title       String
+  description String?
+  orderIndex  Int      @default(0)
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  course  Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons Lesson[]
+}
+
+model Lesson {
+  id          String   @id @default(cuid())
+  moduleId    String
+  title       String
+  type        String   @default("video") // video, document, link, quiz, live_class
+  contentUrl  String?
+  contentBody String?
+  duration    Int?     // minutes
+  orderIndex  Int      @default(0)
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+}
+
+model Assignment {
+  id          String   @id @default(cuid())
+  courseId    String
+  title       String
+  description String?
+  type        String   @default("individual") // individual, group
+  maxScore    Float    @default(100)
+  dueDate     DateTime
+  allowLate   Boolean  @default(true)
+  latePenalty Float    @default(0)
+  attachments String?
+  status      String   @default("published") // draft, published, grading, closed
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  course      Course      @relation(fields: [courseId], references: [id])
+  submissions Submission[]
+}
+
+model Submission {
+  id           String   @id @default(cuid())
+  assignmentId String
+  studentId    String
+  content      String?
+  fileUrls     String?
+  score        Float?
+  feedback     String?
+  status       String   @default("submitted") // submitted, graded, returned, resubmitted
+  submittedAt  DateTime @default(now())
+  gradedAt     DateTime?
+
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  student    User       @relation(fields: [studentId], references: [id])
+
+  @@unique([assignmentId, studentId])
+}
+
+model QuizQuestion {
+  id            String   @id @default(cuid())
+  courseId      String
+  question      String
+  type          String   @default("mcq") // mcq, true_false, short_answer, essay
+  options       String?  // JSON array of options
+  correctAnswer String?
+  points        Float    @default(1)
+  difficulty    String   @default("medium") // easy, medium, hard
+  explanation   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  course Course @relation(fields: [courseId], references: [id])
+}
+
+model QuizAttempt {
+  id           String    @id @default(cuid())
+  studentId    String
+  courseId     String
+  questions    String    // JSON array of question IDs
+  answers      String    // JSON object { questionId: answer }
+  score        Float     @default(0)
+  totalPoints  Float     @default(0)
+  percentage   Float     @default(0)
+  timeTaken    Int?
+  status       String    @default("completed") // in_progress, completed, timed_out
+  startedAt    DateTime  @default(now())
+  completedAt  DateTime?
+
+  student User   @relation(fields: [studentId], references: [id])
+  course  Course @relation(fields: [courseId], references: [id])
+}
+
+model GradeBook {
+  id          String   @id @default(cuid())
+  courseId     String
+  studentId    String
+  component    String   // assignment, quiz, midterm, final, participation, lab
+  componentId  String?
+  score        Float
+  maxScore     Float
+  weightage    Float    @default(0)
+  remarks      String?
+  gradedBy     String?
+  gradedAt     DateTime @default(now())
+
+  course   Course @relation(fields: [courseId], references: [id])
+  student  User   @relation("GradeStudent", fields: [studentId], references: [id])
+  grader   User?  @relation("GradeGrader", fields: [gradedBy], references: [id])
+}
+
+// --- System: Audit & Notifications ---
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  resource  String
+  details   String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  message   String
+  type      String   @default("info")
+  channel   String   @default("in_app")
+  isRead    Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+}
