@@ -35,7 +35,7 @@ interface ModuleItem { id: string; title: string; orderIndex: number; isPublishe
 interface Course {
   id: string; code: string; name: string; credits: number; semester: number;
   type: 'core' | 'elective' | 'lab' | 'project'; description: string; isActive: boolean;
-  program: Program; instructor: Instructor;
+  program: Program | null; instructor: Instructor | null;
   _count: { enrollments: number; modules: number; assignments: number; attendanceSessions: number };
   modules: ModuleItem[];
 }
@@ -204,14 +204,14 @@ function CourseCard({ course }: { course: Course }) {
               <CardTitle className="text-base leading-snug mt-1 truncate">{course.name}</CardTitle>
               <CardDescription className="text-xs flex items-center gap-1 mt-0.5">
                 <GraduationCap className="h-3 w-3 shrink-0" />
-                <span className="truncate">{course.instructor.name}</span>
+                <span className="truncate">{course.instructor?.name || 'TBA'}</span>
               </CardDescription>
             </CardHeader>
 
             <CardContent className="p-0 space-y-3">
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <BookMarked className="h-3 w-3 shrink-0" />
-                <span className="truncate">{course.program.name} ({course.program.code})</span>
+                <span className="truncate">{course.program ? `${course.program.name} (${course.program.code})` : 'No Program'}</span>
               </div>
 
               <div className="grid grid-cols-2 gap-2">

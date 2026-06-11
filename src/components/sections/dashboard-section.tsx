@@ -372,9 +372,9 @@ function ActiveSessionsCard({ sessions }: { sessions: ActiveSession[] }) {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <Badge className="text-[10px] font-semibold" style={{ backgroundColor: NAVY, color: '#fff' }}>
-                        {session.course.code}
+                        {session.course?.code || 'N/A'}
                       </Badge>
-                      <span className="text-sm font-medium">{session.course.name}</span>
+                      <span className="text-sm font-medium">{session.course?.name || 'Unknown Course'}</span>
                     </div>
                     <Badge variant="outline" className="text-[10px] gap-1">
                       <MethodIcon className="h-3 w-3" />
@@ -397,7 +397,7 @@ function ActiveSessionsCard({ sessions }: { sessions: ActiveSession[] }) {
                     </div>
                     <Progress value={pct} className="h-1.5" />
                   </div>
-                  <p className="text-[10px] text-muted-foreground">Started by {session.creator.name}</p>
+                  <p className="text-[10px] text-muted-foreground">Started by {session.creator?.name || 'Unknown'}</p>
                 </div>
               );
             })}

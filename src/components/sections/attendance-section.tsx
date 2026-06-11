@@ -666,10 +666,10 @@ export default function AttendanceSection() {
                           <TableCell>
                             <div>
                               <span className="font-medium text-xs" style={{ color: UOH_NAVY }}>
-                                {session.course.code}
+                                {session.course?.code || 'N/A'}
                               </span>
                               <p className="text-xs text-muted-foreground truncate max-w-[180px]">
-                                {session.course.name}
+                                {session.course?.name || 'Unknown Course'}
                               </p>
                             </div>
                           </TableCell>
