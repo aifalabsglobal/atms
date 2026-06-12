@@ -212,8 +212,8 @@ async function main() {
     // Lab Assistant
     { email: 'lab.ravi@jntuh.ac.in', name: 'Ravi Teja K.', employeeId: 'JNTUH017', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'lab_assistant' as const, status: 'active', phone: '+91-9876543217' },
     // Students
-    { email: 'student.ravi@jntuh.ac.in', name: 'Ravi Kiran', employeeId: 'STU001', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'student' as const, status: 'active', phone: '+91-9876543218' },
-    { email: 'student.divya@jntuh.ac.in', name: 'Divya Sri', employeeId: 'STU002', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'student' as const, status: 'active', phone: '+91-9876543219' },
+    { email: 'student.ravi@jntuh.ac.in', name: 'Ravi Kiran', employeeId: 'STU001', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'student' as const, status: 'active', phone: '+91-9876543218', profileImageUrl: '/profiles/student-male-1.png' },
+    { email: 'student.divya@jntuh.ac.in', name: 'Divya Sri', employeeId: 'STU002', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'student' as const, status: 'active', phone: '+91-9876543219', profileImageUrl: '/profiles/student-female-1.png' },
     { email: 'student.sai@jntuh.ac.in', name: 'Sai Prasad', employeeId: 'STU003', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'student' as const, status: 'active', phone: '+91-9876543220' },
     { email: 'student.priyanka@jntuh.ac.in', name: 'Priyanka Reddy', employeeId: 'STU004', departmentId: eceDept.id, department: 'Electronics & Communication Engineering', role: 'student' as const, status: 'active', phone: '+91-9876543221' },
     { email: 'student.naveen@jntuh.ac.in', name: 'Naveen Kumar', employeeId: 'STU005', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'student' as const, status: 'active', phone: '+91-9876543222' },
@@ -507,6 +507,60 @@ async function main() {
       presentCount: 5,
       absentCount: 1,
       lateCount: 1,
+    }
+  });
+
+  // Self-marking active sessions (geofence + face)
+  const selfMarkSession1 = await db.attendanceSession.create({
+    data: {
+      timetableSlotId: timetableSlots[1 % timetableSlots.length]?.id,
+      courseId: courses[1 % courses.length].id,
+      createdBy: faculty1.id,
+      geofenceId: geofences[0].id,
+      sessionDate: today.toISOString().split('T')[0],
+      startTime: '10:00',
+      endTime: '10:50',
+      status: 'active',
+      captureMethod: 'self_geo_face',
+      expectedCount: 8,
+      presentCount: 0,
+      absentCount: 0,
+      lateCount: 0,
+    }
+  });
+
+  const selfMarkSession2 = await db.attendanceSession.create({
+    data: {
+      timetableSlotId: timetableSlots[2 % timetableSlots.length]?.id,
+      courseId: courses[2 % courses.length].id,
+      createdBy: faculty2.id,
+      geofenceId: geofences[1 % geofences.length]?.id,
+      sessionDate: today.toISOString().split('T')[0],
+      startTime: '11:00',
+      endTime: '11:50',
+      status: 'active',
+      captureMethod: 'self_geo_face',
+      expectedCount: 6,
+      presentCount: 0,
+      absentCount: 0,
+      lateCount: 0,
+    }
+  });
+
+  // Mark s1 (Ravi Kiran) as present in liveSession with geo+face data
+  await db.attendanceRecord.create({
+    data: {
+      sessionId: liveSession.id,
+      studentId: s1.id,
+      status: 'present',
+      markedAt: new Date(),
+      captureMethod: 'self_geo_face',
+      gpsLat: 17.4497,
+      gpsLng: 78.6674,
+      faceVerified: true,
+      geofenceValidated: true,
+      distanceFromCenter: 25.5,
+      confidence: 0.92,
     }
   });
 

@@ -11,7 +11,7 @@ import {
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem,
@@ -186,6 +186,7 @@ function AppContent() {
                       className={cn("flex items-center gap-2 cursor-pointer", isActive && "bg-accent")}
                     >
                       <Avatar className="h-6 w-6">
+                        {preset.profileImageUrl && <AvatarImage src={preset.profileImageUrl} alt={preset.name} />}
                         <AvatarFallback className="text-[9px] text-white" style={{ backgroundColor: ROLE_COLORS[r] }}>
                           {preset.avatar}
                         </AvatarFallback>
@@ -208,6 +209,7 @@ function AppContent() {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="h-9 gap-2 pl-2 pr-1">
                   <Avatar className="h-7 w-7">
+                    {currentUser.profileImageUrl && <AvatarImage src={currentUser.profileImageUrl} alt={currentUser.name} />}
                     <AvatarFallback className="text-white text-xs" style={{ backgroundColor: ROLE_COLORS[role] }}>
                       {currentUser.avatar}
                     </AvatarFallback>
@@ -217,15 +219,20 @@ function AppContent() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
-                <div className="p-2">
-                  <p className="text-sm font-medium">{currentUser.name}</p>
-                  <p className="text-xs text-muted-foreground">{currentUser.email}</p>
-                  <Badge className="mt-1 text-[10px] text-white" style={{ backgroundColor: ROLE_COLORS[role] }}>
-                    {ROLE_LABELS[role]}
-                  </Badge>
-                  {currentUser.department && (
-                    <p className="text-[10px] text-muted-foreground mt-1">{currentUser.department}</p>
-                  )}
+                <div className="p-2 flex items-center gap-3">
+                  <Avatar className="h-12 w-12 border-2" style={{ borderColor: ROLE_COLORS[role] }}>
+                    {currentUser.profileImageUrl && <AvatarImage src={currentUser.profileImageUrl} alt={currentUser.name} />}
+                    <AvatarFallback className="text-white text-sm" style={{ backgroundColor: ROLE_COLORS[role] }}>
+                      {currentUser.avatar}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{currentUser.name}</p>
+                    <p className="text-xs text-muted-foreground truncate">{currentUser.email}</p>
+                    <Badge className="mt-1 text-[10px] text-white" style={{ backgroundColor: ROLE_COLORS[role] }}>
+                      {ROLE_LABELS[role]}
+                    </Badge>
+                  </div>
                 </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem>
@@ -257,9 +264,12 @@ function AppContent() {
               {/* Current Role Indicator */}
               <div className="px-3 mb-2">
                 <div className="rounded-lg border bg-muted/30 p-2.5 flex items-center gap-2">
-                  <div className="h-7 w-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold" style={{ backgroundColor: ROLE_COLORS[role] }}>
-                    {currentUser.avatar}
-                  </div>
+                  <Avatar className="h-7 w-7 border" style={{ borderColor: ROLE_COLORS[role] }}>
+                    {currentUser.profileImageUrl && <AvatarImage src={currentUser.profileImageUrl} alt={currentUser.name} />}
+                    <AvatarFallback className="text-[10px] font-bold text-white" style={{ backgroundColor: ROLE_COLORS[role] }}>
+                      {currentUser.avatar}
+                    </AvatarFallback>
+                  </Avatar>
                   <div className="flex-1 min-w-0">
                     <p className="text-[11px] font-medium truncate">{currentUser.name}</p>
                     <p className="text-[10px] text-muted-foreground truncate">{ROLE_LABELS[role]}</p>

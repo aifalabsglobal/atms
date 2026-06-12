@@ -11,6 +11,7 @@ export interface CurrentUser {
   role: Role;
   department?: string;
   avatar: string; // initials for avatar fallback
+  profileImageUrl?: string; // Profile photo URL
 }
 
 export const ROLE_LABELS: Record<Role, string> = {
@@ -73,6 +74,7 @@ export const ROLE_PRESETS: Record<Role, CurrentUser> = {
     role: 'student',
     department: 'Computer Science & Engineering',
     avatar: 'AK',
+    profileImageUrl: '/profiles/student-male-1.png',
   },
   parent: {
     id: 'u18',

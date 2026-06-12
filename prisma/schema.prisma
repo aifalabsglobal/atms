@@ -102,6 +102,7 @@ model User {
   department    String?
   phone         String?
   avatarUrl     String?
+  profileImageUrl String?  // Profile photo URL for face recognition & display
   role          String   @default("student") // super_admin, admin, hod, faculty, lab_assistant, student, parent, visitor, security
   status        String   @default("active")  // active, inactive, suspended
   passwordHash  String   @default("$2a$10$placeholder")
@@ -226,6 +227,10 @@ model AttendanceRecord {
   gpsLng       Float?
   ipAddress    String?
   deviceId     String?
+  selfieUrl    String?   // Selfie image URL captured during attendance
+  faceVerified Boolean  @default(false)  // Whether face was verified
+  geofenceValidated Boolean @default(false)  // Whether GPS was within geofence
+  distanceFromCenter Float?  // Distance in meters from geofence center
   remarks      String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -233,6 +238,8 @@ model AttendanceRecord {
   session   AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   student   User              @relation(fields: [studentId], references: [id])
   violation AttendanceViolation?
+
+  @@unique([sessionId, studentId])
 }
 
 model AttendanceViolation {
