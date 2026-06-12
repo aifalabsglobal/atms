@@ -43,8 +43,8 @@ export async function POST(request: Request) {
     }
 
     // Check if already marked
-    const existing = await db.attendanceRecord.findUnique({
-      where: { sessionId_studentId: { sessionId, studentId } },
+    const existing = await db.attendanceRecord.findFirst({
+      where: { sessionId, studentId },
     });
 
     if (existing) {

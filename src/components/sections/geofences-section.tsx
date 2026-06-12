@@ -1,29 +1,507 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
-import { MapPin, Plus, Building2, Circle, Pentagon, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  MapPin, Plus, Building2, Circle, Pentagon, ToggleLeft, ToggleRight,
+  Navigation, ScanFace, CheckCircle2, XCircle, Clock, ShieldCheck,
+  ShieldAlert, Loader2, Crosshair, Maximize2, UserCheck, AlertTriangle,
+} from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { useAppStore } from '@/lib/store';
+import { cn } from '@/lib/utils';
 import type { GeofenceItem } from '@/lib/types';
 
+// ─── Constants ──────────────────────────────────────────────────────────────
+const NAVY = '#1A3C6E';
+const DEFAULT_CENTER: [number, number] = [17.4563, 78.6698]; // JNTUH approximate location
+const DEFAULT_ZOOM = 16;
+
+// ─── Haversine Distance ─────────────────────────────────────────────────────
+function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371000;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+// ─── Active Session Type ────────────────────────────────────────────────────
+interface ActiveSession {
+  id: string;
+  sessionDate: string;
+  startTime: string;
+  captureMethod: string;
+  status: string;
+  expectedCount: number;
+  presentCount: number;
+  course: { name: string; code: string };
+  creator: { name: string };
+  geofence: { name: string; centerLat?: number; centerLng?: number; radiusMtrs?: number } | null;
+  timetableSlot: { roomNumber: string | null; building: string | null } | null;
+  alreadyMarked: boolean;
+  existingRecord?: {
+    status: string;
+    faceVerified: boolean;
+    geofenceValidated: boolean;
+  } | null;
+}
+
+// ─── Map Component (dynamic import to avoid SSR issues) ─────────────────────
+function MapView({
+  geofences,
+  activeSessions,
+  userLocation,
+  onGeofenceClick,
+  selectedSession,
+  onMapClick,
+}: {
+  geofences: GeofenceItem[];
+  activeSessions: ActiveSession[];
+  userLocation: { lat: number; lng: number } | null;
+  onGeofenceClick: (geofence: GeofenceItem) => void;
+  selectedSession: ActiveSession | null;
+  onMapClick?: (lat: number, lng: number) => void;
+}) {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const [mapReady, setMapReady] = useState(false);
+  const leafletMapRef = useRef<any>(null);
+  const layersRef = useRef<any[]>([]);
+
+  // Load Leaflet CSS + JS dynamically
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    // Add CSS if not already added
+    if (!document.querySelector('link[href*="leaflet"]')) {
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+      document.head.appendChild(link);
+    }
+
+    // Load Leaflet JS
+    const loadMap = async () => {
+      const L = (await import('leaflet')).default;
+
+      if (!mapRef.current || leafletMapRef.current) return;
+
+      const map = L.map(mapRef.current, {
+        center: DEFAULT_CENTER,
+        zoom: DEFAULT_ZOOM,
+        zoomControl: true,
+        attributionControl: true,
+      });
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        maxZoom: 19,
+      }).addTo(map);
+
+      leafletMapRef.current = map;
+      setMapReady(true);
+    };
+
+    // Small delay to ensure DOM is ready
+    const timer = setTimeout(loadMap, 100);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Update layers when data changes
+  useEffect(() => {
+    if (!leafletMapRef.current || !mapReady) return;
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const L = require('leaflet');
+
+    // Clear existing layers
+    layersRef.current.forEach(layer => layer.remove());
+    layersRef.current = [];
+
+    const map = leafletMapRef.current;
+
+    // Draw geofence circles
+    geofences.forEach(g => {
+      if (g.centerLat && g.centerLng && g.radiusMtrs) {
+        // Check if this geofence is linked to an active session
+        const isActive = activeSessions.some(s => s.geofence?.name === g.name);
+        const circle = L.circle([g.centerLat, g.centerLng], {
+          radius: g.radiusMtrs,
+          color: isActive ? '#16a34a' : NAVY,
+          fillColor: isActive ? '#22c55e' : NAVY,
+          fillOpacity: isActive ? 0.15 : 0.08,
+          weight: isActive ? 3 : 2,
+          dashArray: isActive ? null : '5 5',
+        }).addTo(map);
+
+        circle.bindPopup(`
+          <div style="font-size:12px; min-width:160px;">
+            <strong style="color:${isActive ? '#16a34a' : NAVY}">${g.name}</strong><br/>
+            <span>Type: ${g.type}</span><br/>
+            <span>Radius: ${g.radiusMtrs}m</span><br/>
+            ${g.building ? `<span>Building: ${g.building}</span><br/>` : ''}
+            ${isActive ? '<span style="color:#16a34a; font-weight:600;">🔴 Active Session</span>' : '<span style="color:#888;">No active session</span>'}
+          </div>
+        `);
+
+        circle.on('click', () => onGeofenceClick(g));
+        layersRef.current.push(circle);
+
+        // Add center marker
+        const marker = L.circleMarker([g.centerLat, g.centerLng], {
+          radius: 4,
+          color: isActive ? '#16a34a' : NAVY,
+          fillColor: isActive ? '#22c55e' : NAVY,
+          fillOpacity: 1,
+          weight: 2,
+        }).addTo(map);
+        layersRef.current.push(marker);
+      }
+    });
+
+    // Draw user location
+    if (userLocation) {
+      const userMarker = L.circleMarker([userLocation.lat, userLocation.lng], {
+        radius: 8,
+        color: '#0ea5e9',
+        fillColor: '#0ea5e9',
+        fillOpacity: 0.8,
+        weight: 3,
+      }).addTo(map);
+      userMarker.bindPopup('<div style="font-size:12px;"><strong>Your Location</strong><br/>GPS position acquired</div>');
+      layersRef.current.push(userMarker);
+
+      // Accuracy circle
+      const accuracyCircle = L.circle([userLocation.lat, userLocation.lng], {
+        radius: 30,
+        color: '#0ea5e9',
+        fillColor: '#0ea5e9',
+        fillOpacity: 0.05,
+        weight: 1,
+      }).addTo(map);
+      layersRef.current.push(accuracyCircle);
+    }
+
+  }, [mapReady, geofences, activeSessions, userLocation, onGeofenceClick]);
+
+  // Fit bounds to selected session's geofence
+  useEffect(() => {
+    if (!leafletMapRef.current || !mapReady || !selectedSession) return;
+    if (selectedSession.geofence?.centerLat && selectedSession.geofence?.centerLng) {
+      leafletMapRef.current.setView(
+        [selectedSession.geofence.centerLat, selectedSession.geofence.centerLng],
+        DEFAULT_ZOOM + 2,
+        { animate: true }
+      );
+    }
+  }, [mapReady, selectedSession]);
+
+  return (
+    <div className="relative">
+      <div ref={mapRef} className="w-full h-[400px] md:h-[500px] rounded-lg z-0" />
+      {!mapReady && (
+        <div className="absolute inset-0 flex items-center justify-center bg-muted/30 rounded-lg">
+          <Loader2 className="h-6 w-6 animate-spin text-[#1A3C6E]" />
+        </div>
+      )}
+      {userLocation && (
+        <div className="absolute top-2 right-2 bg-background/90 backdrop-blur rounded-md px-2 py-1 text-[10px] flex items-center gap-1 shadow-sm z-10">
+          <Crosshair className="h-3 w-3 text-sky-500" />
+          <span>{userLocation.lat.toFixed(5)}, {userLocation.lng.toFixed(5)}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Student Mark Attendance Panel ──────────────────────────────────────────
+function StudentMarkPanel() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { currentUser } = useAppStore();
+  const [selectedSession, setSelectedSession] = useState<ActiveSession | null>(null);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [locationError, setLocationError] = useState<string | null>(null);
+  const [geofenceStatus, setGeofenceStatus] = useState<{
+    inside: boolean;
+    distance: number;
+    geofenceName: string;
+    radius: number;
+  } | null>(null);
+
+  // Fetch active sessions
+  const { data: activeData, isLoading: activeLoading } = useQuery({
+    queryKey: ['active-sessions-map', currentUser.id],
+    queryFn: () => fetch(`/api/attendance/active-sessions?studentId=${currentUser.id}`).then(r => r.json()),
+    refetchInterval: 15000,
+  });
+
+  const activeSessions: ActiveSession[] = activeData?.sessions ?? [];
+
+  // Get user location
+  const requestLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      setLocationError('Geolocation not supported');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setUserLocation(loc);
+        setLocationError(null);
+
+        // Check geofence status for selected session
+        if (selectedSession?.geofence?.centerLat && selectedSession?.geofence?.centerLng) {
+          const dist = haversineDistance(
+            loc.lat, loc.lng,
+            selectedSession.geofence.centerLat, selectedSession.geofence.centerLng
+          );
+          const radius = selectedSession.geofence.radiusMtrs ?? 100;
+          setGeofenceStatus({
+            inside: dist <= radius,
+            distance: dist,
+            geofenceName: selectedSession.geofence.name,
+            radius,
+          });
+        }
+      },
+      (err) => setLocationError(err.message),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }, [selectedSession]);
+
+  // Mark attendance mutation
+  const markMutation = useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      fetch('/api/attendance/mark', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }).then(async r => {
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || 'Failed to mark attendance');
+        return data;
+      }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['active-sessions-map'] });
+      queryClient.invalidateQueries({ queryKey: ['geofences'] });
+      toast({
+        title: 'Attendance Marked!',
+        description: `Geo: ${data.geofenceValidated ? '✅' : '❌'} | ${data.geofenceValidated ? `Within ${Math.round(data.distanceFromCenter)}m` : 'Out of bounds'}`,
+        variant: data.geofenceValidated ? 'default' : 'destructive',
+      });
+      setSelectedSession(null);
+      setGeofenceStatus(null);
+    },
+    onError: (err) => {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    },
+  });
+
+  const handleMarkAttendance = () => {
+    if (!selectedSession || !userLocation) return;
+    markMutation.mutate({
+      sessionId: selectedSession.id,
+      studentId: currentUser.id,
+      latitude: userLocation.lat,
+      longitude: userLocation.lng,
+      captureMethod: 'self_geo_face',
+    });
+  };
+
+  return (
+    <Card className="border-l-4" style={{ borderLeftColor: NAVY }}>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Navigation className="h-4 w-4" />
+          Mark Attendance from Map
+        </CardTitle>
+        <CardDescription>Select an active session, verify your location, and mark attendance</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Session Selector */}
+        <div className="space-y-2">
+          <Label className="text-xs font-semibold">Active Sessions</Label>
+          {activeLoading ? (
+            <div className="space-y-2">
+              {[1, 2].map(i => <Skeleton key={i} className="h-12 w-full" />)}
+            </div>
+          ) : activeSessions.length === 0 ? (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">No active sessions right now</span>
+            </div>
+          ) : (
+            <ScrollArea className="max-h-48">
+              <div className="space-y-2">
+                {activeSessions.map(session => (
+                  <button
+                    key={session.id}
+                    onClick={() => {
+                      setSelectedSession(session);
+                      setUserLocation(null);
+                      setGeofenceStatus(null);
+                      setLocationError(null);
+                      requestLocation();
+                    }}
+                    className={cn(
+                      'w-full text-left p-3 rounded-lg border transition-all hover:shadow-sm',
+                      session.alreadyMarked ? 'opacity-50 cursor-not-allowed bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800' :
+                      selectedSession?.id === session.id ? 'ring-2 ring-[#1A3C6E] bg-[#1A3C6E]/5 border-[#1A3C6E]' : 'hover:border-[#1A3C6E]/30'
+                    )}
+                    disabled={session.alreadyMarked}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Badge className="font-mono text-[10px] shrink-0" style={{ backgroundColor: NAVY, color: '#fff' }}>
+                          {session.course?.code || 'N/A'}
+                        </Badge>
+                        <span className="text-sm font-medium truncate">{session.course?.name}</span>
+                      </div>
+                      {session.alreadyMarked ? (
+                        <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 border-green-200 shrink-0">
+                          <CheckCircle2 className="h-3 w-3 mr-0.5" /> Marked
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 border-green-200 shrink-0">
+                          Live
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{session.startTime}</span>
+                      {session.geofence && (
+                        <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{session.geofence.name}</span>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </ScrollArea>
+          )}
+        </div>
+
+        {/* Location + Geofence Status */}
+        {selectedSession && (
+          <div className="space-y-3 pt-2 border-t">
+            <Label className="text-xs font-semibold flex items-center gap-1.5">
+              <Navigation className="h-3.5 w-3.5" /> Location & Geofence Status
+            </Label>
+
+            {userLocation ? (
+              <div className={cn(
+                'p-3 rounded-lg border',
+                geofenceStatus?.inside
+                  ? 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800'
+                  : 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800'
+              )}>
+                <div className="flex items-center gap-2 mb-2">
+                  {geofenceStatus?.inside ? (
+                    <ShieldCheck className="h-5 w-5 text-green-600" />
+                  ) : (
+                    <ShieldAlert className="h-5 w-5 text-red-600" />
+                  )}
+                  <div>
+                    <p className={cn('text-sm font-semibold', geofenceStatus?.inside ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400')}>
+                      {geofenceStatus?.inside ? '✅ Inside Geofence' : '❌ Outside Geofence'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {geofenceStatus ? `${Math.round(geofenceStatus.distance)}m from center (radius: ${geofenceStatus.radius}m)` : 'Checking...'}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-[10px] text-muted-foreground">
+                  GPS: {userLocation.lat.toFixed(6)}, {userLocation.lng.toFixed(6)}
+                </div>
+              </div>
+            ) : locationError ? (
+              <div className="p-3 rounded-lg bg-red-50 border border-red-200 dark:bg-red-900/20 dark:border-red-800">
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 text-red-600" />
+                  <p className="text-xs text-red-700 dark:text-red-400">{locationError}</p>
+                </div>
+                <Button variant="outline" size="sm" className="mt-2 text-xs h-7" onClick={requestLocation}>
+                  Retry Location
+                </Button>
+              </div>
+            ) : (
+              <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 dark:bg-amber-900/20 dark:border-amber-800">
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 text-amber-600 animate-spin" />
+                  <p className="text-xs text-amber-700 dark:text-amber-400">Acquiring location...</p>
+                </div>
+              </div>
+            )}
+
+            <Button variant="outline" size="sm" className="text-xs h-7" onClick={requestLocation}>
+              <Crosshair className="h-3 w-3 mr-1" /> Refresh Location
+            </Button>
+
+            {/* Mark Button */}
+            <div className="pt-2 border-t">
+              <Button
+                className="w-full bg-[#1A3C6E] hover:bg-[#1A3C6E]/90 text-white gap-2"
+                disabled={!userLocation || !geofenceStatus?.inside || markMutation.isPending}
+                onClick={handleMarkAttendance}
+              >
+                {markMutation.isPending ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" /> Verifying...</>
+                ) : (
+                  <><UserCheck className="h-4 w-4" /> Mark Attendance</>
+                )}
+              </Button>
+              {!userLocation && (
+                <p className="text-[10px] text-amber-600 mt-1 text-center">⚠️ Location required</p>
+              )}
+              {userLocation && !geofenceStatus?.inside && (
+                <p className="text-[10px] text-red-600 mt-1 text-center">
+                  ❌ You must be within the geofence boundary to mark attendance
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Main Geofences Section ────────────────────────────────────────────────
 export default function GeofencesSection() {
   const qc = useQueryClient();
+  const { toast } = useToast();
+  const { currentUser } = useAppStore();
   const [showCreate, setShowCreate] = useState(false);
   const [newFence, setNewFence] = useState({ name: '', type: 'circle', centerLat: '17.4563', centerLng: '78.6698', radiusMtrs: '200', building: '', floor: '' });
+  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [activeTab, setActiveTab] = useState('map');
 
   const { data, isLoading } = useQuery({
     queryKey: ['geofences'],
     queryFn: () => fetch('/api/geofences').then(r => r.json()) as Promise<{ geofences: GeofenceItem[] }>,
   });
+
+  const { data: activeSessionsData } = useQuery({
+    queryKey: ['active-sessions-geofence', currentUser.id],
+    queryFn: () => fetch(`/api/attendance/active-sessions?studentId=${currentUser.id}`).then(r => r.json()),
+    refetchInterval: 15000,
+  });
+
+  const activeSessions: ActiveSession[] = activeSessionsData?.sessions ?? [];
 
   const createMutation = useMutation({
     mutationFn: async (data: Record<string, unknown>) => {
@@ -38,6 +516,7 @@ export default function GeofencesSection() {
       qc.invalidateQueries({ queryKey: ['geofences'] });
       setShowCreate(false);
       setNewFence({ name: '', type: 'circle', centerLat: '17.4563', centerLng: '78.6698', radiusMtrs: '200', building: '', floor: '' });
+      toast({ title: 'Geofence Created', description: 'New geofence boundary has been added.' });
     },
   });
 
@@ -46,131 +525,239 @@ export default function GeofencesSection() {
   const circleCount = geofences.filter(g => g.type === 'circle').length;
   const polygonCount = geofences.filter(g => g.type === 'polygon').length;
 
+  // Get user location for map
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        () => {}, // silently fail
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    }
+  }, []);
+
+  const handleGeofenceClick = useCallback((g: GeofenceItem) => {
+    toast({
+      title: g.name,
+      description: `${g.type} • ${g.radiusMtrs ? g.radiusMtrs + 'm radius' : 'No radius set'} • ${g.building || 'No building'}`,
+    });
+  }, [toast]);
+
+  const isStudent = currentUser.role === 'student';
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-[#1A3C6E]">Geofence Management</h1>
-          <p className="text-sm text-muted-foreground mt-1">Manage GPS geofence boundaries for attendance capture</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            {isStudent ? 'View geofence boundaries & mark attendance from map' : 'Manage GPS geofence boundaries for attendance capture'}
+          </p>
         </div>
-        <Button className="gap-2 bg-[#1A3C6E] hover:bg-[#1A3C6E]/90" onClick={() => setShowCreate(true)}>
-          <Plus className="h-4 w-4" /> New Geofence
-        </Button>
+        {!isStudent && (
+          <Button className="gap-2 bg-[#1A3C6E] hover:bg-[#1A3C6E]/90" onClick={() => setShowCreate(true)}>
+            <Plus className="h-4 w-4" /> New Geofence
+          </Button>
+        )}
       </div>
 
       {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-[#1A3C6E]/10 flex items-center justify-center"><MapPin className="h-5 w-5 text-[#1A3C6E]" /></div>
-            <div><p className="text-xs text-muted-foreground">Total Geofences</p><p className="text-xl font-bold">{geofences.length}</p></div>
+      <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
+        <Card className="py-3">
+          <CardContent className="p-3 flex items-center gap-3">
+            <div className="h-9 w-9 rounded-lg bg-[#1A3C6E]/10 flex items-center justify-center shrink-0"><MapPin className="h-4 w-4 text-[#1A3C6E]" /></div>
+            <div><p className="text-[10px] text-muted-foreground">Total Geofences</p><p className="text-lg font-bold">{geofences.length}</p></div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-green-100 flex items-center justify-center"><ToggleRight className="h-5 w-5 text-green-600" /></div>
-            <div><p className="text-xs text-muted-foreground">Active</p><p className="text-xl font-bold">{activeCount}</p></div>
+        <Card className="py-3">
+          <CardContent className="p-3 flex items-center gap-3">
+            <div className="h-9 w-9 rounded-lg bg-green-100 dark:bg-green-900/30 flex items-center justify-center shrink-0"><ToggleRight className="h-4 w-4 text-green-600" /></div>
+            <div><p className="text-[10px] text-muted-foreground">Active</p><p className="text-lg font-bold">{activeCount}</p></div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-blue-100 flex items-center justify-center"><Circle className="h-5 w-5 text-blue-600" /></div>
-            <div><p className="text-xs text-muted-foreground">Circle Type</p><p className="text-xl font-bold">{circleCount}</p></div>
+        <Card className="py-3">
+          <CardContent className="p-3 flex items-center gap-3">
+            <div className="h-9 w-9 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0"><Circle className="h-4 w-4 text-amber-600" /></div>
+            <div><p className="text-[10px] text-muted-foreground">Circle Type</p><p className="text-lg font-bold">{circleCount}</p></div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-purple-100 flex items-center justify-center"><Pentagon className="h-5 w-5 text-purple-600" /></div>
-            <div><p className="text-xs text-muted-foreground">Polygon Type</p><p className="text-xl font-bold">{polygonCount}</p></div>
+        <Card className="py-3">
+          <CardContent className="p-3 flex items-center gap-3">
+            <div className="h-9 w-9 rounded-lg bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center shrink-0"><Pentagon className="h-4 w-4 text-purple-600" /></div>
+            <div><p className="text-[10px] text-muted-foreground">Polygon Type</p><p className="text-lg font-bold">{polygonCount}</p></div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Geofence Map Placeholder + List */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card className="md:col-span-1">
-          <CardHeader>
-            <CardTitle className="text-base">Campus Map View</CardTitle>
-            <CardDescription>Geofence boundaries on campus map</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="aspect-square bg-muted/30 rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-3">
-              <MapPin className="h-12 w-12 text-[#1A3C6E]/30" />
-              <p className="text-sm text-muted-foreground">Interactive Map</p>
-              <p className="text-xs text-muted-foreground">Google Maps integration required</p>
-              <div className="mt-2 space-y-1">
-                {geofences.slice(0, 4).map(g => (
-                  <div key={g.id} className="flex items-center gap-2 text-xs">
-                    <div className={`h-3 w-3 rounded-full ${g.isActive ? 'bg-green-500' : 'bg-gray-400'}`} />
-                    <span>{g.name}</span>
-                    {g.centerLat && <span className="text-muted-foreground">({g.centerLat.toFixed(4)}, {g.centerLng?.toFixed(4)})</span>}
-                  </div>
-                ))}
+      {/* Main Content - Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="map" className="gap-1.5 text-xs">
+            <MapPin className="h-3.5 w-3.5" /> Map View
+          </TabsTrigger>
+          <TabsTrigger value="list" className="gap-1.5 text-xs">
+            <Building2 className="h-3.5 w-3.5" /> List View
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Map Tab */}
+        <TabsContent value="map" className="space-y-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Map */}
+            <Card className="lg:col-span-2 overflow-hidden">
+              <CardContent className="p-0">
+                <MapView
+                  geofences={geofences}
+                  activeSessions={activeSessions}
+                  userLocation={userLocation}
+                  onGeofenceClick={handleGeofenceClick}
+                  selectedSession={null}
+                />
+              </CardContent>
+            </Card>
+
+            {/* Right Panel: Student mark or Geofence details */}
+            <div className="space-y-4">
+              {isStudent ? (
+                <StudentMarkPanel />
+              ) : (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <MapPin className="h-4 w-4" />
+                      Geofence Details
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <ScrollArea className="max-h-[400px]">
+                      <div className="space-y-3">
+                        {geofences.map(g => {
+                          const hasActive = activeSessions.some(s => s.geofence?.name === g.name);
+                          return (
+                            <div
+                              key={g.id}
+                              className={cn(
+                                'p-3 rounded-lg border transition-colors',
+                                hasActive ? 'border-green-200 bg-green-50/50 dark:bg-green-900/10 dark:border-green-800' : 'hover:bg-muted/30'
+                              )}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className={cn(
+                                    'h-3 w-3 rounded-full shrink-0',
+                                    g.isActive ? (hasActive ? 'bg-green-500' : 'bg-[#1A3C6E]') : 'bg-gray-400'
+                                  )} />
+                                  <span className="text-sm font-medium truncate">{g.name}</span>
+                                </div>
+                                {hasActive && (
+                                  <Badge className="text-[9px] bg-green-100 text-green-700 border-green-200 shrink-0">
+                                    Live
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="mt-1.5 text-xs text-muted-foreground space-y-0.5">
+                                {g.centerLat && g.centerLng && (
+                                  <p>{g.centerLat.toFixed(4)}, {g.centerLng.toFixed(4)}</p>
+                                )}
+                                {g.radiusMtrs && <p>Radius: {g.radiusMtrs}m</p>}
+                                {g.building && <p>Building: {g.building}</p>}
+                              </div>
+                              {hasActive && (
+                                <div className="mt-2 pt-2 border-t border-green-200 dark:border-green-800">
+                                  {activeSessions
+                                    .filter(s => s.geofence?.name === g.name)
+                                    .map(s => (
+                                      <div key={s.id} className="flex items-center gap-2 text-xs">
+                                        <Badge className="font-mono text-[9px]" style={{ backgroundColor: NAVY, color: '#fff' }}>
+                                          {s.course?.code}
+                                        </Badge>
+                                        <span className="truncate">{s.course?.name}</span>
+                                        <span className="ml-auto text-muted-foreground">{s.presentCount}/{s.expectedCount}</span>
+                                      </div>
+                                    ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* List Tab */}
+        <TabsContent value="list">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">All Geofences</CardTitle>
+              <CardDescription>Manage geofence boundaries for attendance sessions</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-xs">Name</TableHead>
+                      <TableHead className="text-xs">Type</TableHead>
+                      <TableHead className="text-xs">Coordinates</TableHead>
+                      <TableHead className="text-xs">Building</TableHead>
+                      <TableHead className="text-xs">Radius</TableHead>
+                      <TableHead className="text-xs">Sessions</TableHead>
+                      <TableHead className="text-xs">Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {isLoading ? (
+                      <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+                    ) : geofences.length === 0 ? (
+                      <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No geofences found</TableCell></TableRow>
+                    ) : (
+                      geofences.map(g => (
+                        <TableRow key={g.id}>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <MapPin className="h-4 w-4 text-[#1A3C6E]" />
+                              <span className="font-medium text-sm">{g.name}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="gap-1 text-xs">
+                              {g.type === 'circle' ? <Circle className="h-3 w-3" /> : <Pentagon className="h-3 w-3" />}
+                              {g.type}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-xs font-mono text-muted-foreground">
+                            {g.centerLat ? `${g.centerLat.toFixed(4)}, ${g.centerLng?.toFixed(4)}` : '-'}
+                          </TableCell>
+                          <TableCell className="text-sm">{g.building || '-'}</TableCell>
+                          <TableCell className="text-sm">{g.radiusMtrs ? `${g.radiusMtrs}m` : '-'}</TableCell>
+                          <TableCell className="text-sm">{g._count.attendanceSessions}</TableCell>
+                          <TableCell>
+                            <Badge className={g.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'} variant="secondary">
+                              {g.isActive ? 'Active' : 'Inactive'}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Geofence List</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Building</TableHead>
-                    <TableHead>Radius</TableHead>
-                    <TableHead>Sessions</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isLoading ? (
-                    <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
-                  ) : geofences.length === 0 ? (
-                    <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No geofences found</TableCell></TableRow>
-                  ) : (
-                    geofences.map(g => (
-                      <TableRow key={g.id}>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <MapPin className="h-4 w-4 text-[#1A3C6E]" />
-                            <span className="font-medium">{g.name}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="gap-1">
-                            {g.type === 'circle' ? <Circle className="h-3 w-3" /> : <Pentagon className="h-3 w-3" />}
-                            {g.type}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-sm">{g.building || '-'}</TableCell>
-                        <TableCell className="text-sm">{g.radiusMtrs ? `${g.radiusMtrs}m` : '-'}</TableCell>
-                        <TableCell className="text-sm">{g._count.attendanceSessions}</TableCell>
-                        <TableCell>
-                          <Badge className={g.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'} variant="secondary">
-                            {g.isActive ? 'Active' : 'Inactive'}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
 
       {/* Create Geofence Dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="text-[#1A3C6E]">Create New Geofence</DialogTitle>
+            <DialogDescription>Define a geofence boundary for attendance capture</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div><Label>Name</Label><Input value={newFence.name} onChange={e => setNewFence(p => ({ ...p, name: e.target.value }))} placeholder="e.g., New Science Block" /></div>
@@ -198,6 +785,7 @@ export default function GeofencesSection() {
               centerLat: parseFloat(newFence.centerLat), centerLng: parseFloat(newFence.centerLng),
               radiusMtrs: parseFloat(newFence.radiusMtrs), building: newFence.building, isActive: true,
             })} disabled={!newFence.name || createMutation.isPending}>
+              {createMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
               Create Geofence
             </Button>
           </DialogFooter>

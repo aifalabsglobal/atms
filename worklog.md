@@ -83,3 +83,39 @@ Stage Summary:
 - Profile pictures in circular avatars throughout the app
 - All APIs tested and working
 - Lint clean, no runtime errors
+
+---
+Task ID: 5
+Agent: Main Agent
+Task: Fix overlaps and make geofence functional for student attendance marking
+
+Work Log:
+- Fixed hydration error: changed sidebarOpen initial state from `true` to `false` in store.ts (server/client mismatch)
+- Fixed attendance mark API: changed `findUnique({ where: { sessionId_studentId } })` to `findFirst({ where: { sessionId, studentId } })` (Prisma compound unique key error)
+- Fixed sidebar violations badge overflow: added `min-w-[20px]`, `shrink-0`, `flex items-center justify-center` to badge
+- Fixed LMS text truncation: added `title` attributes to truncated instructor name and program name
+- Installed react-leaflet, leaflet, @types/leaflet for interactive maps
+- Rebuilt geofences-section.tsx with:
+  - Interactive OpenStreetMap via Leaflet (no API key needed)
+  - Geofence circles drawn on map with color coding (green = active session, navy = idle)
+  - User GPS location shown on map with accuracy circle
+  - Student "Mark Attendance from Map" panel with:
+    - Active session selector
+    - GPS location acquisition
+    - Geofence validation (inside/outside indicator with distance)
+    - Mark attendance button (disabled when outside geofence)
+  - Admin "Geofence Details" panel with zone info and active session indicators
+  - Map View / List View tabs
+  - Create Geofence dialog
+- Added 'geofences' to student ROLE_SECTIONS so students can access map view
+- All lint errors fixed, dev server compiles cleanly
+- Browser verified: all features working correctly
+
+Stage Summary:
+- Hydration error fixed (sidebarOpen initial state)
+- Attendance mark API fixed (findFirst instead of findUnique)
+- Geofence section now fully functional with interactive OpenStreetMap
+- Students can view geofences on map and mark attendance directly
+- Geofence validation shows inside/outside status with distance
+- Role-based views: students see "Mark Attendance" panel, admins see "Geofence Details"
+- No lint errors, no runtime errors, browser verified

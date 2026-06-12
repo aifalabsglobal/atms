@@ -106,7 +106,7 @@ export const ROLE_SECTIONS: Record<Role, Section[]> = {
   hod: ['dashboard', 'attendance', 'lms', 'users', 'violations', 'reports', 'geofences', 'calendar'],
   faculty: ['dashboard', 'attendance', 'lms', 'violations', 'reports', 'calendar'],
   lab_assistant: ['dashboard', 'attendance', 'geofences', 'calendar'],
-  student: ['dashboard', 'attendance', 'lms', 'reports', 'calendar'],
+  student: ['dashboard', 'attendance', 'lms', 'reports', 'geofences', 'calendar'],
   parent: ['dashboard', 'attendance', 'reports', 'calendar'],
   visitor: ['dashboard', 'geofences', 'calendar'],
   security: ['dashboard', 'attendance', 'violations', 'geofences', 'calendar'],
@@ -124,7 +124,7 @@ interface AppState {
 export const useAppStore = create<AppState>((set) => ({
   activeSection: 'dashboard',
   setActiveSection: (section) => set({ activeSection: section }),
-  sidebarOpen: true,
+  sidebarOpen: false,
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   currentUser: ROLE_PRESETS.super_admin,
   setCurrentRole: (role) => set({

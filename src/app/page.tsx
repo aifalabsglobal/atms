@@ -296,7 +296,7 @@ function AppContent() {
                           <Icon className="h-4 w-4 shrink-0" />
                           <span className="truncate">{item.label}</span>
                           {item.badge === 'alert' && (
-                            <Badge variant="destructive" className="ml-auto text-[10px] h-5 px-1.5">3</Badge>
+                            <Badge variant="destructive" className="ml-auto text-[10px] h-5 min-w-[20px] px-1 flex items-center justify-center shrink-0">3</Badge>
                           )}
                         </button>
                       </TooltipTrigger>
