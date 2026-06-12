@@ -78,7 +78,7 @@ function AppContent() {
     refetchInterval: 30000,
   });
 
-  const unreadCount = notifData?.unreadCount || 0;
+  const unreadCount = notifData?.unreadCount ?? 0;
 
   const renderSection = () => {
     switch (activeSection) {
@@ -139,9 +139,9 @@ function AppContent() {
                 <Button variant="ghost" size="icon" className="h-9 w-9 relative">
                   <Bell className="h-4 w-4" />
                   {unreadCount > 0 && (
-                    <Badge className="absolute -top-1 -right-1 h-4 w-4 p-0 text-[10px] flex items-center justify-center bg-destructive text-destructive-foreground">
-                      {unreadCount}
-                    </Badge>
+                    <span className="absolute -top-1 -right-1 h-4 min-w-[16px] px-0.5 text-[10px] font-bold flex items-center justify-center rounded-full bg-destructive text-destructive-foreground">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
                   )}
                 </Button>
               </DropdownMenuTrigger>
@@ -296,7 +296,7 @@ function AppContent() {
                           <Icon className="h-4 w-4 shrink-0" />
                           <span className="truncate">{item.label}</span>
                           {item.badge === 'alert' && (
-                            <Badge variant="destructive" className="ml-auto text-[10px] h-5 min-w-[20px] px-1 flex items-center justify-center shrink-0">3</Badge>
+                            <Badge variant="destructive" className="ml-auto text-[10px] h-5 min-w-[20px] px-1.5 flex items-center justify-center shrink-0">3</Badge>
                           )}
                         </button>
                       </TooltipTrigger>
