@@ -1,16 +1,21 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import { useAppStore } from '@/lib/store';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Progress } from '@/components/ui/progress';
-import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Separator } from '@/components/ui/separator';
+import { cn } from '@/lib/utils';
 import {
   BarChart3, Users, BookOpen, ShieldAlert, TrendingUp, TrendingDown,
-  FileText, Download, Calendar
+  FileText, Calendar, Clock, CheckCircle2, AlertTriangle, XCircle,
+  GraduationCap, Award, Target, Trophy, Send, Star, MessageSquare,
+  HelpCircle, ClipboardList, Zap,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -19,36 +24,763 @@ import {
 
 const COLORS = ['#1A3C6E', '#2E7D32', '#E65100', '#6A1B9A', '#C62828', '#00838F', '#F9A825'];
 
-export default function ReportsSection() {
-  const { data, isLoading } = useQuery({
-    queryKey: ['reports'],
-    queryFn: () => fetch('/api/reports').then(r => r.json()),
-  });
+const ROLE_COLORS: Record<string, string> = {
+  super_admin: '#1A3C6E',
+  admin: '#2C5F8A',
+  hod: '#1B6B4A',
+  faculty: '#7C3AED',
+  lab_assistant: '#B45309',
+  student: '#0E7490',
+  parent: '#BE185D',
+  visitor: '#6B7280',
+  security: '#991B1B',
+};
 
-  if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <h1 className="text-2xl font-bold text-[#1A3C6E]">Reports & Analytics</h1>
-        <div className="grid gap-4 md:grid-cols-3">
-          {[1, 2, 3].map(i => (
-            <Card key={i}><CardContent className="p-6"><div className="h-32 bg-muted animate-pulse rounded" /></CardContent></Card>
-          ))}
-        </div>
-      </div>
-    );
-  }
+// ─── Student Report View ─────────────────────────────────────────────
 
-  const { attendanceSummary, studentAttendanceReport, coursePerfReport, violationReport, gradeDistribution } = data || {};
+interface StudentReportData {
+  isStudent: true;
+  student: { id: string; name: string; email: string; employeeId: string | null; department: string | null };
+  enrolledCourses: { id: string; name: string; code: string; credits: number; type: string; semester: number; instructor: { name: string } | null; _count: { assignments: number; modules: number; enrollments: number } }[];
+  attendance: {
+    totalSessions: number; presentCount: number; absentCount: number; lateCount: number;
+    overallPercentage: number;
+    courseAttendance: { course: { id: string; name: string; code: string }; present: number; absent: number; late: number; total: number; percentage: number }[];
+    recentSessions: { id: string; sessionDate: string; presentCount: number; expectedCount: number; absentCount: number; lateCount: number; course: { name: string; code: string } }[];
+  };
+  assignments: {
+    total: number; graded: number; pending: number; avgScore: number | null;
+    recent: { id: string; title: string; course: { id: string; name: string; code: string }; score: number | null; maxScore: number; status: string; feedback: string | null; submittedAt: string; gradedAt: string | null }[];
+  };
+  quizzes: {
+    totalAttempts: number; avgScore: number; bestScore: number;
+    recent: { id: string; score: number; totalPoints: number; percentage: number; timeTaken: number | null; status: string; course: { name: string; code: string }; startedAt: string }[];
+  };
+  grades: {
+    distribution: Record<string, number>;
+    courseGrades: { courseId: string; course: { id: string; name: string; code: string }; grades: { component: string; score: number; maxScore: number; weightage: number }[]; overallScore: number }[];
+    totalEntries: number;
+  };
+  violations: { id: string; type: string; severity: string; reviewStatus: string; description: string | null; record: { session: { sessionDate: string; course: { name: string; code: string } } } }[];
+}
+
+function StudentReportView({ data }: { data: StudentReportData }) {
+  const { student, enrolledCourses, attendance, assignments, quizzes, grades, violations } = data;
 
   // Grade distribution chart data
-  const gradeData = gradeDistribution ? Object.entries(gradeDistribution).map(([grade, count]) => ({
+  const gradeData = Object.entries(grades.distribution).map(([grade, count]) => ({
     name: `${grade} (${count})`,
-    value: count as number,
+    value: count,
     grade,
-  })) : [];
+  }));
+
+  // Attendance trend chart data (per course)
+  const attendanceChartData = attendance.courseAttendance.map(ca => ({
+    name: ca.course.code,
+    fullName: ca.course.name,
+    percentage: ca.percentage,
+  }));
+
+  return (
+    <div className="space-y-6">
+      {/* Student Profile Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+        <Avatar className="h-14 w-14 border-2" style={{ borderColor: ROLE_COLORS.student }}>
+          <AvatarFallback className="text-white text-lg" style={{ backgroundColor: ROLE_COLORS.student }}>
+            {student.name.split(' ').map(n => n[0]).join('').substring(0, 2)}
+          </AvatarFallback>
+        </Avatar>
+        <div className="flex-1 min-w-0">
+          <h1 className="text-2xl font-bold text-[#1A3C6E]">{student.name}</h1>
+          <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground flex-wrap">
+            {student.employeeId && <span className="font-mono">{student.employeeId}</span>}
+            {student.department && <span>{student.department}</span>}
+            <Badge className="text-[10px] text-white" style={{ backgroundColor: ROLE_COLORS.student }}>Student</Badge>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Badge variant="outline" className="gap-1"><Calendar className="h-3 w-3" /> Academic Year 2025-26</Badge>
+          <Badge variant="outline" className="gap-1"><BookOpen className="h-3 w-3" /> {enrolledCourses.length} Courses</Badge>
+        </div>
+      </div>
+
+      {/* Quick Stats Row */}
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+        <Card className="py-3">
+          <CardContent className="flex items-center gap-3 px-3">
+            <div className={cn(
+              'h-9 w-9 rounded-lg flex items-center justify-center shrink-0',
+              attendance.overallPercentage >= 75 ? 'bg-emerald-100 dark:bg-emerald-900/30' :
+              attendance.overallPercentage >= 65 ? 'bg-amber-100 dark:bg-amber-900/30' :
+              'bg-red-100 dark:bg-red-900/30'
+            )}>
+              <TrendingUp className={cn(
+                'h-4 w-4',
+                attendance.overallPercentage >= 75 ? 'text-emerald-600' :
+                attendance.overallPercentage >= 65 ? 'text-amber-600' :
+                'text-red-600'
+              )} />
+            </div>
+            <div>
+              <p className={cn(
+                'text-lg font-bold',
+                attendance.overallPercentage >= 75 ? 'text-emerald-600' :
+                attendance.overallPercentage >= 65 ? 'text-amber-600' :
+                'text-red-600'
+              )}>{attendance.overallPercentage}%</p>
+              <p className="text-[10px] text-muted-foreground">Attendance</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="py-3">
+          <CardContent className="flex items-center gap-3 px-3">
+            <div className="h-9 w-9 rounded-lg bg-[#1A3C6E]/10 flex items-center justify-center shrink-0">
+              <GraduationCap className="h-4 w-4 text-[#1A3C6E]" />
+            </div>
+            <div>
+              <p className="text-lg font-bold">{assignments.avgScore ?? '—'}{assignments.avgScore ? '%' : ''}</p>
+              <p className="text-[10px] text-muted-foreground">Avg Assignment</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="py-3">
+          <CardContent className="flex items-center gap-3 px-3">
+            <div className="h-9 w-9 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0">
+              <Trophy className="h-4 w-4 text-amber-600" />
+            </div>
+            <div>
+              <p className="text-lg font-bold">{Math.round(quizzes.bestScore)}%</p>
+              <p className="text-[10px] text-muted-foreground">Best Quiz</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="py-3">
+          <CardContent className="flex items-center gap-3 px-3">
+            <div className={cn(
+              'h-9 w-9 rounded-lg flex items-center justify-center shrink-0',
+              violations.length > 0 ? 'bg-red-100 dark:bg-red-900/30' : 'bg-emerald-100 dark:bg-emerald-900/30'
+            )}>
+              <ShieldAlert className={cn('h-4 w-4', violations.length > 0 ? 'text-red-600' : 'text-emerald-600')} />
+            </div>
+            <div>
+              <p className={cn('text-lg font-bold', violations.length > 0 && 'text-red-600')}>{violations.length}</p>
+              <p className="text-[10px] text-muted-foreground">Violations</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Attendance Warning */}
+      {attendance.overallPercentage < 75 && attendance.totalSessions > 0 && (
+        <Card className="border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20">
+          <CardContent className="flex items-start gap-3 p-4">
+            <AlertTriangle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-red-700 dark:text-red-400">
+                Attendance Below Minimum Requirement
+              </p>
+              <p className="text-xs text-red-600/80 dark:text-red-300/80 mt-0.5">
+                Your attendance is {attendance.overallPercentage}%, below the JNTUH mandated 75% minimum.
+                You may be detained from appearing for examinations. Please attend classes regularly.
+              </p>
+              <div className="mt-2 flex items-center gap-2">
+                <Progress value={attendance.overallPercentage} className="h-2 flex-1 max-w-48" />
+                <span className="text-xs font-bold text-red-600">{attendance.overallPercentage}% / 75%</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {attendance.overallPercentage >= 75 && attendance.totalSessions > 0 && (
+        <Card className="border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20">
+          <CardContent className="flex items-start gap-3 p-4">
+            <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+                Attendance Requirement Met
+              </p>
+              <p className="text-xs text-emerald-600/80 dark:text-emerald-300/80 mt-0.5">
+                Your attendance is {attendance.overallPercentage}%, meeting the JNTUH 75% requirement. Keep it up!
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Tabs defaultValue="attendance" className="space-y-4">
+        <TabsList className="grid w-full max-w-lg grid-cols-4">
+          <TabsTrigger value="attendance">Attendance</TabsTrigger>
+          <TabsTrigger value="assignments">Assignments</TabsTrigger>
+          <TabsTrigger value="quizzes">Quizzes</TabsTrigger>
+          <TabsTrigger value="grades">Grades</TabsTrigger>
+        </TabsList>
+
+        {/* Attendance Tab */}
+        <TabsContent value="attendance" className="space-y-4">
+          {/* Attendance Overview */}
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4 text-[#1A3C6E]" /> My Attendance Overview
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Total Sessions</span>
+                  <span className="text-sm font-bold">{attendance.totalSessions}</span>
+                </div>
+                <Separator />
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3 text-emerald-500" /> Present
+                  </span>
+                  <span className="text-sm font-bold text-emerald-600">{attendance.presentCount}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground flex items-center gap-1">
+                    <XCircle className="h-3 w-3 text-red-500" /> Absent
+                  </span>
+                  <span className="text-sm font-bold text-red-600">{attendance.absentCount}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground flex items-center gap-1">
+                    <Clock className="h-3 w-3 text-amber-500" /> Late
+                  </span>
+                  <span className="text-sm font-bold text-amber-600">{attendance.lateCount}</span>
+                </div>
+                <Separator />
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Overall Attendance</span>
+                  <span className={cn('text-sm font-bold', 
+                    attendance.overallPercentage >= 75 ? 'text-emerald-600' : 
+                    attendance.overallPercentage >= 65 ? 'text-amber-600' : 'text-red-600'
+                  )}>{attendance.overallPercentage}%</span>
+                </div>
+                <Progress value={attendance.overallPercentage} className="h-2" />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Target className="h-4 w-4 text-[#1A3C6E]" /> Course-wise Attendance
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {attendanceChartData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={attendanceChartData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" fontSize={11} />
+                      <YAxis domain={[0, 100]} fontSize={11} />
+                      <RechartsTooltip formatter={(value: number) => [`${value}%`, 'Attendance']} />
+                      <Bar dataKey="percentage" fill="#1A3C6E" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-[220px] text-sm text-muted-foreground">
+                    No attendance data yet
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Course Attendance Table */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Attendance by Course</CardTitle>
+              <CardDescription>Your attendance breakdown per enrolled course</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <ScrollArea className="max-h-[300px]">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Course</TableHead>
+                      <TableHead className="text-center">Present</TableHead>
+                      <TableHead className="text-center">Absent</TableHead>
+                      <TableHead className="text-center">Late</TableHead>
+                      <TableHead className="text-center">Total</TableHead>
+                      <TableHead>Attendance %</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {attendance.courseAttendance.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={6} className="text-center text-sm text-muted-foreground py-8">
+                          No attendance records found
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      attendance.courseAttendance.map((ca) => (
+                        <TableRow key={ca.course.id}>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Badge className="text-[10px] font-mono bg-[#1A3C6E] text-white shrink-0">{ca.course.code}</Badge>
+                              <span className="text-sm truncate max-w-[150px]" title={ca.course.name}>{ca.course.name}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-center text-emerald-600 font-medium">{ca.present}</TableCell>
+                          <TableCell className="text-center text-red-600">{ca.absent}</TableCell>
+                          <TableCell className="text-center text-amber-600">{ca.late}</TableCell>
+                          <TableCell className="text-center">{ca.total}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Progress value={ca.percentage} className="h-2 w-16" />
+                              <span className={cn(
+                                'text-sm font-medium',
+                                ca.percentage >= 75 ? 'text-emerald-600' :
+                                ca.percentage >= 65 ? 'text-amber-600' : 'text-red-600'
+                              )}>{ca.percentage}%</span>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Assignments Tab */}
+        <TabsContent value="assignments" className="space-y-4">
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+            <Card className="py-3">
+              <CardContent className="flex items-center gap-3 px-3">
+                <div className="h-9 w-9 rounded-lg bg-[#1A3C6E]/10 flex items-center justify-center shrink-0">
+                  <FileText className="h-4 w-4 text-[#1A3C6E]" />
+                </div>
+                <div>
+                  <p className="text-lg font-bold">{assignments.total}</p>
+                  <p className="text-[10px] text-muted-foreground">Total</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="py-3">
+              <CardContent className="flex items-center gap-3 px-3">
+                <div className="h-9 w-9 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center shrink-0">
+                  <Send className="h-4 w-4 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-lg font-bold">{assignments.pending}</p>
+                  <p className="text-[10px] text-muted-foreground">Pending</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="py-3">
+              <CardContent className="flex items-center gap-3 px-3">
+                <div className="h-9 w-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                </div>
+                <div>
+                  <p className="text-lg font-bold">{assignments.graded}</p>
+                  <p className="text-[10px] text-muted-foreground">Graded</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="py-3">
+              <CardContent className="flex items-center gap-3 px-3">
+                <div className="h-9 w-9 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0">
+                  <Award className="h-4 w-4 text-amber-600" />
+                </div>
+                <div>
+                  <p className="text-lg font-bold">{assignments.avgScore ?? '—'}{assignments.avgScore ? '%' : ''}</p>
+                  <p className="text-[10px] text-muted-foreground">Avg Score</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <FileText className="h-4 w-4 text-[#1A3C6E]" /> My Assignment Submissions
+              </CardTitle>
+              <CardDescription>Your graded and pending assignments</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <ScrollArea className="max-h-[400px]">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Assignment</TableHead>
+                      <TableHead>Course</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Score</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {assignments.recent.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center text-sm text-muted-foreground py-8">
+                          No assignment submissions yet
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      assignments.recent.map((a) => {
+                        const isGraded = a.score !== null;
+                        const scorePct = isGraded && a.maxScore > 0 ? (a.score! / a.maxScore) * 100 : 0;
+                        return (
+                          <TableRow key={a.id}>
+                            <TableCell>
+                              <div>
+                                <p className="text-sm font-medium">{a.title}</p>
+                                {a.feedback && (
+                                  <div className="flex items-center gap-1 mt-1">
+                                    <MessageSquare className="h-3 w-3 text-muted-foreground" />
+                                    <span className="text-[10px] text-muted-foreground truncate max-w-[200px]">{a.feedback}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge className="text-[10px] font-mono bg-[#1A3C6E] text-white">{a.course.code}</Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className={cn('text-[10px]',
+                                isGraded ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200' :
+                                'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200'
+                              )}>
+                                {isGraded ? <><Star className="h-3 w-3 mr-0.5" /> Graded</> : <><Send className="h-3 w-3 mr-0.5" /> Submitted</>}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {isGraded ? (
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <Progress value={scorePct} className="h-1.5 w-12" />
+                                  <span className={cn('text-sm font-bold',
+                                    scorePct >= 80 ? 'text-emerald-600' :
+                                    scorePct >= 50 ? 'text-amber-600' : 'text-red-600'
+                                  )}>{a.score}/{a.maxScore}</span>
+                                </div>
+                              ) : (
+                                <span className="text-sm text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Quizzes Tab */}
+        <TabsContent value="quizzes" className="space-y-4">
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+            <Card className="py-3">
+              <CardContent className="flex items-center gap-3 px-3">
+                <div className="h-9 w-9 rounded-lg bg-[#1A3C6E]/10 flex items-center justify-center shrink-0">
+                  <HelpCircle className="h-4 w-4 text-[#1A3C6E]" />
+                </div>
+                <div>
+                  <p className="text-lg font-bold">{quizzes.totalAttempts}</p>
+                  <p className="text-[10px] text-muted-foreground">Attempts</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="py-3">
+              <CardContent className="flex items-center gap-3 px-3">
+                <div className="h-9 w-9 rounded-lg bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center shrink-0">
+                  <Target className="h-4 w-4 text-amber-600" />
+                </div>
+                <div>
+                  <p className="text-lg font-bold">{quizzes.avgScore}%</p>
+                  <p className="text-[10px] text-muted-foreground">Avg Score</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="py-3">
+              <CardContent className="flex items-center gap-3 px-3">
+                <div className="h-9 w-9 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center shrink-0">
+                  <Trophy className="h-4 w-4 text-emerald-600" />
+                </div>
+                <div>
+                  <p className="text-lg font-bold">{Math.round(quizzes.bestScore)}%</p>
+                  <p className="text-[10px] text-muted-foreground">Best Score</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="py-3">
+              <CardContent className="flex items-center gap-3 px-3">
+                <div className="h-9 w-9 rounded-lg bg-[#1A3C6E]/10 flex items-center justify-center shrink-0">
+                  <Zap className="h-4 w-4 text-[#1A3C6E]" />
+                </div>
+                <div>
+                  <p className="text-lg font-bold">{quizzes.avgScore >= 80 ? 'A' : quizzes.avgScore >= 60 ? 'B' : quizzes.avgScore >= 40 ? 'C' : quizzes.avgScore > 0 ? 'D' : '—'}</p>
+                  <p className="text-[10px] text-muted-foreground">Grade</p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <ClipboardList className="h-4 w-4 text-[#1A3C6E]" /> My Quiz Attempts
+              </CardTitle>
+              <CardDescription>{quizzes.recent.length} quiz attempts recorded</CardDescription>
+            </CardHeader>
+            <CardContent className="px-4 pt-2">
+              {quizzes.recent.length === 0 ? (
+                <div className="flex flex-col items-center py-8 text-center">
+                  <ClipboardList className="h-10 w-10 text-muted-foreground/40 mb-3" />
+                  <p className="text-sm text-muted-foreground">No quiz attempts yet</p>
+                </div>
+              ) : (
+                <ScrollArea className="max-h-[400px]">
+                  <div className="space-y-3">
+                    {quizzes.recent.map((at) => {
+                      const pctColor =
+                        at.percentage >= 80 ? 'text-emerald-600 dark:text-emerald-400' :
+                        at.percentage >= 50 ? 'text-amber-600 dark:text-amber-400' :
+                        'text-red-600 dark:text-red-400';
+                      const bgColor =
+                        at.percentage >= 80 ? 'bg-emerald-100 dark:bg-emerald-900/30' :
+                        at.percentage >= 50 ? 'bg-amber-100 dark:bg-amber-900/30' :
+                        'bg-red-100 dark:bg-red-900/30';
+                      const progressColor =
+                        at.percentage >= 80 ? '[&>div]:bg-emerald-500' :
+                        at.percentage >= 50 ? '[&>div]:bg-amber-500' :
+                        '[&>div]:bg-red-500';
+
+                      return (
+                        <div key={at.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+                          <div className={cn('h-10 w-10 rounded-lg flex items-center justify-center shrink-0', bgColor)}>
+                            <span className={cn('text-sm font-bold', pctColor)}>{Math.round(at.percentage)}%</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <Badge className="text-[10px] font-mono bg-[#1A3C6E] text-white shrink-0">{at.course.code}</Badge>
+                              <span className="text-sm font-medium truncate">{at.course.name}</span>
+                            </div>
+                            <div className="flex items-center gap-3 mt-1">
+                              <div className="flex items-center gap-1.5 flex-1 min-w-[80px]">
+                                <Progress value={at.percentage} className={cn('h-1.5 flex-1', progressColor)} />
+                                <span className={cn('text-[10px] font-semibold', pctColor)}>{at.score}/{at.totalPoints}</span>
+                              </div>
+                              {at.timeTaken && (
+                                <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                                  <Clock className="h-2.5 w-2.5" />{Math.floor(at.timeTaken / 60)}m {at.timeTaken % 60}s
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              'text-[10px] capitalize shrink-0',
+                              at.status === 'completed' && 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
+                              at.status === 'in_progress' && 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+                              at.status === 'abandoned' && 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
+                            )}
+                          >
+                            {at.status.replace('_', ' ')}
+                          </Badge>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Grades Tab */}
+        <TabsContent value="grades" className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Grade Distribution</CardTitle>
+                <CardDescription>Your grade distribution across all courses</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {gradeData.some(d => d.value > 0) ? (
+                  <ResponsiveContainer width="100%" height={250}>
+                    <PieChart>
+                      <Pie data={gradeData} cx="50%" cy="50%" innerRadius={50} outerRadius={90} paddingAngle={5} dataKey="value" label={({ grade, value }) => `${grade}: ${value}`}>
+                        {gradeData.map((_: unknown, index: number) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Legend />
+                      <RechartsTooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex items-center justify-center h-[250px] text-sm text-muted-foreground">
+                    No grade data available yet
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Grade Scale</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {[
+                    { grade: 'A', range: '90-100%', color: 'bg-green-500' },
+                    { grade: 'B', range: '75-89%', color: 'bg-blue-500' },
+                    { grade: 'C', range: '60-74%', color: 'bg-amber-500' },
+                    { grade: 'D', range: '40-59%', color: 'bg-orange-500' },
+                    { grade: 'F', range: '0-39%', color: 'bg-red-500' },
+                  ].map(g => {
+                    const count = grades.distribution[g.grade] || 0;
+                    const total = gradeData.reduce((s: number, d: { value: number }) => s + d.value, 0);
+                    return (
+                      <div key={g.grade} className="flex items-center gap-3">
+                        <div className={`h-8 w-8 rounded flex items-center justify-center text-white font-bold text-sm ${g.color}`}>{g.grade}</div>
+                        <div className="flex-1">
+                          <div className="flex justify-between text-sm mb-1">
+                            <span>{g.range}</span>
+                            <span className="font-medium">{count} {count === 1 ? 'entry' : 'entries'}</span>
+                          </div>
+                          <Progress value={total > 0 ? (count / total) * 100 : 0} className="h-2" />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Course-wise Grades */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Course-wise Performance</CardTitle>
+              <CardDescription>Your overall score in each enrolled course</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <ScrollArea className="max-h-[300px]">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Course</TableHead>
+                      <TableHead>Components</TableHead>
+                      <TableHead>Overall Score</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {grades.courseGrades.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={3} className="text-center text-sm text-muted-foreground py-8">
+                          No grade entries available yet
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      grades.courseGrades.map((cg) => (
+                        <TableRow key={cg.courseId}>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Badge className="text-[10px] font-mono bg-[#1A3C6E] text-white shrink-0">{cg.course.code}</Badge>
+                              <span className="text-sm truncate max-w-[150px]" title={cg.course.name}>{cg.course.name}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap gap-1">
+                              {cg.grades.map((g, i) => (
+                                <Badge key={i} variant="outline" className="text-[9px]">
+                                  {g.component}: {g.score}/{g.maxScore}
+                                </Badge>
+                              ))}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Progress value={cg.overallScore} className="h-2 w-16" />
+                              <span className={cn('text-sm font-bold',
+                                cg.overallScore >= 80 ? 'text-emerald-600' :
+                                cg.overallScore >= 50 ? 'text-amber-600' : 'text-red-600'
+                              )}>{cg.overallScore}%</span>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            </CardContent>
+          </Card>
+
+          {/* Violations (if any) */}
+          {violations.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 text-red-600" /> My Violations
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="max-h-64">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Severity</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Course</TableHead>
+                        <TableHead>Date</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {violations.map((v) => (
+                        <TableRow key={v.id}>
+                          <TableCell className="capitalize text-sm">{v.type?.replace(/_/g, ' ')}</TableCell>
+                          <TableCell><Badge variant="outline" className="text-xs">{v.severity}</Badge></TableCell>
+                          <TableCell><Badge variant="secondary" className="text-xs">{v.reviewStatus}</Badge></TableCell>
+                          <TableCell className="text-sm">{v.record?.session?.course?.name}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{v.record?.session?.sessionDate}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+// ─── Admin / General Report View ─────────────────────────────────────
+
+interface AdminReportData {
+  isStudent: false;
+  attendanceSummary: { id: string; sessionDate: string; presentCount: number; expectedCount: number; absentCount: number; lateCount: number; course: { name: string; code: string } }[];
+  studentAttendanceReport: { id: string; name: string; employeeId: string | null; department: string | null; stats: { present: number; absent: number; late: number; total: number; percentage: number } }[];
+  coursePerfReport: { id: string; code: string; name: string; _count: { enrollments: number }; avgGrade: number | null }[];
+  violationReport: { id: string; type: string; severity: string; reviewStatus: string; violator: { name: string }; record: { session: { sessionDate: string; course: { name: string } } } }[];
+  gradeDistribution: Record<string, number>;
+}
+
+function AdminReportView({ data }: { data: AdminReportData }) {
+  const { attendanceSummary, studentAttendanceReport, coursePerfReport, violationReport, gradeDistribution } = data;
+
+  // Grade distribution chart data
+  const gradeData = Object.entries(gradeDistribution || {}).map(([grade, count]) => ({
+    name: `${grade} (${count})`,
+    value: count,
+    grade,
+  }));
 
   // Course performance chart data
-  const coursePerfData = (coursePerfReport || []).filter((c: { avgGrade: number | null }) => c.avgGrade !== null).map((c: { name: string; code: string; avgGrade: number }) => ({
+  const coursePerfData = (coursePerfReport || []).filter((c) => c.avgGrade !== null).map((c) => ({
     name: c.code,
     fullName: c.name,
     avgGrade: c.avgGrade,
@@ -358,4 +1090,37 @@ export default function ReportsSection() {
       </Tabs>
     </div>
   );
+}
+
+// ─── Main Reports Section ─────────────────────────────────────────────
+
+export default function ReportsSection() {
+  const { currentUser } = useAppStore();
+  const isStudent = currentUser.role === 'student';
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['reports', isStudent ? currentUser.id : 'admin'],
+    queryFn: () => fetch(`/api/reports${isStudent ? `?studentId=${currentUser.id}` : ''}`).then(r => r.json()),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-2xl font-bold text-[#1A3C6E]">Reports & Analytics</h1>
+        <div className="grid gap-4 md:grid-cols-3">
+          {[1, 2, 3].map(i => (
+            <Card key={i}><CardContent className="p-6"><div className="h-32 bg-muted animate-pulse rounded" /></CardContent></Card>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) return null;
+
+  if (data.isStudent) {
+    return <StudentReportView data={data} />;
+  }
+
+  return <AdminReportView data={data} />;
 }

@@ -26,3 +26,37 @@ Stage Summary:
 - Visual overlap issues fixed (notification badge, sidebar badge)
 - Database IDs now consistent between store presets and seed data
 - All APIs returning 200, lint passes, no compilation errors
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: Make student reports specific to the logged-in student
+
+Work Log:
+- Analyzed existing Reports section and API - both were showing ALL data regardless of role
+- Read store.ts to understand current user context and role presets
+- Read LMS section to understand how it already handles student-specific filtering (passing studentId to APIs)
+- Rewrote /api/reports/route.ts to accept studentId parameter and return completely different data structure for students:
+  - Student profile info
+  - Enrolled courses list
+  - Student-specific attendance with per-course breakdown
+  - Student's assignment submissions with scores and feedback
+  - Student's quiz attempts with scores
+  - Student's grade distribution and course-wise grades
+  - Student's violations only
+- Rewrote /src/components/sections/reports-section.tsx with two distinct views:
+  - StudentReportView: Shows student profile header, attendance warning, course-wise attendance chart, assignment submissions, quiz attempts, grade distribution, course grades, and violations - all specific to the student
+  - AdminReportView: Preserved the original admin view with all-student data
+- Main component detects role and passes studentId to API when role is 'student'
+- Verified both views work correctly via browser testing
+- Student view shows: Arun Kumar's name, per-course attendance (100% for MA101BS, 0% for CH201BS, etc.), graded assignments with feedback, quiz attempts, grade distribution chart, and student's own violations
+- Admin view shows: "Reports & Analytics" with all-student attendance data, course performance, grade distribution, and violation summary
+- Lint check passed with no errors
+- Dev log shows successful API calls for both /api/reports?studentId=u10 (200) and /api/reports (200)
+
+Stage Summary:
+- Reports API now supports student-specific filtering via studentId query parameter
+- Reports section renders completely different views based on user role
+- Student view includes attendance warning when below 75% (JNTUH requirement)
+- All data in student view is filtered to only show the logged-in student's records
+- Admin view remains unchanged with campus-wide analytics
