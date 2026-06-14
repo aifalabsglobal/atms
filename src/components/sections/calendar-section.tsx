@@ -1,6 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import { useAppStore } from '@/lib/store';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -29,6 +30,7 @@ const MONTHS = [
 ];
 
 export default function CalendarSection() {
+  const { currentUser } = useAppStore();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedType, setSelectedType] = useState<string | null>(null);
 
@@ -92,6 +94,8 @@ export default function CalendarSection() {
     });
     return counts;
   }, [events]);
+
+  if (!currentUser) return null;
 
   return (
     <div className="space-y-6">

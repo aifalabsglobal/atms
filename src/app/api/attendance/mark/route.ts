@@ -2,43 +2,49 @@ import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
-import ZAI from 'z-ai-web-dev-sdk';
-
-// Haversine formula for distance in meters
-function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371000;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
+import { requireAuth, resolveStudentId, SELF_MARK_METHODS } from '@/lib/auth-helpers';
+import type { Role } from '@/lib/store';
+import { verifyFaceMatch } from '@/lib/face-verification';
+import { validateGeofenceLocation } from '@/lib/geofence';
 
 export async function POST(request: Request) {
   try {
+    const { error, session: authSession } = await requireAuth();
+    if (error) return error;
+
     const body = await request.json();
-    const { sessionId, studentId, latitude, longitude, selfieBase64, captureMethod } = body;
+    const { sessionId, studentId: requestedStudentId, latitude, longitude, selfieBase64, captureMethod } = body;
+    const method = captureMethod || 'self_geo_face';
+
+    const role = authSession!.user.role as Role;
+    if (SELF_MARK_METHODS.includes(method as typeof SELF_MARK_METHODS[number]) && role !== 'student' && role !== 'parent') {
+      return NextResponse.json({ error: 'Self-mark attendance is only available for students and parents' }, { status: 403 });
+    }
+
+    const { studentId, error: studentError } = await resolveStudentId(authSession!, requestedStudentId ?? null);
+    if (studentError) return studentError;
+    if (!studentId) {
+      return NextResponse.json({ error: 'studentId is required' }, { status: 400 });
+    }
 
     if (!sessionId || !studentId) {
       return NextResponse.json({ error: 'sessionId and studentId are required' }, { status: 400 });
     }
 
     // Get the session with geofence
-    const session = await db.attendanceSession.findUnique({
+    const attendanceSession = await db.attendanceSession.findUnique({
       where: { id: sessionId },
       include: {
-        geofence: { select: { name: true, centerLat: true, centerLng: true, radiusMtrs: true } },
-        course: { select: { name: true, code: true } },
+        geofence: { select: { name: true, type: true, centerLat: true, centerLng: true, radiusMtrs: true, polygonData: true } },
+        course: { select: { name: true, code: true, id: true } },
       },
     });
 
-    if (!session) {
+    if (!attendanceSession) {
       return NextResponse.json({ error: 'Session not found' }, { status: 404 });
     }
 
-    if (session.status !== 'active') {
+    if (attendanceSession.status !== 'active') {
       return NextResponse.json({ error: 'Session is not active' }, { status: 400 });
     }
 
@@ -51,27 +57,39 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Attendance already marked for this session', record: existing }, { status: 409 });
     }
 
+    const enrollment = await db.courseEnrollment.findFirst({
+      where: { studentId, courseId: attendanceSession.courseId, status: 'enrolled' },
+    });
+    if (!enrollment) {
+      return NextResponse.json({ error: 'You are not enrolled in this course' }, { status: 403 });
+    }
+
     // ── GEOFENCE VALIDATION ──
     let geofenceValidated = true;
     let distanceFromCenter: number | null = null;
 
-    if (session.geofence && session.geofence.centerLat && session.geofence.centerLng) {
+    if (attendanceSession.geofence) {
       if (latitude == null || longitude == null) {
         return NextResponse.json({ error: 'Location is required for this session (geofence active)' }, { status: 400 });
       }
-      distanceFromCenter = haversineDistance(
-        latitude, longitude,
-        session.geofence.centerLat, session.geofence.centerLng
+      const { validated, distanceFromCenter: dist } = validateGeofenceLocation(
+        attendanceSession.geofence,
+        latitude,
+        longitude
       );
-      const radius = session.geofence.radiusMtrs ?? 100;
-      geofenceValidated = distanceFromCenter <= radius;
+      distanceFromCenter = dist;
+      geofenceValidated = validated;
 
       if (!geofenceValidated) {
+        const radius = attendanceSession.geofence.radiusMtrs ?? 100;
+        const msg = attendanceSession.geofence.type === 'polygon'
+          ? `You are outside ${attendanceSession.geofence.name}`
+          : `You are ${Math.round(dist ?? 0)}m away — must be within ${radius}m of ${attendanceSession.geofence.name}`;
         return NextResponse.json({
-          error: `You are ${Math.round(distanceFromCenter)}m away — must be within ${radius}m of ${session.geofence.name}`,
+          error: msg,
           geofenceValidated: false,
-          distanceFromCenter,
-          radius,
+          distanceFromCenter: dist,
+          radius: attendanceSession.geofence.type === 'circle' ? radius : undefined,
         }, { status: 403 });
       }
     }
@@ -96,38 +114,12 @@ export async function POST(request: Request) {
       try {
         const student = await db.user.findUnique({ where: { id: studentId } });
         if (student?.profileImageUrl) {
-          const zai = await ZAI.create();
-          const selfieDataUrl = selfieBase64.startsWith('data:') ? selfieBase64 : `data:image/png;base64,${selfieBase64}`;
-          const profileFullPath = path.join(process.cwd(), 'public', student.profileImageUrl);
-          let profileDataUrl = student.profileImageUrl;
-          if (fs.existsSync(profileFullPath)) {
-            const imgBuffer = fs.readFileSync(profileFullPath);
-            profileDataUrl = `data:image/png;base64,${imgBuffer.toString('base64')}`;
-          }
-
-          const vlmResponse = await zai.chat.completions.createVision({
-            messages: [{
-              role: 'user',
-              content: [
-                { type: 'text', text: 'Compare these two photos. Is this the same person? Reply ONLY with JSON: {"isMatch": true/false, "confidence": 0.0-1.0, "reason": "brief explanation"}' },
-                { type: 'image_url', image_url: { url: selfieDataUrl } },
-                { type: 'image_url', image_url: { url: profileDataUrl } },
-              ],
-            }],
-            thinking: { type: 'disabled' },
-          });
-
-          const content = vlmResponse.choices?.[0]?.message?.content || '';
-          const jsonMatch = content.match(/\{[\s\S]*\}/);
-          if (jsonMatch) {
-            const parsed = JSON.parse(jsonMatch[0]);
-            faceVerified = parsed.isMatch === true && (parsed.confidence ?? 0) >= 0.4;
-            confidence = parsed.confidence ?? null;
-          }
+          const result = await verifyFaceMatch(selfieBase64, student.profileImageUrl);
+          faceVerified = result.isMatch;
+          confidence = result.confidence;
         }
       } catch (faceErr) {
         console.error('Face verification error (non-blocking):', faceErr);
-        // Non-blocking: face verification failure doesn't prevent attendance
       }
     }
 

@@ -135,6 +135,7 @@ export interface GeofenceItem {
   centerLat: number | null;
   centerLng: number | null;
   radiusMtrs: number | null;
+  polygonData?: string | null;
   building: string | null;
   floor: string | null;
   isActive: boolean;

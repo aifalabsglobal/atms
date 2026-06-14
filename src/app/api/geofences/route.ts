@@ -1,8 +1,12 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
+import { requireSection, STAFF_ROLES } from '@/lib/auth-helpers';
+import { logAudit, getClientIp } from '@/lib/audit';
 
 export async function GET() {
   try {
+    const { error } = await requireSection('geofences');
+    if (error) return error;
     const geofences = await db.geofence.findMany({
       include: { _count: { select: { attendanceSessions: true } } },
       orderBy: { createdAt: 'desc' },
@@ -17,8 +21,23 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const { error, session } = await requireSection('geofences');
+    if (error || !session) return error;
+    if (!STAFF_ROLES.includes(session.user.role as (typeof STAFF_ROLES)[number])) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const body = await request.json();
     const geofence = await db.geofence.create({ data: body });
+
+    await logAudit({
+      userId: session.user.id,
+      action: 'geofence.create',
+      resource: `geofence:${geofence.id}`,
+      details: { name: geofence.name },
+      ipAddress: getClientIp(request),
+    });
+
     return NextResponse.json(geofence, { status: 201 });
   } catch (error) {
     console.error('Create geofence error:', error);

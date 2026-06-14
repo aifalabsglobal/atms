@@ -1,8 +1,16 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
+import { requireAuth, STAFF_ROLES, requireRoles } from '@/lib/auth-helpers';
+import type { Role } from '@/lib/store';
+
+const PUBLIC_EVENT_TYPES = ['academic', 'exam', 'holiday', 'event', 'deadline', 'class'];
 
 export async function GET(request: Request) {
   try {
+    const { error, session } = await requireAuth();
+    if (error || !session) return error;
+
+    const role = session.user.role as Role;
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '50');
@@ -15,7 +23,22 @@ export async function GET(request: Request) {
     const isAllDay = searchParams.get('isAllDay');
 
     const where: Record<string, unknown> = {};
-    if (userId) where.userId = userId;
+
+    const isStaff = ['super_admin', 'admin', 'hod', 'faculty', 'lab_assistant', 'security'].includes(role);
+    if (!isStaff) {
+      where.OR = [
+        { type: { in: PUBLIC_EVENT_TYPES } },
+        { userId: session.user.id },
+      ];
+    }
+
+    if (userId) {
+      if (!isStaff && userId !== session.user.id) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+      where.userId = userId;
+      delete where.OR;
+    }
     if (type) where.type = type;
     if (academicYearId) where.academicYearId = academicYearId;
     if (courseId) where.courseId = courseId;
@@ -23,7 +46,6 @@ export async function GET(request: Request) {
       where.isAllDay = isAllDay === 'true';
     }
 
-    // Date range filtering
     if (startDate || endDate) {
       const dateFilter: Record<string, unknown> = {};
       if (startDate) dateFilter.gte = startDate;
@@ -31,11 +53,15 @@ export async function GET(request: Request) {
       where.startDate = dateFilter;
     }
 
+    const userSelect = isStaff
+      ? { id: true, name: true, email: true, role: true }
+      : { id: true, name: true };
+
     const [events, total] = await Promise.all([
       db.calendarEvent.findMany({
         where,
         include: {
-          user: { select: { id: true, name: true, email: true, role: true } },
+          user: { select: userSelect },
           academicYear: { select: { id: true, name: true, code: true, regulation: true } },
         },
         orderBy: { startDate: 'asc' },
@@ -54,6 +80,9 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const { error } = await requireRoles(STAFF_ROLES);
+    if (error) return error;
+
     const body = await request.json();
     const {
       userId, title, description, type, startDate, endDate,
@@ -68,13 +97,11 @@ export async function POST(request: Request) {
       );
     }
 
-    // Verify user exists
     const user = await db.user.findUnique({ where: { id: userId } });
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Verify academic year exists if provided
     if (academicYearId) {
       const academicYear = await db.academicYear.findUnique({ where: { id: academicYearId } });
       if (!academicYear) {
@@ -113,6 +140,9 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
+    const { error } = await requireRoles(STAFF_ROLES);
+    if (error) return error;
+
     const body = await request.json();
     const { id, title, description, type, startDate, endDate,
       startTime, endTime, location, color, isAllDay,
@@ -159,6 +189,9 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    const { error } = await requireRoles(STAFF_ROLES);
+    if (error) return error;
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 

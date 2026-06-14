@@ -1,8 +1,11 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
+import { requireAuth, ADMIN_ROLES, requireRoles } from '@/lib/auth-helpers';
 
 export async function GET(request: Request) {
   try {
+    const { error } = await requireRoles(ADMIN_ROLES);
+    if (error) return error;
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '50');
@@ -45,6 +48,9 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const { error } = await requireRoles(ADMIN_ROLES);
+    if (error) return error;
+
     const body = await request.json();
     const { name, code, building, floor, phone, email, hodId, isActive } = body;
 
@@ -90,6 +96,9 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
+    const { error } = await requireRoles(ADMIN_ROLES);
+    if (error) return error;
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
@@ -145,6 +154,9 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
+    const { error } = await requireRoles(ADMIN_ROLES);
+    if (error) return error;
+
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 

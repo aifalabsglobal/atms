@@ -86,6 +86,8 @@ interface ActiveSession {
 }
 
 interface DashboardData {
+  scope?: 'student' | 'parent' | 'campus' | 'visitor';
+  ward?: { id: string; name: string; department: string | null; employeeId: string | null };
   stats: DashboardStats;
   courseAttendance: CourseAttendance[];
   captureMethods: Record<string, number>;
@@ -286,6 +288,7 @@ function StatCard({
 
 function WelcomeBanner() {
   const { currentUser } = useAppStore();
+  if (!currentUser) return null;
   const role = currentUser.role;
   const roleColor = ROLE_COLORS[role];
 
@@ -421,10 +424,10 @@ function CourseAttendanceChart({ data }: { data: CourseAttendance[] }) {
             <CartesianGrid vertical={false} strokeDasharray="3 3" />
             <XAxis dataKey="code" tickLine={false} axisLine={false} fontSize={11} className="fill-muted-foreground" />
             <YAxis tickLine={false} axisLine={false} fontSize={11} domain={[0, 100]} className="fill-muted-foreground" />
-            <ChartTooltip content={<ChartTooltipContent formatter={(value: number, _name: string, item: { payload: { name: string } }) => (
+            <ChartTooltip content={<ChartTooltipContent formatter={(value, _name, item) => (
               <div className="flex flex-col gap-0.5">
-                <span className="font-medium">{item.payload.name}</span>
-                <span>{value}% attendance</span>
+                <span className="font-medium">{(item as { payload?: { name?: string } }).payload?.name}</span>
+                <span>{Number(value)}% attendance</span>
               </div>
             )} />} />
             <Bar dataKey="percentage" fill={NAVY} radius={[4, 4, 0, 0]} maxBarSize={40} />
@@ -867,20 +870,22 @@ function StudentDashboard({ data }: { data: DashboardData }) {
 // ─── Parent Dashboard ────────────────────────────────────────────────────────
 
 function ParentDashboard({ data }: { data: DashboardData }) {
-  const { stats, courseAttendance, weeklyTrend } = data;
+  const { stats, courseAttendance, weeklyTrend, ward } = data;
+  const wardName = ward?.name ?? 'Your ward';
+  const wardDept = ward?.department ?? '—';
+  const initials = wardName.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase();
 
   return (
     <div className="space-y-6">
-      {/* Child Overview */}
       <Card className="border-l-4" style={{ borderLeftColor: '#BE185D' }}>
         <CardContent className="p-4">
           <div className="flex items-center gap-4">
             <div className="h-14 w-14 rounded-full flex items-center justify-center text-white text-lg font-bold" style={{ backgroundColor: '#BE185D' }}>
-              AK
+              {initials}
             </div>
             <div>
-              <h3 className="text-lg font-semibold">Arun Kumar</h3>
-              <p className="text-sm text-muted-foreground">M.Tech Computer Science — Semester 2</p>
+              <h3 className="text-lg font-semibold">{wardName}</h3>
+              <p className="text-sm text-muted-foreground">{wardDept}</p>
               <div className="flex items-center gap-2 mt-1">
                 <Badge variant="outline" className={`text-[10px] ${stats.overallAttendance >= 75 ? 'text-green-600 border-green-200' : 'text-red-600 border-red-200'}`}>
                   {stats.overallAttendance >= 75 ? <CheckCircle2 className="h-3 w-3 mr-1" /> : <AlertTriangle className="h-3 w-3 mr-1" />}
@@ -963,8 +968,8 @@ function VisitorDashboard({ data }: { data: DashboardData }) {
               <GraduationCap className="h-7 w-7 text-white" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-[#1A3C6E]">University of Hyderabad</h3>
-              <p className="text-sm text-muted-foreground">Welcome to the UoH Smart Campus. Explore campus zones and information below.</p>
+              <h3 className="text-lg font-semibold text-[#1A3C6E]">JNTUH Engineering College</h3>
+              <p className="text-sm text-muted-foreground">Welcome to the JNTUH Smart Campus. Explore campus zones and information below.</p>
             </div>
           </div>
         </CardContent>
@@ -1013,7 +1018,7 @@ function VisitorDashboard({ data }: { data: DashboardData }) {
               { icon: MapPin, text: 'Stay within designated visitor zones', color: '#1A3C6E' },
               { icon: Clock, text: 'Visiting hours: 9:00 AM – 5:00 PM', color: '#B45309' },
               { icon: Eye, text: 'CCTV monitoring is active on campus', color: '#6B7280' },
-              { icon: Wifi, text: 'Guest WiFi: UoH-Guest (no password)', color: '#7C3AED' },
+              { icon: Wifi, text: 'Guest WiFi: JNTUH-Guest (no password)', color: '#7C3AED' },
               { icon: AlertTriangle, text: 'Report suspicious activity to Security', color: '#E74C3C' },
             ].map((item, i) => (
               <div key={i} className="flex items-center gap-3">
@@ -1106,17 +1111,20 @@ function SecurityDashboard({ data }: { data: DashboardData }) {
 
 export default function DashboardSection() {
   const { currentUser } = useAppStore();
-  const role = currentUser.role;
 
   const { data, isLoading, isError, refetch } = useQuery<DashboardData>({
-    queryKey: ['dashboard'],
+    queryKey: ['dashboard', currentUser?.id],
     queryFn: () => fetch('/api/dashboard').then((r) => {
       if (!r.ok) throw new Error('Failed to fetch dashboard data');
       return r.json();
     }),
+    enabled: !!currentUser,
     refetchInterval: 30000,
     staleTime: 15000,
   });
+
+  if (!currentUser) return <DashboardSkeleton />;
+  const role = currentUser.role;
 
   if (isLoading) return <DashboardSkeleton />;
   if (isError || !data) return <DashboardError onRetry={() => refetch()} />;
@@ -1142,7 +1150,7 @@ export default function DashboardSection() {
             Dashboard
           </h1>
           <p className="text-sm text-muted-foreground">
-            University of Hyderabad &mdash; {roleDescriptions[role]}
+            JNTUH Engineering College &mdash; {roleDescriptions[role]}
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-2 w-fit">

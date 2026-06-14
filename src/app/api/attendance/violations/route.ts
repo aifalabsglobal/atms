@@ -1,8 +1,14 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
+import { STAFF_ROLES, requireRoles, getCampusScope, requireSection } from '@/lib/auth-helpers';
+import { logAudit, getClientIp } from '@/lib/audit';
 
 export async function GET(request: Request) {
   try {
+    const { error, session } = await requireSection('violations');
+    if (error || !session) return error;
+
+    const scope = await getCampusScope(session);
     const { searchParams } = new URL(request.url);
     const reviewStatus = searchParams.get('reviewStatus');
     const severity = searchParams.get('severity');
@@ -14,6 +20,18 @@ export async function GET(request: Request) {
     if (reviewStatus) where.reviewStatus = reviewStatus;
     if (severity) where.severity = severity;
     if (type) where.type = type;
+
+    if (scope.level === 'department') {
+      where.violator = { departmentId: scope.departmentId };
+    } else if (scope.level === 'instructor') {
+      const enrollments = await db.courseEnrollment.findMany({
+        where: { courseId: { in: scope.courseIds }, status: 'enrolled' },
+        select: { studentId: true },
+        distinct: ['studentId'],
+      });
+      const studentIds = enrollments.map((e) => e.studentId);
+      where.studentId = { in: studentIds.length > 0 ? studentIds : ['__none__'] };
+    }
 
     const [violations, total] = await Promise.all([
       db.attendanceViolation.findMany({
@@ -39,13 +57,52 @@ export async function GET(request: Request) {
 
 export async function PUT(request: Request) {
   try {
+    const { error, session } = await requireSection('violations');
+    if (error || !session) return error;
+    const role = session.user.role;
+    if (!STAFF_ROLES.includes(role as (typeof STAFF_ROLES)[number])) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+    if (error || !session) return error;
+
     const body = await request.json();
-    const { id, reviewStatus, reviewNotes, reviewedBy } = body;
+    const { id, reviewStatus, reviewNotes } = body;
+
+    const existing = await db.attendanceViolation.findUnique({
+      where: { id },
+      include: {
+        violator: { select: { departmentId: true } },
+        record: { select: { session: { select: { courseId: true } } } },
+      },
+    });
+    if (!existing) {
+      return NextResponse.json({ error: 'Violation not found' }, { status: 404 });
+    }
+
+    const scope = await getCampusScope(session);
+    if (scope.level === 'department') {
+      if (existing.violator.departmentId !== scope.departmentId) {
+        return NextResponse.json({ error: 'Violation is outside your department scope' }, { status: 403 });
+      }
+    } else if (scope.level === 'instructor') {
+      const courseId = existing.record?.session?.courseId;
+      if (!courseId || !scope.courseIds.includes(courseId)) {
+        return NextResponse.json({ error: 'Violation is outside your course scope' }, { status: 403 });
+      }
+    }
 
     const violation = await db.attendanceViolation.update({
       where: { id },
-      data: { reviewStatus, reviewNotes, reviewedBy },
+      data: { reviewStatus, reviewNotes, reviewedBy: session.user.id },
       include: { violator: { select: { name: true } } },
+    });
+
+    await logAudit({
+      userId: session.user.id,
+      action: 'violation.review',
+      resource: `violation:${id}`,
+      details: { reviewStatus, violator: violation.violator.name },
+      ipAddress: getClientIp(request),
     });
 
     return NextResponse.json(violation);

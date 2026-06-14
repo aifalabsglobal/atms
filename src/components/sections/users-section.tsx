@@ -7,10 +7,11 @@ import {
   ChevronRight, Eye, MoreHorizontal, Mail, Phone, Building2,
   Clock, CheckCircle2, XCircle, AlertTriangle, ShieldCheck,
   GraduationCap, FlaskConical, BookOpen, MapPin, ClipboardList,
-  FileText, BarChart3, Settings, Lock, Award, UserCog
+  FileText, BarChart3, Settings, Lock, Award, UserCog, Database, UserPlus
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { UserItem } from '@/lib/types';
+import { useAppStore, ROLE_SECTIONS, type Role, type Section } from '@/lib/store';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -37,6 +38,7 @@ import {
   type ChartConfig,
 } from '@/components/ui/chart';
 import { Pie, PieChart, Cell } from 'recharts';
+import { CreateUserDialog, useUserMutations } from '@/components/users/user-management-dialogs';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -90,19 +92,6 @@ const STATUS_ICONS: Record<string, React.ElementType> = {
   suspended: AlertTriangle,
 };
 
-const DEPARTMENTS = [
-  'Computer Science',
-  'Electronics & Communication',
-  'Physics',
-  'Chemistry',
-  'Mathematics',
-  'Life Sciences',
-  'IT Department',
-  'Administration',
-  'Library',
-  'Security Office',
-];
-
 const CHART_CONFIG: ChartConfig = {
   super_admin: { label: 'Super Admin', color: '#DC2626' },
   admin: { label: 'Admin', color: '#EA580C' },
@@ -115,30 +104,23 @@ const CHART_CONFIG: ChartConfig = {
   security: { label: 'Security', color: '#E11D48' },
 };
 
-// Permission matrix: key modules × 9 roles
-const PERMISSION_MODULES = [
+// Permission matrix: navigation sections × 9 roles (synced with ROLE_SECTIONS)
+const PERMISSION_MODULES: { key: Section; label: string; icon: React.ElementType }[] = [
   { key: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+  { key: 'masters', label: 'Masters', icon: Database },
   { key: 'attendance', label: 'Attendance', icon: ClipboardList },
   { key: 'lms', label: 'Learning Mgmt', icon: BookOpen },
   { key: 'users', label: 'User Mgmt', icon: Users },
   { key: 'violations', label: 'Violations', icon: Shield },
   { key: 'reports', label: 'Reports', icon: FileText },
   { key: 'geofences', label: 'Geofences', icon: MapPin },
+  { key: 'calendar', label: 'Calendar', icon: Clock },
   { key: 'settings', label: 'Settings', icon: Settings },
-] as const;
+];
 
-// Permission levels: full=✓, view=◐, none=✗
-const PERMISSION_MATRIX: Record<string, Record<string, '✓' | '◐' | '✗'>> = {
-  super_admin: { dashboard: '✓', attendance: '✓', lms: '✓', users: '✓', violations: '✓', reports: '✓', geofences: '✓', settings: '✓' },
-  admin:       { dashboard: '✓', attendance: '✓', lms: '✓', users: '✓', violations: '✓', reports: '✓', geofences: '✓', settings: '◐' },
-  hod:         { dashboard: '✓', attendance: '✓', lms: '✓', users: '◐', violations: '✓', reports: '✓', geofences: '◐', settings: '✗' },
-  faculty:     { dashboard: '✓', attendance: '✓', lms: '✓', users: '✗', violations: '◐', reports: '◐', geofences: '✗', settings: '✗' },
-  lab_assistant: { dashboard: '✓', attendance: '✓', lms: '◐', users: '✗', violations: '✗', reports: '◐', geofences: '✗', settings: '✗' },
-  student:     { dashboard: '✓', attendance: '◐', lms: '✓', users: '✗', violations: '✗', reports: '✗', geofences: '✗', settings: '✗' },
-  parent:      { dashboard: '✓', attendance: '◐', lms: '◐', users: '✗', violations: '✗', reports: '✗', geofences: '✗', settings: '✗' },
-  visitor:     { dashboard: '◐', attendance: '✗', lms: '✗', users: '✗', violations: '✗', reports: '✗', geofences: '✗', settings: '✗' },
-  security:    { dashboard: '✓', attendance: '✓', lms: '✗', users: '✗', violations: '✓', reports: '◐', geofences: '✓', settings: '✗' },
-};
+function sectionAccess(role: Role, section: Section): '✓' | '✗' {
+  return ROLE_SECTIONS[role].includes(section) ? '✓' : '✗';
+}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -146,6 +128,7 @@ interface UsersApiResponse {
   users: UserItem[];
   total: number;
   roleDistribution: { role: string; _count: number }[];
+  departments?: string[];
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -326,7 +309,7 @@ function PermissionMatrixCard() {
           Permission Matrix
         </CardTitle>
         <CardDescription className="text-[10px]">
-          Access control across 9 roles × key modules (✓ Full · ◐ View · ✗ None)
+          Access control across 9 roles × navigation sections (✓ Access · ✗ None)
         </CardDescription>
       </CardHeader>
       <CardContent className="p-0 pb-3">
@@ -353,13 +336,12 @@ function PermissionMatrixCard() {
                         {mod.label}
                       </td>
                       {ROLES.map(r => {
-                        const perm = PERMISSION_MATRIX[r.value]?.[mod.key] || '✗';
+                        const perm = sectionAccess(r.value as Role, mod.key);
                         return (
                           <td key={r.value} className="px-1.5 py-1.5 text-center">
                             <span className={cn(
                               'inline-flex items-center justify-center w-5 h-5 rounded text-[10px] font-bold',
                               perm === '✓' && 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-                              perm === '◐' && 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
                               perm === '✗' && 'bg-red-50 text-red-400 dark:bg-red-900/20 dark:text-red-500',
                             )}>
                               {perm}
@@ -416,6 +398,7 @@ function StatsSkeleton() {
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function UsersSection() {
+  const { currentUser } = useAppStore();
   // Filter state
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
@@ -427,6 +410,10 @@ export default function UsersSection() {
   // Dialog state
   const [selectedUser, setSelectedUser] = useState<UserItem | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const { updateUser } = useUserMutations();
+
+  const canManage = currentUser ? ['super_admin', 'admin', 'hod'].includes(currentUser.role) : false;
 
   // Build query params
   const queryParams = useMemo(() => {
@@ -453,6 +440,7 @@ export default function UsersSection() {
   const users = data?.users ?? [];
   const total = data?.total ?? 0;
   const roleDistribution = data?.roleDistribution ?? [];
+  const departments = data?.departments ?? [];
   const totalPages = Math.ceil(total / limit);
 
   // Derived stats
@@ -499,6 +487,8 @@ export default function UsersSection() {
 
   const hasActiveFilters = search || roleFilter !== 'all' || statusFilter !== 'all' || departmentFilter !== 'all';
 
+  if (!currentUser) return null;
+
   return (
     <div className="space-y-4">
       {/* Section Header */}
@@ -512,9 +502,17 @@ export default function UsersSection() {
             Manage users, roles, and permissions across the campus system
           </p>
         </div>
-        <Badge variant="outline" className="w-fit text-xs font-semibold" style={{ borderColor: UOH_NAVY, color: UOH_NAVY }}>
-          9-Role RBAC System
-        </Badge>
+        <div className="flex items-center gap-2">
+          {canManage && (
+            <Button size="sm" className="h-8" onClick={() => setCreateOpen(true)}>
+              <UserPlus className="h-4 w-4 mr-1.5" />
+              Add User
+            </Button>
+          )}
+          <Badge variant="outline" className="w-fit text-xs font-semibold" style={{ borderColor: UOH_NAVY, color: UOH_NAVY }}>
+            9-Role RBAC System
+          </Badge>
+        </div>
       </div>
 
       {/* Main Layout: Two columns on desktop */}
@@ -563,7 +561,7 @@ export default function UsersSection() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Departments</SelectItem>
-                    {DEPARTMENTS.map(d => (
+                    {departments.map(d => (
                       <SelectItem key={d} value={d}>{d}</SelectItem>
                     ))}
                   </SelectContent>
@@ -658,15 +656,24 @@ export default function UsersSection() {
                                   <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleRowClick(user); }}>
                                     <Eye className="mr-2 h-3.5 w-3.5" /> View Profile
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={(e) => e.stopPropagation()}>
-                                    <UserCog className="mr-2 h-3.5 w-3.5" /> Edit Role
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={(e) => e.stopPropagation()}>
-                                    <Mail className="mr-2 h-3.5 w-3.5" /> Send Email
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={(e) => e.stopPropagation()}>
-                                    <Lock className="mr-2 h-3.5 w-3.5" /> Reset Password
-                                  </DropdownMenuItem>
+                                  {canManage && (
+                                    <>
+                                      <DropdownMenuItem onClick={(e) => {
+                                        e.stopPropagation();
+                                        const next = user.status === 'active' ? 'suspended' : 'active';
+                                        updateUser.mutate({ id: user.id, status: next });
+                                      }}>
+                                        <UserCog className="mr-2 h-3.5 w-3.5" />
+                                        {user.status === 'active' ? 'Suspend' : 'Activate'}
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem onClick={(e) => {
+                                        e.stopPropagation();
+                                        updateUser.mutate({ id: user.id, resetPassword: true });
+                                      }}>
+                                        <Lock className="mr-2 h-3.5 w-3.5" /> Reset Password
+                                      </DropdownMenuItem>
+                                    </>
+                                  )}
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </TableCell>
@@ -849,6 +856,7 @@ export default function UsersSection() {
 
       {/* User Detail Dialog */}
       <UserDetailDialog user={selectedUser} open={dialogOpen} onOpenChange={setDialogOpen} />
+      <CreateUserDialog open={createOpen} onOpenChange={setCreateOpen} actorRole={currentUser.role} />
     </div>
   );
 }

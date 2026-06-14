@@ -1,4 +1,5 @@
 import { db } from '@/lib/db';
+import bcrypt from 'bcryptjs';
 
 async function main() {
   console.log('🌱 Seeding JNTUH SCMS database with R22 Regulation data...');
@@ -154,7 +155,7 @@ async function main() {
     { code: 'CS604PC', name: 'Management Science', departmentId: cseDept.id, semesterId: semIII2.id, credits: 2, lectureHours: 2, tutorialHours: 0, labHours: 0, type: 'core', category: 'HS', syllabus: 'Management Concepts, Planning, Organizing, Staffing, Directing, Controlling, Marketing Management, Financial Management', textbooks: JSON.stringify(['Management Science by Aryasri']) },
 
     // IV Year I Sem (CSE)
-    { code: 'CS701PC', name: 'Big Data Analytics', departmentId: cseDept.id, semesterId: semIV1.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'PC', syllabus: 'Big Data Concepts, Hadoop Ecosystem, MapReduce, HDFS, Hive, Pig, Spark, NoSQL, Stream Processing, Big Data Visualization', textbooks: JSON.stringify(['Big Data: Principles and Best Practices by Holistic'], 'Hadoop: The Definitive Guide by Tom White'), referenceBooks: JSON.stringify(['Spark: The Definitive Guide']) },
+    { code: 'CS701PC', name: 'Big Data Analytics', departmentId: cseDept.id, semesterId: semIV1.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'PC', syllabus: 'Big Data Concepts, Hadoop Ecosystem, MapReduce, HDFS, Hive, Pig, Spark, NoSQL, Stream Processing, Big Data Visualization', textbooks: JSON.stringify(['Big Data: Principles and Best Practices of Scalable Realtime Data Systems by Holistic', 'Hadoop: The Definitive Guide by Tom White']), referenceBooks: JSON.stringify(['Spark: The Definitive Guide']) },
     { code: 'CS7XXPE1', name: 'Professional Elective-II', departmentId: cseDept.id, semesterId: semIV1.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'professional_elective', category: 'PE' },
     { code: 'CS7XXPE2', name: 'Professional Elective-III', departmentId: cseDept.id, semesterId: semIV1.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'professional_elective', category: 'PE' },
     { code: 'CS7XXOE', name: 'Open Elective', departmentId: cseDept.id, semesterId: semIV1.id, credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'open_elective', category: 'OE' },
@@ -188,6 +189,7 @@ async function main() {
   // 5. USERS (20+ across roles)
   // ==========================================
   console.log('📦 Creating users...');
+  const passwordHash = await bcrypt.hash('demo123', 10);
   const usersData = [
     // Super Admin
     { id: 'u1', email: 'vice.chancellor@jntuh.ac.in', name: 'Dr. K. Sreenivasa Raju', employeeId: 'JNTUH001', departmentId: cseDept.id, department: 'Administration', role: 'super_admin' as const, status: 'active', phone: '+91-9876543201' },
@@ -222,7 +224,7 @@ async function main() {
     { id: 'u10h', email: 'student.sireesha@jntuh.ac.in', name: 'Sireesha Kumari', employeeId: 'STU008', departmentId: itDept.id, department: 'Information Technology', role: 'student' as const, status: 'active', phone: '+91-9876543225' },
     { id: 'u10i', email: 'student.irfan@jntuh.ac.in', name: 'Irfan Khan', employeeId: 'STU009', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'student' as const, status: 'suspended', phone: '+91-9876543226' },
     // Parent
-    { id: 'u18', email: 'parent.rajesh@jntuh.ac.in', name: 'Mr. Rajesh Kumar', department: 'N/A', role: 'parent' as const, status: 'active', phone: '+91-9876543227' },
+    { id: 'u18', email: 'parent.rajesh@jntuh.ac.in', name: 'Mr. Rajesh Kumar', department: 'N/A', role: 'parent' as const, status: 'active', phone: '+91-9876543227', linkedStudentId: 'u10' },
     // Visitor
     { id: 'u19', email: 'visitor.john@jntuh.ac.in', name: 'John Smith', department: 'External', role: 'visitor' as const, status: 'active', phone: '+91-9876543228' },
     // Security
@@ -230,14 +232,31 @@ async function main() {
   ];
 
   const users = await Promise.all(
-    usersData.map(u => db.user.create({ data: u }))
+    usersData.map(u => db.user.create({ data: { ...u, passwordHash } }))
   );
 
   const [superAdmin, adminUser, hodCSE, , , , , , , , , , faculty1, faculty2, faculty3, faculty4, labAssist, s1, s2, s3, s4, s5, s6, s7, s8, s9, parentUser, visitorUser, securityUser] = users;
   const students = users.filter(u => u.role === 'student' && u.status === 'active');
 
-  // Set HOD references for departments
-  await db.department.update({ where: { id: cseDept.id }, data: { hodId: hodCSE.id } });
+  // Set HOD references for all departments
+  const hodDeptPairs: Array<[typeof cseDept, string]> = [
+    [cseDept, 'hod.cse@jntuh.ac.in'],
+    [aimlDept, 'hod.aiml@jntuh.ac.in'],
+    [dsDept, 'hod.ds@jntuh.ac.in'],
+    [ntDept, 'hod.nt@jntuh.ac.in'],
+    [eceDept, 'hod.ece@jntuh.ac.in'],
+    [eeeDept, 'hod.eee@jntuh.ac.in'],
+    [mechDept, 'hod.mech@jntuh.ac.in'],
+    [civilDept, 'hod.civil@jntuh.ac.in'],
+    [itDept, 'hod.it@jntuh.ac.in'],
+    [csamDept, 'hod.csam@jntuh.ac.in'],
+  ];
+  for (const [dept, email] of hodDeptPairs) {
+    const hod = users.find((u) => u.email === email);
+    if (hod) {
+      await db.department.update({ where: { id: dept.id }, data: { hodId: hod.id } });
+    }
+  }
 
   console.log(`   Created ${users.length} users`);
 
@@ -547,7 +566,7 @@ async function main() {
     }
   });
 
-  // Mark s1 (Ravi Kiran) as present in liveSession with geo+face data
+  // Mark u10 (Arun Kumar) as present in liveSession with geo+face data
   await db.attendanceRecord.create({
     data: {
       sessionId: liveSession.id,
@@ -563,6 +582,27 @@ async function main() {
       confidence: 0.92,
     }
   });
+
+  // Sync session counts from actual attendance records
+  const allSessions = [...sessions, liveSession, selfMarkSession1, selfMarkSession2];
+  for (const sess of allSessions) {
+    const records = await db.attendanceRecord.findMany({
+      where: { sessionId: sess.id },
+      select: { status: true },
+    });
+    const presentCount = records.filter((r) => r.status === 'present').length;
+    const lateCount = records.filter((r) => r.status === 'late').length;
+    const absentCount = records.filter((r) => r.status === 'absent').length;
+    await db.attendanceSession.update({
+      where: { id: sess.id },
+      data: {
+        presentCount,
+        lateCount,
+        absentCount,
+        expectedCount: Math.max(sess.expectedCount, records.length),
+      },
+    });
+  }
 
   // ==========================================
   // 13. ASSIGNMENTS & SUBMISSIONS
@@ -746,7 +786,7 @@ async function main() {
       { userId: adminUser.id, title: 'System Update', message: 'Face recognition model updated to ArcFace v3.0', type: 'info', channel: 'in_app', isRead: false },
       { userId: s3.id, title: 'Low Attendance Warning', message: 'Your attendance in CS201ES Data Structures is below 75%. Please improve attendance.', type: 'warning', channel: 'in_app', isRead: false },
       { userId: superAdmin.id, title: 'Academic Calendar Published', message: 'Academic Calendar for AY 2025-2026 has been published under R22 regulation', type: 'info', channel: 'in_app', isRead: true },
-      { userId: parentUser.id, title: 'Attendance Update', message: 'Your ward Ravi Kiran has 82% attendance this month', type: 'info', channel: 'in_app', isRead: false },
+      { userId: parentUser.id, title: 'Attendance Update', message: 'Your ward Arun Kumar has 82% attendance this month', type: 'info', channel: 'in_app', isRead: false },
       { userId: securityUser.id, title: 'Security Alert', message: 'Unauthorized entry attempt detected at ECE Block entrance', type: 'warning', channel: 'in_app', isRead: false },
     ]
   });

@@ -1,16 +1,36 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
+import { requireAuth, resolveStudentId, getCampusScope, buildCourseIdFilter } from '@/lib/auth-helpers';
 
 export async function GET(request: Request) {
   try {
+    const { error, session } = await requireAuth();
+    if (error || !session) return error;
+
     const { searchParams } = new URL(request.url);
-    const studentId = searchParams.get('studentId');
+    const { studentId, error: studentError } = await resolveStudentId(session, searchParams.get('studentId'));
+    if (studentError) return studentError;
+
+    const where: Record<string, unknown> = { status: 'active' };
+
+    if (studentId) {
+      const enrollments = await db.courseEnrollment.findMany({
+        where: { studentId, status: 'enrolled' },
+        select: { courseId: true },
+      });
+      const enrolledIds = enrollments.map((e) => e.courseId);
+      where.courseId = { in: enrolledIds.length > 0 ? enrolledIds : ['__none__'] };
+    } else {
+      const scope = await getCampusScope(session);
+      const courseFilter = buildCourseIdFilter(scope);
+      if (courseFilter) where.courseId = courseFilter;
+    }
 
     const sessions = await db.attendanceSession.findMany({
-      where: { status: 'active' },
+      where,
       include: {
         course: { select: { name: true, code: true } },
-        geofence: { select: { name: true, centerLat: true, centerLng: true, radiusMtrs: true } },
+        geofence: { select: { name: true, type: true, centerLat: true, centerLng: true, radiusMtrs: true, polygonData: true } },
         timetableSlot: { select: { roomNumber: true, building: true, startTime: true, endTime: true } },
         creator: { select: { name: true } },
         records: studentId ? { where: { studentId } } : false,

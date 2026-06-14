@@ -1,0 +1,164 @@
+/**
+ * Role-based access tests — run: npm run test:roles
+ */
+import { ROLE_SECTIONS, type Role, type Section } from '../src/lib/store';
+
+const BASE = process.env.BASE_URL ?? 'http://localhost:3000';
+
+const DEMO_ACCOUNTS: { label: string; email: string; role: Role }[] = [
+  { label: 'Super Admin', email: 'vice.chancellor@jntuh.ac.in', role: 'super_admin' },
+  { label: 'Admin', email: 'registrar@jntuh.ac.in', role: 'admin' },
+  { label: 'HOD (CSE)', email: 'hod.cse@jntuh.ac.in', role: 'hod' },
+  { label: 'Faculty', email: 'faculty.venkat@jntuh.ac.in', role: 'faculty' },
+  { label: 'Student', email: 'student.ravi@jntuh.ac.in', role: 'student' },
+  { label: 'Parent', email: 'parent.rajesh@jntuh.ac.in', role: 'parent' },
+  { label: 'Security', email: 'security.murthy@jntuh.ac.in', role: 'security' },
+];
+
+type Endpoint = { name: string; path: string; section?: Section; allowed: Role[] };
+
+const ENDPOINTS: Endpoint[] = [
+  { name: 'dashboard', path: '/api/dashboard', section: 'dashboard', allowed: ['super_admin', 'admin', 'hod', 'faculty', 'lab_assistant', 'student', 'parent', 'visitor', 'security'] },
+  { name: 'masters', path: '/api/masters/departments?limit=5', section: 'masters', allowed: ['super_admin', 'admin'] },
+  { name: 'users', path: '/api/users?limit=5', section: 'users', allowed: ['super_admin', 'admin', 'hod'] },
+  { name: 'lms', path: '/api/lms/courses?limit=5', section: 'lms', allowed: ['super_admin', 'admin', 'hod', 'faculty', 'student', 'parent'] },
+  { name: 'violations', path: '/api/attendance/violations?limit=1', section: 'violations', allowed: ['super_admin', 'admin', 'hod', 'faculty', 'security'] },
+  { name: 'reports', path: '/api/reports', section: 'reports', allowed: ['super_admin', 'admin', 'hod', 'faculty', 'student', 'parent'] },
+  { name: 'geofences', path: '/api/geofences', section: 'geofences', allowed: ['super_admin', 'admin', 'hod', 'lab_assistant', 'student', 'visitor', 'security'] },
+  { name: 'calendar', path: '/api/calendar?limit=5', section: 'calendar', allowed: ['super_admin', 'admin', 'hod', 'faculty', 'lab_assistant', 'student', 'parent', 'visitor', 'security'] },
+  { name: 'attendance-sessions', path: '/api/attendance/sessions?limit=5', section: 'attendance', allowed: ['super_admin', 'admin', 'hod', 'faculty', 'lab_assistant', 'security'] },
+  { name: 'active-sessions', path: '/api/attendance/active-sessions', allowed: ['super_admin', 'admin', 'hod', 'faculty', 'lab_assistant', 'student', 'parent', 'security'] },
+];
+
+function mergeCookies(existing: string, setCookie: string | null): string {
+  const jar = new Map<string, string>();
+  for (const part of existing.split(';').map((s) => s.trim()).filter(Boolean)) {
+    const [k, ...v] = part.split('=');
+    jar.set(k, v.join('='));
+  }
+  if (setCookie) {
+    for (const chunk of setCookie.split(/,(?=\s*[^;]+=[^;]+)/)) {
+      const [pair] = chunk.split(';');
+      const [k, ...v] = pair.trim().split('=');
+      jar.set(k, v.join('='));
+    }
+  }
+  return Array.from(jar.entries()).map(([k, v]) => `${k}=${v}`).join('; ');
+}
+
+async function login(email: string): Promise<string> {
+  const csrfRes = await fetch(`${BASE}/api/auth/csrf`);
+  const { csrfToken } = await csrfRes.json();
+  let cookie = mergeCookies('', csrfRes.headers.get('set-cookie'));
+
+  const body = new URLSearchParams({
+    email,
+    password: 'demo123',
+    csrfToken,
+    callbackUrl: `${BASE}/`,
+    json: 'true',
+  });
+
+  const loginRes = await fetch(`${BASE}/api/auth/callback/credentials`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookie },
+    body,
+  });
+  cookie = mergeCookies(cookie, loginRes.headers.get('set-cookie'));
+  if (loginRes.status !== 200) throw new Error(`login failed ${loginRes.status}`);
+
+  const sessionRes = await fetch(`${BASE}/api/auth/session`, { headers: { Cookie: cookie } });
+  const session = await sessionRes.json();
+  if (!session?.user?.email) throw new Error('no session');
+  if (session.user.email !== email) throw new Error(`wrong email ${session.user.email}`);
+
+  return cookie;
+}
+
+type Row = { role: string; check: string; ok: boolean; detail: string; ms: number };
+
+async function main() {
+  const rows: Row[] = [];
+
+  for (const account of DEMO_ACCOUNTS) {
+    const t0 = Date.now();
+    let cookie: string;
+    try {
+      cookie = await login(account.email);
+      rows.push({ role: account.label, check: 'login', ok: true, detail: account.role, ms: Date.now() - t0 });
+    } catch (e) {
+      rows.push({ role: account.label, check: 'login', ok: false, detail: e instanceof Error ? e.message : String(e), ms: Date.now() - t0 });
+      continue;
+    }
+
+    for (const ep of ENDPOINTS) {
+      const uiHasSection = ep.section ? ROLE_SECTIONS[account.role].includes(ep.section) : true;
+      const apiAllowed = ep.allowed.includes(account.role);
+      const expectOk = apiAllowed;
+
+      const start = Date.now();
+      try {
+        const res = await fetch(`${BASE}${ep.path}`, { headers: { Cookie: cookie } });
+        const ms = Date.now() - start;
+
+        if (expectOk && !res.ok) {
+          rows.push({ role: account.label, check: ep.name, ok: false, detail: `expected 200 got ${res.status}`, ms });
+          continue;
+        }
+        if (!expectOk && res.status !== 403) {
+          rows.push({ role: account.label, check: ep.name, ok: false, detail: `expected 403 got ${res.status}`, ms });
+          continue;
+        }
+
+        if (ep.name === 'dashboard' && res.ok) {
+          const data = await res.json();
+          const scope = data.scope as string;
+          const expected: Partial<Record<Role, string>> = {
+            super_admin: 'campus', admin: 'campus', hod: 'department',
+            faculty: 'instructor', student: 'student', parent: 'parent', visitor: 'visitor',
+          };
+          const exp = expected[account.role];
+          if (exp && scope !== exp) {
+            rows.push({ role: account.label, check: ep.name, ok: false, detail: `scope=${scope} want ${exp}`, ms });
+            continue;
+          }
+          if (account.role === 'parent' && !data.ward?.name) {
+            rows.push({ role: account.label, check: 'parent-ward', ok: false, detail: 'no ward linked', ms });
+            continue;
+          }
+        }
+
+        const note = expectOk ? '200' : '403';
+        const uiNote = ep.section && !uiHasSection ? ' (not in nav)' : '';
+        rows.push({ role: account.label, check: ep.name, ok: true, detail: `${note}${uiNote}`, ms });
+      } catch (e) {
+        rows.push({ role: account.label, check: ep.name, ok: false, detail: e instanceof Error ? e.message : String(e), ms: Date.now() - start });
+      }
+    }
+  }
+
+  console.log('\n=== Role Access Tests (7 demo roles) ===\n');
+
+  let currentRole = '';
+  for (const row of rows) {
+    if (row.role !== currentRole) {
+      currentRole = row.role;
+      console.log(`\n[${row.role}]`);
+    }
+    console.log(`${row.ok ? '  PASS' : '  FAIL'} ${row.check} — ${row.detail} (${row.ms}ms)`);
+  }
+
+  const passed = rows.filter((r) => r.ok).length;
+  const failed = rows.filter((r) => !r.ok);
+  console.log(`\n${passed}/${rows.length} passed`);
+  if (failed.length) {
+    console.log('\nFailures:');
+    for (const f of failed) console.log(`  - ${f.role} / ${f.check}: ${f.detail}`);
+    process.exit(1);
+  }
+}
+
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

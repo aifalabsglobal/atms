@@ -1,10 +1,15 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
+import { requireAuth, resolveStudentId, requireCampusRead, getCampusScope, buildCourseIdFilter, requireSection } from '@/lib/auth-helpers';
 
 export async function GET(request: Request) {
   try {
+    const { error, session } = await requireAuth();
+    if (error) return error;
+
     const { searchParams } = new URL(request.url);
-    const studentId = searchParams.get('studentId');
+    const { studentId, error: studentError } = await resolveStudentId(session!, searchParams.get('studentId'));
+    if (studentError) return studentError;
     const isStudent = !!studentId;
 
     // ── STUDENT-SPECIFIC REPORT ─────────────────────────────────────────
@@ -120,7 +125,7 @@ export async function GET(request: Request) {
       // 6. Grade Book entries
       const gradeEntries = await db.gradeBook.findMany({
         where: { studentId },
-        include: { course: { select: { name: true, code: true } } },
+        include: { course: { select: { id: true, name: true, code: true } } },
         orderBy: { gradedAt: 'desc' },
       });
 
@@ -221,10 +226,35 @@ export async function GET(request: Request) {
       });
     }
 
-    // ── ADMIN / GENERAL REPORT ──────────────────────────────────────────
-    // 1. Attendance Summary Report
+    const { error: sectionError } = await requireSection('reports');
+    if (sectionError) return sectionError;
+
+    const { error: campusError } = await requireCampusRead();
+    if (campusError) return campusError;
+
+    const scope = await getCampusScope(session!);
+    const courseFilter = buildCourseIdFilter(scope);
+    const sessionWhere = courseFilter ? { courseId: courseFilter } : {};
+    const courseWhere = courseFilter ? { isActive: true, id: courseFilter } : { isActive: true };
+
+    let studentWhere: Record<string, unknown> = { role: 'student', status: 'active' };
+    let violationWhere: Record<string, unknown> = {};
+
+    if (scope.level === 'department') {
+      studentWhere = { role: 'student', status: 'active', departmentId: scope.departmentId };
+      violationWhere = { violator: { departmentId: scope.departmentId } };
+    } else if (scope.level === 'instructor') {
+      const enrollments = await db.courseEnrollment.findMany({
+        where: { courseId: { in: scope.courseIds }, status: 'enrolled' },
+        select: { studentId: true },
+        distinct: ['studentId'],
+      });
+      const studentIds = enrollments.map((e) => e.studentId);
+      studentWhere = { id: { in: studentIds.length > 0 ? studentIds : ['__none__'] }, role: 'student', status: 'active' };
+    }
+
     const attendanceSummary = await db.attendanceSession.findMany({
-      where: { status: 'completed' },
+      where: { ...sessionWhere, status: 'completed' },
       include: {
         course: { select: { name: true, code: true } },
         creator: { select: { name: true } },
@@ -235,7 +265,7 @@ export async function GET(request: Request) {
 
     // 2. Student Attendance Detail
     const studentAttendance = await db.user.findMany({
-      where: { role: 'student', status: 'active' },
+      where: studentWhere,
       select: {
         id: true, name: true, employeeId: true, department: true,
         _count: { select: { attendanceRecords: true } },
@@ -259,7 +289,7 @@ export async function GET(request: Request) {
 
     // 3. Course Performance Report
     const coursePerformance = await db.course.findMany({
-      where: { isActive: true },
+      where: courseWhere,
       select: {
         id: true, name: true, code: true, credits: true, type: true,
         instructor: { select: { name: true } },
@@ -276,6 +306,7 @@ export async function GET(request: Request) {
 
     // 4. Violation Report
     const violationReport = await db.attendanceViolation.findMany({
+      where: violationWhere,
       include: {
         violator: { select: { name: true, employeeId: true, department: true } },
         record: { select: { session: { select: { sessionDate: true, course: { select: { name: true } } } } } },
@@ -285,7 +316,16 @@ export async function GET(request: Request) {
     });
 
     // 5. Grade Distribution
-    const allGrades = await db.gradeBook.findMany({ select: { score: true, maxScore: true, component: true, studentId: true } });
+    const gradeWhere = scope.level === 'all'
+      ? {}
+      : scope.level === 'department'
+        ? { student: { departmentId: scope.departmentId } }
+        : { courseId: { in: scope.courseIds.length > 0 ? scope.courseIds : ['__none__'] } };
+
+    const allGrades = await db.gradeBook.findMany({
+      where: gradeWhere,
+      select: { score: true, maxScore: true, component: true, studentId: true },
+    });
     const gradeDistribution = { A: 0, B: 0, C: 0, D: 0, F: 0 };
     allGrades.forEach(g => {
       const pct = (g.score / g.maxScore) * 100;

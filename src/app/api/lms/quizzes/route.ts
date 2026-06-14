@@ -1,11 +1,17 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
+import { requireAuth, resolveStudentId, getCampusScope, buildCourseIdFilter, CAMPUS_READ_ROLES } from '@/lib/auth-helpers';
+import type { Role } from '@/lib/store';
 
 export async function GET(request: Request) {
   try {
+    const { error, session } = await requireAuth();
+    if (error) return error;
+
     const { searchParams } = new URL(request.url);
     const courseId = searchParams.get('courseId');
-    const studentId = searchParams.get('studentId');
+    const { studentId, error: studentError } = await resolveStudentId(session!, searchParams.get('studentId'));
+    if (studentError) return studentError;
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
 
@@ -24,6 +30,11 @@ export async function GET(request: Request) {
       where.courseId = courseId
         ? (enrolledCourseIds.includes(courseId) ? courseId : '__none__')
         : { in: enrolledCourseIds };
+    } else if (CAMPUS_READ_ROLES.includes(session!.user.role as Role)) {
+      const scope = await getCampusScope(session!);
+      const filter = buildCourseIdFilter(scope, courseId);
+      if (filter) where.courseId = filter;
+      enrolledCourseIds = scope.level === 'all' ? null : scope.courseIds;
     }
 
     const [questions, total] = await Promise.all([
@@ -45,7 +56,7 @@ export async function GET(request: Request) {
     if (courseId) {
       attemptWhere.courseId = courseId;
     } else if (enrolledCourseIds) {
-      attemptWhere.courseId = { in: enrolledCourseIds };
+      attemptWhere.courseId = { in: enrolledCourseIds.length > 0 ? enrolledCourseIds : ['__none__'] };
     }
 
     const attempts = await db.quizAttempt.findMany({

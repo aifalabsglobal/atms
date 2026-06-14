@@ -1034,6 +1034,7 @@ function AdminQuizzesTab({ questions, attempts }: { questions: QuizQuestion[]; a
 export default function LmsSection() {
   const [activeTab, setActiveTab] = useState('courses');
   const { currentUser } = useAppStore();
+  if (!currentUser) return null;
   const isStudent = currentUser.role === 'student';
 
   const { data: courseData, isLoading: coursesLoading } = useQuery<CourseResponse>({
@@ -1043,12 +1044,18 @@ export default function LmsSection() {
 
   const { data: assignmentData, isLoading: assignmentsLoading } = useQuery<AssignmentResponse>({
     queryKey: ['lms-assignments', isStudent ? currentUser.id : 'all'],
-    queryFn: () => fetch(`/api/lms/assignments?page=1&limit=20${isStudent ? `&studentId=${currentUser.id}` : ''}`).then(r => r.json()),
+    queryFn: () => fetch(`/api/lms/assignments?page=1&limit=20${isStudent ? `&studentId=${currentUser.id}` : ''}`).then((r) => {
+      if (!r.ok) throw new Error('Failed to load assignments');
+      return r.json();
+    }),
   });
 
   const { data: quizData, isLoading: quizzesLoading } = useQuery<QuizResponse>({
     queryKey: ['lms-quizzes', isStudent ? currentUser.id : 'all'],
-    queryFn: () => fetch(`/api/lms/quizzes${isStudent ? `?studentId=${currentUser.id}` : ''}`).then(r => r.json()),
+    queryFn: () => fetch(`/api/lms/quizzes${isStudent ? `?studentId=${currentUser.id}` : ''}`).then((r) => {
+      if (!r.ok) throw new Error('Failed to load quizzes');
+      return r.json();
+    }),
   });
 
   const courses = courseData?.courses ?? [];

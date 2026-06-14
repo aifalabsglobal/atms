@@ -1,8 +1,13 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
+import { requireAuth, STAFF_ROLES, requireRoles, requireCampusRead, getCampusScope, assertCourseInScope } from '@/lib/auth-helpers';
 
 export async function GET(request: Request) {
   try {
+    const { error, session } = await requireCampusRead();
+    if (error || !session) return error;
+
+    const scope = await getCampusScope(session);
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
     const courseId = searchParams.get('courseId');
@@ -16,6 +21,26 @@ export async function GET(request: Request) {
     if (courseId) where.courseId = courseId;
     if (captureMethod) where.captureMethod = captureMethod;
     if (date) where.sessionDate = date;
+
+    if (scope.level !== 'all') {
+      const courseIds = scope.courseIds;
+      if (courseIds.length === 0) {
+        return NextResponse.json({
+          sessions: [], total: 0, page, limit,
+          summary: { totalSessions: 0, activeCount: 0, completedCount: 0, avgAttendanceRate: 0 },
+        });
+      }
+      if (courseId) {
+        if (!courseIds.includes(courseId)) {
+          return NextResponse.json({
+            sessions: [], total: 0, page, limit,
+            summary: { totalSessions: 0, activeCount: 0, completedCount: 0, avgAttendanceRate: 0 },
+          });
+        }
+      } else {
+        where.courseId = { in: courseIds };
+      }
+    }
 
     const [sessions, total] = await Promise.all([
       db.attendanceSession.findMany({
@@ -34,13 +59,14 @@ export async function GET(request: Request) {
       db.attendanceSession.count({ where }),
     ]);
 
-    // Summary stats
-    const totalSessions = await db.attendanceSession.count();
-    const activeCount = await db.attendanceSession.count({ where: { status: 'active' } });
-    const completedCount = await db.attendanceSession.count({ where: { status: 'completed' } });
+    // Summary stats (scoped)
+    const summaryWhere = scope.level !== 'all' ? { courseId: { in: scope.courseIds } } : {};
+    const totalSessions = await db.attendanceSession.count({ where: summaryWhere });
+    const activeCount = await db.attendanceSession.count({ where: { ...summaryWhere, status: 'active' } });
+    const completedCount = await db.attendanceSession.count({ where: { ...summaryWhere, status: 'completed' } });
     const avgAttendance = await db.attendanceSession.aggregate({
       _avg: { presentCount: true, expectedCount: true },
-      where: { status: 'completed' },
+      where: { ...summaryWhere, status: 'completed' },
     });
 
     return NextResponse.json({
@@ -62,12 +88,24 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { courseId, createdBy, sessionDate, startTime, endTime, captureMethod, geofenceId, timetableSlotId, expectedCount } = body;
+    const { error, session } = await requireRoles(STAFF_ROLES);
+    if (error || !session) return error;
 
-    const session = await db.attendanceSession.create({
+    const body = await request.json();
+    const { courseId, sessionDate, startTime, endTime, captureMethod, geofenceId, timetableSlotId, expectedCount } = body;
+
+    if (!courseId) {
+      return NextResponse.json({ error: 'courseId is required' }, { status: 400 });
+    }
+
+    const scopeError = await assertCourseInScope(session, courseId);
+    if (scopeError) return scopeError;
+
+    const attendanceSession = await db.attendanceSession.create({
       data: {
-        courseId, createdBy, sessionDate, startTime, endTime,
+        courseId,
+        createdBy: session.user.id,
+        sessionDate, startTime, endTime,
         captureMethod: captureMethod || 'manual',
         geofenceId, timetableSlotId,
         expectedCount: expectedCount || 0,
@@ -76,7 +114,7 @@ export async function POST(request: Request) {
       include: { course: { select: { name: true, code: true } } },
     });
 
-    return NextResponse.json(session, { status: 201 });
+    return NextResponse.json(attendanceSession, { status: 201 });
   } catch (error) {
     console.error('Create session error:', error);
     return NextResponse.json({ error: 'Failed to create session' }, { status: 500 });

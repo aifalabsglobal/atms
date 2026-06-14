@@ -1,5 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextResponse } from 'next/server';
+import { requireAuth } from '@/lib/auth-helpers';
 
 export async function GET() {
-  return NextResponse.json({ message: "Hello, world!" });
+  const { error } = await requireAuth();
+  if (error) return error;
+  return NextResponse.json({ status: 'ok', service: 'JNTUH SCMS API' });
 }

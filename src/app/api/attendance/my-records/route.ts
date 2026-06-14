@@ -1,0 +1,51 @@
+import { db } from '@/lib/db';
+import { NextResponse } from 'next/server';
+import { requireAuth, resolveStudentId } from '@/lib/auth-helpers';
+
+export async function GET(request: Request) {
+  try {
+    const { error, session } = await requireAuth();
+    if (error || !session) return error;
+
+    const { searchParams } = new URL(request.url);
+    const { studentId, error: studentError } = await resolveStudentId(session, searchParams.get('studentId'));
+    if (studentError) return studentError;
+    if (!studentId) {
+      return NextResponse.json({ error: 'Student scope required' }, { status: 403 });
+    }
+
+    const records = await db.attendanceRecord.findMany({
+      where: { studentId },
+      include: {
+        session: {
+          select: {
+            id: true,
+            sessionDate: true,
+            startTime: true,
+            endTime: true,
+            status: true,
+            captureMethod: true,
+            course: { select: { name: true, code: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+
+    const present = records.filter((r) => r.status === 'present').length;
+    const total = records.length;
+
+    return NextResponse.json({
+      records,
+      summary: {
+        total,
+        present,
+        percentage: total > 0 ? Math.round((present / total) * 100) : 0,
+      },
+    });
+  } catch (error) {
+    console.error('My records API error:', error);
+    return NextResponse.json({ error: 'Failed to load attendance records' }, { status: 500 });
+  }
+}

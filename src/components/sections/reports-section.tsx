@@ -1096,11 +1096,14 @@ function AdminReportView({ data }: { data: AdminReportData }) {
 
 export default function ReportsSection() {
   const { currentUser } = useAppStore();
-  const isStudent = currentUser.role === 'student';
+  if (!currentUser) return null;
 
   const { data, isLoading } = useQuery({
-    queryKey: ['reports', isStudent ? currentUser.id : 'admin'],
-    queryFn: () => fetch(`/api/reports${isStudent ? `?studentId=${currentUser.id}` : ''}`).then(r => r.json()),
+    queryKey: ['reports', currentUser.id],
+    queryFn: () => fetch('/api/reports').then((r) => {
+      if (!r.ok) throw new Error('Failed to load reports');
+      return r.json();
+    }),
   });
 
   if (isLoading) {

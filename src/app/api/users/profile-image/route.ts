@@ -2,9 +2,13 @@ import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import { requireAuth, ADMIN_ROLES } from '@/lib/auth-helpers';
 
 export async function POST(request: Request) {
   try {
+    const { error, session } = await requireAuth();
+    if (error || !session) return error;
+
     const body = await request.json();
     const { userId, imageBase64 } = body;
 
@@ -12,12 +16,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'userId and imageBase64 are required' }, { status: 400 });
     }
 
+    const isSelf = userId === session.user.id;
+    const isAdmin = ADMIN_ROLES.includes(session.user.role);
+    if (!isSelf && !isAdmin) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const user = await db.user.findUnique({ where: { id: userId } });
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Save profile image
     const profilesDir = path.join(process.cwd(), 'public', 'profiles');
     if (!fs.existsSync(profilesDir)) fs.mkdirSync(profilesDir, { recursive: true });
 
@@ -28,7 +37,6 @@ export async function POST(request: Request) {
 
     const profileImageUrl = `/profiles/${filename}`;
 
-    // Update user
     await db.user.update({
       where: { id: userId },
       data: { profileImageUrl },

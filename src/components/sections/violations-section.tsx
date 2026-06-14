@@ -12,12 +12,14 @@ import { Separator } from '@/components/ui/separator';
 import { ShieldAlert, AlertTriangle, Eye, CheckCircle, XCircle, Clock, MapPin, ScanFace, Filter } from 'lucide-react';
 import { useState } from 'react';
 import type { ViolationItem } from '@/lib/types';
+import { useAppStore } from '@/lib/store';
 
 const severityColors: Record<string, string> = { low: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200', medium: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200', high: 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200', critical: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' };
 const statusColors: Record<string, string> = { pending: 'bg-amber-100 text-amber-800', confirmed: 'bg-red-100 text-red-800', dismissed: 'bg-green-100 text-green-800' };
 const typeIcons: Record<string, React.ElementType> = { spoofing: AlertTriangle, proxy: ShieldAlert, out_of_geofence: MapPin, multiple_marking: Clock, face_mismatch: ScanFace };
 
 export default function ViolationsSection() {
+  const { currentUser } = useAppStore();
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [severityFilter, setSeverityFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
@@ -42,7 +44,7 @@ export default function ViolationsSection() {
       const res = await fetch('/api/attendance/violations', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, reviewStatus, reviewNotes, reviewedBy: 'admin' }),
+        body: JSON.stringify({ id, reviewStatus, reviewNotes }),
       });
       return res.json();
     },
@@ -57,6 +59,8 @@ export default function ViolationsSection() {
   const pendingCount = violations.filter(v => v.reviewStatus === 'pending').length;
   const confirmedCount = violations.filter(v => v.reviewStatus === 'confirmed').length;
   const dismissedCount = violations.filter(v => v.reviewStatus === 'dismissed').length;
+
+  if (!currentUser) return null;
 
   return (
     <div className="space-y-6">

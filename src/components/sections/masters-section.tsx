@@ -1,6 +1,7 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useAppStore } from '@/lib/store';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -518,6 +519,7 @@ function ProgramsTab({ programs, departments }: { programs: any[]; departments: 
 // ─── Main Masters Section ────────────────────────────────────────────────────
 
 export default function MastersSection() {
+  const { currentUser } = useAppStore();
   const { data: deptsData, isLoading: dL } = useQuery({ queryKey: ['masters-departments'], queryFn: () => fetch('/api/masters/departments?limit=50').then(r => r.json()) });
   const { data: ayData, isLoading: ayL } = useQuery({ queryKey: ['masters-academic-years'], queryFn: () => fetch('/api/masters/academic-years?limit=50').then(r => r.json()) });
   const { data: semData, isLoading: semL } = useQuery({ queryKey: ['masters-semesters'], queryFn: () => fetch('/api/masters/semesters?limit=50').then(r => r.json()) });
@@ -531,6 +533,8 @@ export default function MastersSection() {
   const programs = progData?.programs || [];
 
   const isLoading = dL || ayL || semL || subjL || progL;
+
+  if (!currentUser) return null;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">

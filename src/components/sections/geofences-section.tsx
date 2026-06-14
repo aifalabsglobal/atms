@@ -20,7 +20,8 @@ import {
   ShieldAlert, Loader2, Crosshair, Maximize2, UserCheck, AlertTriangle,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useAppStore } from '@/lib/store';
+import { useAppStore, GEOFENCE_WRITE_ROLES } from '@/lib/store';
+import { parsePolygonData } from '@/lib/geofence';
 import { cn } from '@/lib/utils';
 import type { GeofenceItem } from '@/lib/types';
 
@@ -82,10 +83,12 @@ function MapView({
   const [mapReady, setMapReady] = useState(false);
   const leafletMapRef = useRef<any>(null);
   const layersRef = useRef<any[]>([]);
+  const mountedRef = useRef(true);
 
   // Load Leaflet CSS + JS dynamically
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    mountedRef.current = true;
 
     // Add CSS if not already added
     if (!document.querySelector('link[href*="leaflet"]')) {
@@ -99,7 +102,7 @@ function MapView({
     const loadMap = async () => {
       const L = (await import('leaflet')).default;
 
-      if (!mapRef.current || leafletMapRef.current) return;
+      if (!mapRef.current || leafletMapRef.current || !mountedRef.current) return;
 
       const map = L.map(mapRef.current, {
         center: DEFAULT_CENTER,
@@ -114,12 +117,20 @@ function MapView({
       }).addTo(map);
 
       leafletMapRef.current = map;
-      setMapReady(true);
+      if (mountedRef.current) setMapReady(true);
     };
 
     // Small delay to ensure DOM is ready
     const timer = setTimeout(loadMap, 100);
-    return () => clearTimeout(timer);
+    return () => {
+      mountedRef.current = false;
+      clearTimeout(timer);
+      if (leafletMapRef.current) {
+        leafletMapRef.current.remove();
+        leafletMapRef.current = null;
+      }
+      setMapReady(false);
+    };
   }, []);
 
   // Update layers when data changes
@@ -134,11 +145,39 @@ function MapView({
 
     const map = leafletMapRef.current;
 
-    // Draw geofence circles
+    // Draw geofence shapes
     geofences.forEach(g => {
+      const isActive = activeSessions.some(s => s.geofence?.name === g.name);
+
+      if (g.type === 'polygon' && g.polygonData) {
+        const polygon = parsePolygonData(g.polygonData);
+        if (polygon) {
+          const latlngs = polygon.map((p) => [p.lat, p.lng] as [number, number]);
+          const poly = L.polygon(latlngs, {
+            color: isActive ? '#16a34a' : NAVY,
+            fillColor: isActive ? '#22c55e' : NAVY,
+            fillOpacity: isActive ? 0.15 : 0.08,
+            weight: isActive ? 3 : 2,
+            dashArray: isActive ? undefined : '5 5',
+          }).addTo(map);
+
+          poly.bindPopup(`
+            <div style="font-size:12px; min-width:160px;">
+              <strong style="color:${isActive ? '#16a34a' : NAVY}">${g.name}</strong><br/>
+              <span>Type: polygon</span><br/>
+              <span>Vertices: ${polygon.length}</span><br/>
+              ${g.building ? `<span>Building: ${g.building}</span><br/>` : ''}
+              ${isActive ? '<span style="color:#16a34a; font-weight:600;">🔴 Active Session</span>' : '<span style="color:#888;">No active session</span>'}
+            </div>
+          `);
+
+          poly.on('click', () => onGeofenceClick(g));
+          layersRef.current.push(poly);
+        }
+        return;
+      }
+
       if (g.centerLat && g.centerLng && g.radiusMtrs) {
-        // Check if this geofence is linked to an active session
-        const isActive = activeSessions.some(s => s.geofence?.name === g.name);
         const circle = L.circle([g.centerLat, g.centerLng], {
           radius: g.radiusMtrs,
           color: isActive ? '#16a34a' : NAVY,
@@ -245,10 +284,13 @@ function StudentMarkPanel() {
 
   // Fetch active sessions
   const { data: activeData, isLoading: activeLoading } = useQuery({
-    queryKey: ['active-sessions-map', currentUser.id],
-    queryFn: () => fetch(`/api/attendance/active-sessions?studentId=${currentUser.id}`).then(r => r.json()),
+    queryKey: ['active-sessions-map', currentUser?.id],
+    queryFn: () => fetch(`/api/attendance/active-sessions?studentId=${currentUser!.id}`).then(r => r.json()),
+    enabled: !!currentUser,
     refetchInterval: 15000,
   });
+
+  if (!currentUser) return null;
 
   const activeSessions: ActiveSession[] = activeData?.sessions ?? [];
 
@@ -495,9 +537,14 @@ export default function GeofencesSection() {
     queryFn: () => fetch('/api/geofences').then(r => r.json()) as Promise<{ geofences: GeofenceItem[] }>,
   });
 
+  const isStudent = currentUser?.role === 'student';
+  const canManageGeofences = currentUser ? GEOFENCE_WRITE_ROLES.includes(currentUser.role) : false;
+  const activeSessionsQuery = isStudent && currentUser ? `?studentId=${currentUser.id}` : '';
+
   const { data: activeSessionsData } = useQuery({
-    queryKey: ['active-sessions-geofence', currentUser.id],
-    queryFn: () => fetch(`/api/attendance/active-sessions?studentId=${currentUser.id}`).then(r => r.json()),
+    queryKey: ['active-sessions-geofence', currentUser?.id, isStudent],
+    queryFn: () => fetch(`/api/attendance/active-sessions${activeSessionsQuery}`).then(r => r.json()),
+    enabled: !!currentUser,
     refetchInterval: 15000,
   });
 
@@ -543,7 +590,7 @@ export default function GeofencesSection() {
     });
   }, [toast]);
 
-  const isStudent = currentUser.role === 'student';
+  if (!currentUser) return null;
 
   return (
     <div className="space-y-6">
@@ -551,10 +598,10 @@ export default function GeofencesSection() {
         <div>
           <h1 className="text-2xl font-bold text-[#1A3C6E]">Geofence Management</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {isStudent ? 'View geofence boundaries & mark attendance from map' : 'Manage GPS geofence boundaries for attendance capture'}
+            {isStudent ? 'View geofence boundaries & mark attendance from map' : canManageGeofences ? 'Manage GPS geofence boundaries for attendance capture' : 'View campus geofence boundaries'}
           </p>
         </div>
-        {!isStudent && (
+        {canManageGeofences && (
           <Button className="gap-2 bg-[#1A3C6E] hover:bg-[#1A3C6E]/90" onClick={() => setShowCreate(true)}>
             <Plus className="h-4 w-4" /> New Geofence
           </Button>

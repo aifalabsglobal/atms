@@ -2,20 +2,19 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Settings as SettingsIcon, Shield, Bell, Database, Server,
-  ScanFace, MapPin, Clock, Lock, Globe, Cpu, CheckCircle, X as XIcon
+  ScanFace, MapPin, Clock, Lock, CheckCircle, X as XIcon, ScrollText
 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { useAppStore, ROLE_SECTIONS, ROLE_LABELS, type Role, type Section } from '@/lib/store';
 
-const roles = ['super_admin', 'admin', 'hod', 'faculty', 'lab_assistant', 'student', 'parent', 'visitor', 'security'];
-const roleLabels: Record<string, string> = {
-  super_admin: 'Super Admin', admin: 'Admin', hod: 'HOD', faculty: 'Faculty',
-  lab_assistant: 'Lab Asst.', student: 'Student', parent: 'Parent', visitor: 'Visitor', security: 'Security'
-};
-const roleColors: Record<string, string> = {
+const roles: Role[] = ['super_admin', 'admin', 'hod', 'faculty', 'lab_assistant', 'student', 'parent', 'visitor', 'security'];
+
+const roleColors: Record<Role, string> = {
   super_admin: 'bg-red-100 text-red-800', admin: 'bg-orange-100 text-orange-800',
   hod: 'bg-purple-100 text-purple-800', faculty: 'bg-blue-100 text-blue-800',
   lab_assistant: 'bg-teal-100 text-teal-800', student: 'bg-green-100 text-green-800',
@@ -23,53 +22,47 @@ const roleColors: Record<string, string> = {
   security: 'bg-rose-100 text-rose-800'
 };
 
-const modules = [
-  { name: 'Dashboard', key: 'dashboard' },
-  { name: 'Attendance Sessions', key: 'attendance' },
-  { name: 'Mark Attendance', key: 'mark_attendance' },
-  { name: 'Face Recognition', key: 'face_recognition' },
-  { name: 'GPS Geofencing', key: 'gps_geofencing' },
-  { name: 'Course Management', key: 'courses' },
-  { name: 'Assignment Mgmt', key: 'assignments' },
-  { name: 'Quiz Management', key: 'quizzes' },
-  { name: 'Grade Book', key: 'gradebook' },
-  { name: 'User Management', key: 'users' },
-  { name: 'Violation Review', key: 'violations' },
-  { name: 'Reports & Analytics', key: 'reports' },
-  { name: 'Geofence Config', key: 'geofence_config' },
-  { name: 'System Settings', key: 'system_settings' },
-  { name: 'Audit Logs', key: 'audit_logs' },
+const navModules: { section: Section; name: string }[] = [
+  { section: 'dashboard', name: 'Dashboard' },
+  { section: 'masters', name: 'Masters' },
+  { section: 'attendance', name: 'Attendance' },
+  { section: 'lms', name: 'Learning Mgmt' },
+  { section: 'users', name: 'Users & RBAC' },
+  { section: 'violations', name: 'Violations' },
+  { section: 'reports', name: 'Reports' },
+  { section: 'geofences', name: 'Geofences' },
+  { section: 'calendar', name: 'Calendar' },
+  { section: 'settings', name: 'Settings' },
 ];
 
-// Permission matrix: role -> module -> hasAccess
-const permissionMatrix: Record<string, Record<string, boolean>> = {
-  super_admin: Object.fromEntries(modules.map(m => [m.key, true])),
-  admin: Object.fromEntries(modules.map(m => [m.key, m.key !== 'system_settings'])),
-  hod: Object.fromEntries(modules.map(m => [m.key, ['dashboard', 'attendance', 'mark_attendance', 'courses', 'assignments', 'quizzes', 'gradebook', 'users', 'violations', 'reports'].includes(m.key)])),
-  faculty: Object.fromEntries(modules.map(m => [m.key, ['dashboard', 'attendance', 'mark_attendance', 'face_recognition', 'courses', 'assignments', 'quizzes', 'gradebook', 'reports'].includes(m.key)])),
-  lab_assistant: Object.fromEntries(modules.map(m => [m.key, ['dashboard', 'attendance', 'mark_attendance', 'face_recognition', 'gps_geofencing'].includes(m.key)])),
-  student: Object.fromEntries(modules.map(m => [m.key, ['dashboard', 'mark_attendance', 'gps_geofencing', 'courses', 'assignments', 'quizzes', 'gradebook'].includes(m.key)])),
-  parent: Object.fromEntries(modules.map(m => [m.key, ['dashboard', 'attendance', 'reports'].includes(m.key)])),
-  visitor: Object.fromEntries(modules.map(m => [m.key, ['dashboard'].includes(m.key)])),
-  security: Object.fromEntries(modules.map(m => [m.key, ['dashboard', 'attendance', 'mark_attendance', 'face_recognition'].includes(m.key)])),
-};
-
 const systemConfig = [
-  { label: 'Face Recognition Model', value: 'ArcFace (DeepFace)', icon: ScanFace, status: 'active' },
-  { label: 'Face Match Threshold', value: '0.92 (cosine similarity)', icon: ScanFace, status: 'active' },
-  { label: 'GPS Geofencing Engine', value: 'Haversine + Shapely', icon: MapPin, status: 'active' },
-  { label: 'Anti-Spoofing', value: 'MaxMind GeoIP2', icon: Shield, status: 'active' },
-  { label: 'Min Attendance (Regulation)', value: '75% for eligibility', icon: Clock, status: 'active' },
-  { label: 'Condonation Threshold', value: '65% with HOD approval', icon: Clock, status: 'active' },
-  { label: 'Auth Method', value: 'JWT RS256 + Refresh Tokens', icon: Lock, status: 'active' },
-  { label: 'Access Token Expiry', value: '15 minutes', icon: Clock, status: 'active' },
-  { label: 'Rate Limiting', value: '100 req/min per user', icon: Globe, status: 'active' },
-  { label: 'Database', value: 'PostgreSQL 16 + pgvector', icon: Database, status: 'active' },
-  { label: 'Cache Layer', value: 'Redis 7', icon: Cpu, status: 'active' },
-  { label: 'API Version', value: 'v1 (/api/v1/)', icon: Server, status: 'active' },
+  { label: 'Face Verification', value: 'Stub locally; set FACE_VERIFICATION_ENABLED + API URL for ArcFace', icon: ScanFace, status: 'active' as const },
+  { label: 'GPS Geofencing', value: 'Haversine (circle) + point-in-polygon', icon: MapPin, status: 'active' as const },
+  { label: 'Min Attendance (Regulation)', value: '75% for eligibility', icon: Clock, status: 'active' as const },
+  { label: 'Condonation Threshold', value: '65% with HOD approval', icon: Clock, status: 'active' as const },
+  { label: 'Auth Method', value: 'next-auth JWT (credentials)', icon: Lock, status: 'active' as const },
+  { label: 'Audit Logging', value: 'Login, user CRUD, violations, geofences', icon: ScrollText, status: 'active' as const },
+  { label: 'Rate Limiting', value: 'Upstash Redis (prod) or in-memory (dev)', icon: Server, status: 'active' as const },
+  { label: 'Email', value: 'Resend or SMTP — welcome & password-reset on user CRUD', icon: Bell, status: 'active' as const },
+  { label: 'Database', value: 'PostgreSQL (Neon) + Prisma migrations', icon: Database, status: 'active' as const },
+  { label: 'API', value: 'Next.js App Router (/api/*)', icon: Server, status: 'active' as const },
 ];
 
 export default function SettingsSection() {
+  const { currentUser } = useAppStore();
+  const isAdmin = currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
+
+  const { data: auditData, isLoading: auditLoading } = useQuery({
+    queryKey: ['audit-logs'],
+    queryFn: () => fetch('/api/audit?limit=30').then((r) => {
+      if (!r.ok) throw new Error('Failed to load audit logs');
+      return r.json();
+    }),
+    enabled: isAdmin,
+  });
+
+  if (!currentUser) return null;
+
   return (
     <div className="space-y-6">
       <div>
@@ -78,9 +71,10 @@ export default function SettingsSection() {
       </div>
 
       <Tabs defaultValue="config" className="space-y-4">
-        <TabsList className="grid w-full max-w-lg grid-cols-3">
+        <TabsList className={isAdmin ? 'grid w-full max-w-2xl grid-cols-4' : 'grid w-full max-w-lg grid-cols-3'}>
           <TabsTrigger value="config">Configuration</TabsTrigger>
           <TabsTrigger value="rbac">RBAC Matrix</TabsTrigger>
+          {isAdmin && <TabsTrigger value="audit">Audit Log</TabsTrigger>}
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
         </TabsList>
 
@@ -114,7 +108,7 @@ export default function SettingsSection() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2"><Shield className="h-4 w-4 text-[#1A3C6E]" /> Role-Based Access Control Matrix</CardTitle>
-              <CardDescription>9-role hierarchy with granular permission control across 15 modules</CardDescription>
+              <CardDescription>Navigation access per role — synced with app shell (ROLE_SECTIONS)</CardDescription>
             </CardHeader>
             <CardContent className="p-0">
               <div className="overflow-x-auto">
@@ -124,17 +118,17 @@ export default function SettingsSection() {
                       <TableHead className="sticky left-0 bg-card z-10 min-w-[160px]">Module</TableHead>
                       {roles.map(role => (
                         <TableHead key={role} className="text-center min-w-[80px]">
-                          <Badge className={`${roleColors[role]} text-[10px] whitespace-nowrap`}>{roleLabels[role]}</Badge>
+                          <Badge className={`${roleColors[role]} text-[10px] whitespace-nowrap`}>{ROLE_LABELS[role]}</Badge>
                         </TableHead>
                       ))}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {modules.map(mod => (
-                      <TableRow key={mod.key}>
+                    {navModules.map(mod => (
+                      <TableRow key={mod.section}>
                         <TableCell className="sticky left-0 bg-card z-10 font-medium text-sm">{mod.name}</TableCell>
                         {roles.map(role => {
-                          const hasAccess = permissionMatrix[role]?.[mod.key] || false;
+                          const hasAccess = ROLE_SECTIONS[role].includes(mod.section);
                           return (
                             <TableCell key={role} className="text-center">
                               {hasAccess ? (
@@ -163,7 +157,7 @@ export default function SettingsSection() {
               <div className="flex flex-wrap gap-2 items-center">
                 {roles.map((role, i) => (
                   <div key={role} className="flex items-center gap-2">
-                    <Badge className={`${roleColors[role]} font-medium`}>{roleLabels[role]}</Badge>
+                    <Badge className={`${roleColors[role]} font-medium`}>{ROLE_LABELS[role]}</Badge>
                     {i < roles.length - 1 && <span className="text-muted-foreground text-sm">→</span>}
                   </div>
                 ))}
@@ -171,6 +165,65 @@ export default function SettingsSection() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {isAdmin && (
+          <TabsContent value="audit" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <ScrollText className="h-4 w-4 text-[#1A3C6E]" /> Enterprise Audit Trail
+                </CardTitle>
+                <CardDescription>Immutable log of security-sensitive actions (last 30 events)</CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                {auditLoading ? (
+                  <div className="p-4 space-y-2">
+                    {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Time</TableHead>
+                          <TableHead>Actor</TableHead>
+                          <TableHead>Action</TableHead>
+                          <TableHead>Resource</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {(auditData?.logs ?? []).map((log: {
+                          id: string; action: string; resource: string; createdAt: string;
+                          actor: { name: string; email: string } | null;
+                        }) => (
+                          <TableRow key={log.id}>
+                            <TableCell className="text-xs whitespace-nowrap">
+                              {new Date(log.createdAt).toLocaleString('en-IN')}
+                            </TableCell>
+                            <TableCell className="text-xs">
+                              {log.actor ? `${log.actor.name}` : 'System'}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="text-[10px] font-mono">{log.action}</Badge>
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground font-mono">{log.resource}</TableCell>
+                          </TableRow>
+                        ))}
+                        {(auditData?.logs ?? []).length === 0 && (
+                          <TableRow>
+                            <TableCell colSpan={4} className="text-center text-sm text-muted-foreground py-8">
+                              No audit events yet. Actions will appear after logins and admin operations.
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
 
         {/* Notification Settings */}
         <TabsContent value="notifications" className="space-y-4">
@@ -183,7 +236,7 @@ export default function SettingsSection() {
               <div className="grid gap-4 md:grid-cols-2">
                 {[
                   { channel: 'In-App', status: 'Active', provider: 'Built-in', events: 'All events' },
-                  { channel: 'Email', status: 'Active', provider: 'SMTP (UoH Mail)', events: 'Grades, Alerts, Announcements' },
+                  { channel: 'Email', status: 'Active', provider: 'SMTP (JNTUH Mail)', events: 'Grades, Alerts, Announcements' },
                   { channel: 'SMS', status: 'Configured', provider: 'Twilio', events: 'Critical alerts only' },
                   { channel: 'Push', status: 'Active', provider: 'Firebase FCM', events: 'Attendance, Deadlines' },
                 ].map(ch => (

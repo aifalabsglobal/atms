@@ -152,8 +152,9 @@ function StudentMarkAttendance() {
 
   // Fetch active sessions for student
   const { data: activeData, isLoading: activeLoading } = useQuery({
-    queryKey: ['active-sessions', currentUser.id],
-    queryFn: () => fetch(`/api/attendance/active-sessions?studentId=${currentUser.id}`).then(r => r.json()),
+    queryKey: ['active-sessions', currentUser?.id],
+    queryFn: () => fetch(`/api/attendance/active-sessions?studentId=${currentUser!.id}`).then(r => r.json()),
+    enabled: !!currentUser,
     refetchInterval: 10000,
   });
 
@@ -239,7 +240,7 @@ function StudentMarkAttendance() {
 
   // Submit attendance
   const handleSubmit = () => {
-    if (!selectedSession || !userLocation) return;
+    if (!currentUser || !selectedSession || !userLocation) return;
     setMarkingStep('submitting');
     markMutation.mutate({
       sessionId: selectedSession.id,
@@ -261,6 +262,8 @@ function StudentMarkAttendance() {
     setMarkingStep('select');
   };
 
+  if (!currentUser) return null;
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -269,7 +272,7 @@ function StudentMarkAttendance() {
             <ScanFace className="h-5 w-5" />
             Mark Your Attendance
           </h3>
-          <p className="text-xs text-muted-foreground mt-0.5">Self-mark with geofence verification & facial recognition</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Self-mark with geofence verification & selfie capture</p>
         </div>
         {markingStep !== 'select' && (
           <Button variant="outline" size="sm" onClick={handleReset}>
@@ -405,7 +408,7 @@ function StudentMarkAttendance() {
               {/* Camera / Selfie */}
               <div className="space-y-2">
                 <Label className="text-xs font-semibold flex items-center gap-1.5">
-                  <Camera className="h-3.5 w-3.5" /> Facial Verification (Selfie)
+                  <Camera className="h-3.5 w-3.5" /> Selfie Capture (Optional)
                 </Label>
                 {selfieBase64 ? (
                   <div className="flex items-center gap-3">
@@ -416,7 +419,7 @@ function StudentMarkAttendance() {
                       <p className="font-medium text-green-700 flex items-center gap-1">
                         <CheckCircle2 className="h-3.5 w-3.5" /> Selfie Captured
                       </p>
-                      <p className="text-muted-foreground mt-0.5">Face will be verified against your profile photo</p>
+                      <p className="text-muted-foreground mt-0.5">Selfie stored for audit — automated face matching is not configured</p>
                     </div>
                     <Button variant="outline" size="sm" className="text-xs h-7 ml-auto" onClick={() => setSelfieBase64(null)}>
                       Retake
@@ -492,7 +495,7 @@ function StudentMarkAttendance() {
           <CardContent className="flex flex-col items-center text-center">
             <Loader2 className="h-10 w-10 animate-spin text-[#1A3C6E] mb-3" />
             <p className="text-sm font-medium">Verifying your attendance...</p>
-            <p className="text-xs text-muted-foreground mt-1">Checking geofence & facial recognition</p>
+            <p className="text-xs text-muted-foreground mt-1">Checking geofence & saving selfie</p>
           </CardContent>
         </Card>
       )}
@@ -528,9 +531,9 @@ function StudentMarkAttendance() {
                   : 'bg-amber-50 border-amber-200 dark:bg-amber-900/20 dark:border-amber-800'
               )}>
                 <ScanFace className={cn('h-5 w-5 mx-auto mb-1', markMutation.data.faceVerified ? 'text-green-600' : 'text-amber-600')} />
-                <p className="text-xs font-medium">Face</p>
+                <p className="text-xs font-medium">Selfie</p>
                 <p className={cn('text-xs', markMutation.data.faceVerified ? 'text-green-700' : 'text-amber-700')}>
-                  {markMutation.data.faceVerified ? '✅ Verified' : '⚠️ Skipped'}
+                  {markMutation.data.faceVerified ? 'Saved' : 'Not captured'}
                 </p>
                 {markMutation.data.confidence != null && (
                   <p className="text-[10px] text-muted-foreground mt-0.5">Confidence: {Math.round(markMutation.data.confidence * 100)}%</p>
@@ -573,6 +576,60 @@ function StudentMarkAttendance() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Student Records View ───────────────────────────────────────
+function StudentRecordsView() {
+  const { data, isLoading } = useQuery<{
+    records: Array<{
+      id: string; status: string; markedAt: string | null; faceVerified: boolean;
+      session: { sessionDate: string; startTime: string; endTime: string; course: { name: string; code: string } };
+    }>;
+    summary: { total: number; present: number; percentage: number };
+  }>({
+    queryKey: ['attendance-my-records'],
+    queryFn: () => fetch('/api/attendance/my-records').then((r) => {
+      if (!r.ok) throw new Error('Failed to load records');
+      return r.json();
+    }),
+  });
+
+  if (isLoading) return <Skeleton className="h-48 w-full" />;
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-3 gap-3">
+        <Card><CardContent className="p-4 text-center"><p className="text-2xl font-bold">{data?.summary.total ?? 0}</p><p className="text-xs text-muted-foreground">Total Sessions</p></CardContent></Card>
+        <Card><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-green-600">{data?.summary.present ?? 0}</p><p className="text-xs text-muted-foreground">Present</p></CardContent></Card>
+        <Card><CardContent className="p-4 text-center"><p className="text-2xl font-bold">{data?.summary.percentage ?? 0}%</p><p className="text-xs text-muted-foreground">Attendance Rate</p></CardContent></Card>
+      </div>
+      <Card>
+        <CardHeader><CardTitle className="text-base">Attendance History</CardTitle></CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Course</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Face</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {(data?.records ?? []).map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell>{r.session.sessionDate}</TableCell>
+                  <TableCell>{r.session.course.code}</TableCell>
+                  <TableCell><Badge variant="outline">{r.status}</Badge></TableCell>
+                  <TableCell>{r.faceVerified ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <XCircle className="h-4 w-4 text-muted-foreground" />}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -657,9 +714,9 @@ function AdminSessionsView() {
                 </div>
                 <div>
                   <span className="text-[10px] text-muted-foreground">{card.title}</span>
-                  <p className="text-lg font-bold leading-tight" style={{ color: card.color }}>
+                  <div className="text-lg font-bold leading-tight" style={{ color: card.color }}>
                     {isLoading ? <Skeleton className="h-5 w-10" /> : card.value}
-                  </p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -718,7 +775,7 @@ function AdminSessionsView() {
                   <div className="grid gap-1.5"><Label className="text-xs">Capture Method</Label><Select value={newSession.captureMethod} onValueChange={v => setNewSession(p => ({ ...p, captureMethod: v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.entries(CAPTURE_METHOD_CONFIG).map(([k, { label }]) => <SelectItem key={k} value={k}>{label}</SelectItem>)}</SelectContent></Select></div>
                   <div className="grid gap-1.5"><Label className="text-xs">Geofence</Label><Select value={newSession.geofenceId} onValueChange={v => setNewSession(p => ({ ...p, geofenceId: v }))}><SelectTrigger><SelectValue placeholder="Optional" /></SelectTrigger><SelectContent>{geofences.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent></Select></div>
                 </div>
-                <DialogFooter><Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button><Button onClick={() => createMutation.mutate({ courseId: newSession.courseId, createdBy: 'admin', sessionDate: newSession.sessionDate, startTime: newSession.startTime, endTime: newSession.endTime, captureMethod: newSession.captureMethod, geofenceId: newSession.geofenceId || undefined })} disabled={createMutation.isPending} className="bg-[#1A3C6E] hover:bg-[#1A3C6E]/90 text-white">{createMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-1" />}Create</Button></DialogFooter>
+                <DialogFooter><Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button><Button onClick={() => createMutation.mutate({ courseId: newSession.courseId, sessionDate: newSession.sessionDate, startTime: newSession.startTime, endTime: newSession.endTime, captureMethod: newSession.captureMethod, geofenceId: newSession.geofenceId || undefined })} disabled={createMutation.isPending} className="bg-[#1A3C6E] hover:bg-[#1A3C6E]/90 text-white">{createMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-1" />}Create</Button></DialogFooter>
               </DialogContent>
             </Dialog>
           </div>
@@ -804,7 +861,10 @@ function AdminSessionsView() {
 // ─── Main Component ─────────────────────────────────────────────
 export default function AttendanceSection() {
   const { currentUser } = useAppStore();
+  if (!currentUser) return null;
+
   const isStudent = currentUser.role === 'student';
+  const isParent = currentUser.role === 'parent';
 
   return (
     <div className="space-y-6">
@@ -814,8 +874,10 @@ export default function AttendanceSection() {
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
           {isStudent
-            ? 'Mark your attendance with geofence verification & facial recognition'
-            : 'Manage attendance sessions, track participation, and verify records'}
+            ? 'Mark your attendance with geofence verification & selfie capture'
+            : isParent
+              ? "View your ward's attendance records"
+              : 'Manage attendance sessions, track participation, and verify records'}
         </p>
       </div>
 
@@ -823,7 +885,7 @@ export default function AttendanceSection() {
         <Tabs defaultValue="mark">
           <TabsList>
             <TabsTrigger value="mark" className="gap-1.5 text-xs">
-              <ScanFace className="h-4 w-4" /> Mark Attendance
+              <ScanLine className="h-4 w-4" /> Mark Attendance
             </TabsTrigger>
             <TabsTrigger value="history" className="gap-1.5 text-xs">
               <Clock className="h-4 w-4" /> My Records
@@ -833,9 +895,11 @@ export default function AttendanceSection() {
             <StudentMarkAttendance />
           </TabsContent>
           <TabsContent value="history" className="mt-4">
-            <AdminSessionsView />
+            <StudentRecordsView />
           </TabsContent>
         </Tabs>
+      ) : isParent ? (
+        <StudentRecordsView />
       ) : (
         <AdminSessionsView />
       )}
