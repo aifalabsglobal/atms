@@ -1,11 +1,18 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
-import { requireAuth, ADMIN_ROLES, requireRoles } from '@/lib/auth-helpers';
+import { requireMastersRead, requireMastersWrite, auditMasterMutation, mastersError, applyAcademicYearDepartmentScope } from '@/lib/masters-helpers';
+
+async function enforceSingleActiveYear(excludeId?: string) {
+  await db.academicYear.updateMany({
+    where: { status: 'active', ...(excludeId ? { NOT: { id: excludeId } } : {}) },
+    data: { status: 'completed' },
+  });
+}
 
 export async function GET(request: Request) {
   try {
-    const { error } = await requireRoles(ADMIN_ROLES);
-    if (error) return error;
+    const { error, session } = await requireMastersRead();
+    if (error || !session) return error;
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '50');
@@ -19,6 +26,8 @@ export async function GET(request: Request) {
     if (isActive !== null && isActive !== undefined && isActive !== '') {
       where.isActive = isActive === 'true';
     }
+
+    await applyAcademicYearDepartmentScope(session, where);
 
     const [academicYears, total] = await Promise.all([
       db.academicYear.findMany({
@@ -42,28 +51,23 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { error } = await requireRoles(ADMIN_ROLES);
-    if (error) return error;
+    const { error, session } = await requireMastersWrite();
+    if (error || !session) return error;
 
     const body = await request.json();
     const { name, code, startDate, endDate, status, regulation, isActive } = body;
 
     if (!name || !code || !startDate || !endDate) {
-      return NextResponse.json(
-        { error: 'Missing required fields: name, code, startDate, and endDate are required' },
-        { status: 400 }
-      );
+      return mastersError('Missing required fields: name, code, startDate, and endDate are required');
     }
 
-    // Check for unique constraints
     const existingName = await db.academicYear.findUnique({ where: { name } });
-    if (existingName) {
-      return NextResponse.json({ error: 'Academic year with this name already exists' }, { status: 409 });
-    }
+    if (existingName) return mastersError('Academic year with this name already exists', 409);
     const existingCode = await db.academicYear.findUnique({ where: { code } });
-    if (existingCode) {
-      return NextResponse.json({ error: 'Academic year with this code already exists' }, { status: 409 });
-    }
+    if (existingCode) return mastersError('Academic year with this code already exists', 409);
+
+    const nextStatus = status || 'upcoming';
+    if (nextStatus === 'active') await enforceSingleActiveYear();
 
     const academicYear = await db.academicYear.create({
       data: {
@@ -71,11 +75,13 @@ export async function POST(request: Request) {
         code,
         startDate,
         endDate,
-        status: status || 'upcoming',
+        status: nextStatus,
         regulation,
         isActive: isActive !== undefined ? isActive : true,
       },
     });
+
+    await auditMasterMutation(request, session.user.id, 'masters.academic_year.create', `academic_year:${academicYear.id}`, { code });
 
     return NextResponse.json({ academicYear }, { status: 201 });
   } catch (error) {
@@ -86,37 +92,29 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const { error } = await requireRoles(ADMIN_ROLES);
-    if (error) return error;
+    const { error, session } = await requireMastersWrite();
+    if (error || !session) return error;
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
-
-    if (!id) {
-      return NextResponse.json({ error: 'Missing required parameter: id' }, { status: 400 });
-    }
+    if (!id) return mastersError('Missing required parameter: id');
 
     const existing = await db.academicYear.findUnique({ where: { id } });
-    if (!existing) {
-      return NextResponse.json({ error: 'Academic year not found' }, { status: 404 });
-    }
+    if (!existing) return mastersError('Academic year not found', 404);
 
     const body = await request.json();
     const { name, code, startDate, endDate, status, regulation, isActive } = body;
 
-    // Check unique constraints if name/code is being changed
     if (name && name !== existing.name) {
       const existingName = await db.academicYear.findUnique({ where: { name } });
-      if (existingName) {
-        return NextResponse.json({ error: 'Academic year with this name already exists' }, { status: 409 });
-      }
+      if (existingName) return mastersError('Academic year with this name already exists', 409);
     }
     if (code && code !== existing.code) {
       const existingCode = await db.academicYear.findUnique({ where: { code } });
-      if (existingCode) {
-        return NextResponse.json({ error: 'Academic year with this code already exists' }, { status: 409 });
-      }
+      if (existingCode) return mastersError('Academic year with this code already exists', 409);
     }
+
+    if (status === 'active') await enforceSingleActiveYear(id);
 
     const academicYear = await db.academicYear.update({
       where: { id },
@@ -131,6 +129,8 @@ export async function PUT(request: Request) {
       },
     });
 
+    await auditMasterMutation(request, session.user.id, 'masters.academic_year.update', `academic_year:${id}`, { code: academicYear.code });
+
     return NextResponse.json({ academicYear });
   } catch (error) {
     console.error('Update Academic Year API error:', error);
@@ -140,38 +140,28 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const { error } = await requireRoles(ADMIN_ROLES);
-    if (error) return error;
+    const { error, session } = await requireMastersWrite();
+    if (error || !session) return error;
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
-
-    if (!id) {
-      return NextResponse.json({ error: 'Missing required parameter: id' }, { status: 400 });
-    }
+    if (!id) return mastersError('Missing required parameter: id');
 
     const existing = await db.academicYear.findUnique({
       where: { id },
-      include: {
-        _count: { select: { semesters: true, calendarEvents: true } },
-      },
+      include: { _count: { select: { semesters: true, calendarEvents: true } } },
     });
+    if (!existing) return mastersError('Academic year not found', 404);
 
-    if (!existing) {
-      return NextResponse.json({ error: 'Academic year not found' }, { status: 404 });
-    }
-
-    // Check for dependent records
     if (existing._count.semesters > 0) {
-      return NextResponse.json(
-        {
-          error: `Cannot delete academic year. It has ${existing._count.semesters} semester(s) associated with it. Please remove them first.`,
-        },
-        { status: 409 }
+      return mastersError(
+        `Cannot delete academic year. It has ${existing._count.semesters} semester(s) associated with it. Please remove them first.`,
+        409
       );
     }
 
     await db.academicYear.delete({ where: { id } });
+    await auditMasterMutation(request, session.user.id, 'masters.academic_year.delete', `academic_year:${id}`, { code: existing.code });
 
     return NextResponse.json({ message: 'Academic year deleted successfully' });
   } catch (error) {

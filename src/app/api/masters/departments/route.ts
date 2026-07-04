@@ -1,11 +1,12 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
-import { requireAuth, ADMIN_ROLES, requireRoles } from '@/lib/auth-helpers';
+import { requireMastersRead, requireMastersWrite, auditMasterMutation, getMastersDepartmentId } from '@/lib/masters-helpers';
 
 export async function GET(request: Request) {
   try {
-    const { error } = await requireRoles(ADMIN_ROLES);
-    if (error) return error;
+    const { error, session } = await requireMastersRead();
+    if (error || !session) return error;
+    const deptScope = await getMastersDepartmentId(session);
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '50');
@@ -14,6 +15,7 @@ export async function GET(request: Request) {
     const isActive = searchParams.get('isActive');
 
     const where: Record<string, unknown> = {};
+    if (deptScope) where.id = deptScope;
     if (search) {
       where.OR = [
         { name: { contains: search } },
@@ -48,8 +50,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { error } = await requireRoles(ADMIN_ROLES);
-    if (error) return error;
+    const { error, session } = await requireMastersWrite();
+    if (error || !session) return error;
 
     const body = await request.json();
     const { name, code, building, floor, phone, email, hodId, isActive } = body;
@@ -87,6 +89,15 @@ export async function POST(request: Request) {
       },
     });
 
+    if (hodId) {
+      await db.user.update({
+        where: { id: hodId },
+        data: { role: 'hod', departmentId: department.id, department: department.name },
+      });
+    }
+
+    await auditMasterMutation(request, session.user.id, 'masters.department.create', `department:${department.id}`, { code: department.code });
+
     return NextResponse.json({ department }, { status: 201 });
   } catch (error) {
     console.error('Create Department API error:', error);
@@ -96,8 +107,8 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const { error } = await requireRoles(ADMIN_ROLES);
-    if (error) return error;
+    const { error, session } = await requireMastersWrite();
+    if (error || !session) return error;
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
@@ -145,6 +156,15 @@ export async function PUT(request: Request) {
       },
     });
 
+    if (hodId) {
+      await db.user.update({
+        where: { id: hodId },
+        data: { role: 'hod', departmentId: department.id, department: department.name },
+      });
+    }
+
+    await auditMasterMutation(request, session.user.id, 'masters.department.update', `department:${id}`, { code: department.code });
+
     return NextResponse.json({ department });
   } catch (error) {
     console.error('Update Department API error:', error);
@@ -154,8 +174,8 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const { error } = await requireRoles(ADMIN_ROLES);
-    if (error) return error;
+    const { error, session } = await requireMastersWrite();
+    if (error || !session) return error;
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
@@ -186,6 +206,8 @@ export async function DELETE(request: Request) {
     }
 
     await db.department.delete({ where: { id } });
+
+    await auditMasterMutation(request, session.user.id, 'masters.department.delete', `department:${id}`, { code: existing.code });
 
     return NextResponse.json({ message: 'Department deleted successfully' });
   } catch (error) {

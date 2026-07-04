@@ -7,8 +7,24 @@ services:
       - .env
     environment:
       NODE_ENV: production
+      DATABASE_URL: postgresql://scms:scms@db:5432/scms?sslmode=disable
+      NEXTAUTH_URL: http://localhost:3000
+      ALLOW_IN_MEMORY_RATE_LIMIT: "true"
     depends_on:
-      - db
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
     restart: unless-stopped
 
   db:
@@ -21,6 +37,11 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scms -d scms"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
     restart: unless-stopped
 
 volumes:

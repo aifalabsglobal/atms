@@ -1,6 +1,15 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { requireAuth, resolveStudentId, requireCampusRead, getCampusScope, buildCourseIdFilter, requireSection } from '@/lib/auth-helpers';
+import {
+  attendanceRiskStatus,
+  buildDepartmentAnalytics,
+  buildStudentAttendanceStats,
+  buildViolationAnalytics,
+  buildWeeklyTrend,
+  getDepartmentName,
+  scopeLabel,
+} from '@/lib/reports-analytics';
 
 export async function GET(request: Request) {
   try {
@@ -42,7 +51,14 @@ export async function GET(request: Request) {
       const enrolledCourses = enrollments.map(e => e.course);
       const enrolledCourseIds = enrolledCourses.map(c => c.id);
 
-      // 3. Student Attendance Records
+      const [presentCount, absentCount, lateCount, totalSessions] = await Promise.all([
+        db.attendanceRecord.count({ where: { studentId, status: 'present' } }),
+        db.attendanceRecord.count({ where: { studentId, status: 'absent' } }),
+        db.attendanceRecord.count({ where: { studentId, status: 'late' } }),
+        db.attendanceRecord.count({ where: { studentId } }),
+      ]);
+      const overallPercentage = totalSessions > 0 ? Math.round((presentCount / totalSessions) * 100) : 0;
+
       const attendanceRecords = await db.attendanceRecord.findMany({
         where: { studentId },
         include: {
@@ -54,14 +70,8 @@ export async function GET(request: Request) {
           },
         },
         orderBy: { createdAt: 'desc' },
-        take: 100,
+        take: 80,
       });
-
-      const totalSessions = attendanceRecords.length;
-      const presentCount = attendanceRecords.filter(r => r.status === 'present').length;
-      const absentCount = attendanceRecords.filter(r => r.status === 'absent').length;
-      const lateCount = attendanceRecords.filter(r => r.status === 'late').length;
-      const overallPercentage = totalSessions > 0 ? Math.round((presentCount / totalSessions) * 100) : 0;
 
       // Per-course attendance breakdown
       const courseAttendanceMap = new Map<string, { course: { id: string; name: string; code: string }; present: number; absent: number; late: number; total: number }>();
@@ -165,7 +175,18 @@ export async function GET(request: Request) {
         };
       });
 
-      // 7. Student Violations
+      const attendanceTrend = buildWeeklyTrend(
+        attendanceRecords.map((r) => ({
+          sessionDate: r.session.sessionDate,
+          presentCount: r.status === 'present' ? 1 : 0,
+          absentCount: r.status === 'absent' ? 1 : 0,
+          lateCount: r.status === 'late' ? 1 : 0,
+          expectedCount: 1,
+        }))
+      );
+
+      const codingAttempts = quizAttempts.length;
+
       const violations = await db.attendanceViolation.findMany({
         where: { studentId },
         include: {
@@ -177,6 +198,9 @@ export async function GET(request: Request) {
 
       return NextResponse.json({
         isStudent: true,
+        isParent: session!.user.role === 'parent',
+        analyticsScope: 'student' as const,
+        riskStatus: attendanceRiskStatus(overallPercentage, totalSessions),
         student: {
           id: student.id,
           name: student.name,
@@ -193,6 +217,7 @@ export async function GET(request: Request) {
           overallPercentage,
           courseAttendance,
           recentSessions: attendanceSummary,
+          weeklyTrend: attendanceTrend,
         },
         assignments: {
           total: submissions.length,
@@ -215,6 +240,7 @@ export async function GET(request: Request) {
           totalAttempts: quizAttempts.length,
           avgScore: avgQuizScore,
           bestScore: bestQuizScore,
+          codingAttempts,
           recent: quizAttempts.slice(0, 10),
         },
         grades: {
@@ -253,81 +279,102 @@ export async function GET(request: Request) {
       studentWhere = { id: { in: studentIds.length > 0 ? studentIds : ['__none__'] }, role: 'student', status: 'active' };
     }
 
-    const attendanceSummary = await db.attendanceSession.findMany({
-      where: { ...sessionWhere, status: 'completed' },
-      include: {
-        course: { select: { name: true, code: true } },
-        creator: { select: { name: true } },
-      },
-      orderBy: { sessionDate: 'desc' },
-      take: 30,
-    });
+    const deptName = scope.level === 'department' ? await getDepartmentName(scope.departmentId) : undefined;
+    const { scope: analyticsScope, label: scopeLabelText } = scopeLabel(scope, deptName);
 
-    // 2. Student Attendance Detail
-    const studentAttendance = await db.user.findMany({
-      where: studentWhere,
-      select: {
-        id: true, name: true, employeeId: true, department: true,
-        _count: { select: { attendanceRecords: true } },
-        attendanceRecords: {
-          select: { status: true },
+    const [
+      totalStudents,
+      totalCourses,
+      totalEnrollments,
+      attendanceSummary,
+      studentAttendanceReport,
+      coursePerformance,
+      violationReport,
+      allGrades,
+      sessionAgg,
+      captureGroups,
+      quizAgg,
+      submissionCount,
+    ] = await Promise.all([
+      db.user.count({ where: studentWhere }),
+      db.course.count({ where: courseWhere }),
+      db.courseEnrollment.count({
+        where: scope.level === 'all'
+          ? { status: 'enrolled' }
+          : { status: 'enrolled', courseId: courseFilter ?? { in: ['__none__'] } },
+      }),
+      db.attendanceSession.findMany({
+        where: { ...sessionWhere, status: 'completed' },
+        include: {
+          course: { select: { name: true, code: true } },
+          creator: { select: { name: true } },
         },
-      },
-      take: 20,
-    });
-    const studentAttendanceReport = studentAttendance.map(s => {
-      const present = s.attendanceRecords.filter(r => r.status === 'present').length;
-      const absent = s.attendanceRecords.filter(r => r.status === 'absent').length;
-      const late = s.attendanceRecords.filter(r => r.status === 'late').length;
-      const total = s.attendanceRecords.length;
-      return {
-        ...s,
-        attendanceRecords: undefined,
-        stats: { present, absent, late, total, percentage: total > 0 ? Math.round((present / total) * 100) : 0 },
-      };
-    });
+        orderBy: { sessionDate: 'desc' },
+        take: 40,
+      }),
+      buildStudentAttendanceStats(studentWhere, scope.level === 'all' ? 80 : 50),
+      db.course.findMany({
+        where: courseWhere,
+        select: {
+          id: true, name: true, code: true, credits: true, type: true,
+          instructor: { select: { name: true } },
+          _count: { select: { enrollments: true, assignments: true, quizAttempts: true } },
+          gradeBooks: { select: { score: true, maxScore: true, component: true }, take: 200 },
+        },
+        take: scope.level === 'instructor' ? 20 : 30,
+      }),
+      db.attendanceViolation.findMany({
+        where: violationWhere,
+        include: {
+          violator: { select: { name: true, employeeId: true, department: true } },
+          record: { select: { session: { select: { sessionDate: true, course: { select: { name: true } } } } } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+      }),
+      db.gradeBook.findMany({
+        where:
+          scope.level === 'all'
+            ? {}
+            : scope.level === 'department'
+              ? { student: { departmentId: scope.departmentId } }
+              : { courseId: { in: scope.courseIds.length > 0 ? scope.courseIds : ['__none__'] } },
+        select: { score: true, maxScore: true, component: true, studentId: true },
+        take: 2000,
+      }),
+      db.attendanceSession.aggregate({
+        where: { ...sessionWhere, status: 'completed' },
+        _sum: { presentCount: true, absentCount: true, lateCount: true, expectedCount: true },
+        _count: { _all: true },
+      }),
+      db.attendanceSession.groupBy({
+        by: ['captureMethod'],
+        where: sessionWhere,
+        _count: { _all: true },
+      }),
+      db.quizAttempt.aggregate({
+        where: scope.level === 'all'
+          ? {}
+          : { courseId: courseFilter ?? { in: ['__none__'] } },
+        _count: { _all: true },
+        _avg: { percentage: true },
+      }),
+      db.submission.count({
+        where: scope.level === 'all'
+          ? {}
+          : { assignment: { courseId: courseFilter ?? { in: ['__none__'] } } },
+      }),
+    ]);
 
-    // 3. Course Performance Report
-    const coursePerformance = await db.course.findMany({
-      where: courseWhere,
-      select: {
-        id: true, name: true, code: true, credits: true, type: true,
-        instructor: { select: { name: true } },
-        _count: { select: { enrollments: true, assignments: true } },
-        gradeBooks: { select: { score: true, maxScore: true, component: true } },
-      },
-    });
-    const coursePerfReport = coursePerformance.map(c => {
+    const coursePerfReport = coursePerformance.map((c) => {
       const avgGrade = c.gradeBooks.length > 0
         ? Math.round(c.gradeBooks.reduce((s, g) => s + (g.score / g.maxScore) * 100, 0) / c.gradeBooks.length)
         : null;
       return { ...c, gradeBooks: undefined, avgGrade };
     });
 
-    // 4. Violation Report
-    const violationReport = await db.attendanceViolation.findMany({
-      where: violationWhere,
-      include: {
-        violator: { select: { name: true, employeeId: true, department: true } },
-        record: { select: { session: { select: { sessionDate: true, course: { select: { name: true } } } } } },
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 30,
-    });
-
-    // 5. Grade Distribution
-    const gradeWhere = scope.level === 'all'
-      ? {}
-      : scope.level === 'department'
-        ? { student: { departmentId: scope.departmentId } }
-        : { courseId: { in: scope.courseIds.length > 0 ? scope.courseIds : ['__none__'] } };
-
-    const allGrades = await db.gradeBook.findMany({
-      where: gradeWhere,
-      select: { score: true, maxScore: true, component: true, studentId: true },
-    });
     const gradeDistribution = { A: 0, B: 0, C: 0, D: 0, F: 0 };
-    allGrades.forEach(g => {
+    allGrades.forEach((g) => {
       const pct = (g.score / g.maxScore) * 100;
       if (pct >= 90) gradeDistribution.A++;
       else if (pct >= 75) gradeDistribution.B++;
@@ -336,8 +383,77 @@ export async function GET(request: Request) {
       else gradeDistribution.F++;
     });
 
+    const weeklyAttendanceTrend = buildWeeklyTrend(attendanceSummary);
+    const departmentAnalytics =
+      analyticsScope === 'campus' ? buildDepartmentAnalytics(studentAttendanceReport) : [];
+
+    const atRiskStudents = studentAttendanceReport
+      .filter((s) => s.stats.total > 0 && s.stats.percentage < 75)
+      .slice(0, 20);
+
+    const topPerformers = [...studentAttendanceReport]
+      .filter((s) => s.stats.total >= 3)
+      .sort((a, b) => b.stats.percentage - a.stats.percentage)
+      .slice(0, 10);
+
+    const violationAnalytics = buildViolationAnalytics(violationReport);
+
+    const captureMethodBreakdown: Record<string, number> = {};
+    captureGroups.forEach((g) => {
+      captureMethodBreakdown[g.captureMethod] = g._count._all;
+    });
+
+    const expectedSum = sessionAgg._sum.expectedCount ?? 0;
+    const presentSum = sessionAgg._sum.presentCount ?? 0;
+    const avgAttendancePct = expectedSum > 0 ? Math.round((presentSum / expectedSum) * 100) : 0;
+
+    const avgGradePct =
+      allGrades.length > 0
+        ? Math.round(
+            allGrades.reduce((s, g) => s + (g.score / g.maxScore) * 100, 0) / allGrades.length
+          )
+        : 0;
+
     return NextResponse.json({
       isStudent: false,
+      analyticsScope,
+      scopeLabel: scopeLabelText,
+      role: session!.user.role,
+      kpis: {
+        totalStudents,
+        totalCourses,
+        totalEnrollments,
+        completedSessions: sessionAgg._count._all,
+        avgAttendancePct,
+        atRiskCount: atRiskStudents.length,
+        pendingViolations: violationAnalytics.pending,
+        avgGradePct,
+        quizAttempts: quizAgg._count._all,
+        avgQuizScore: Math.round(quizAgg._avg.percentage ?? 0),
+        submissions: submissionCount,
+      },
+      weeklyAttendanceTrend,
+      departmentAnalytics,
+      atRiskStudents,
+      topPerformers,
+      violationAnalytics,
+      captureMethodBreakdown,
+      lmsEngagement: {
+        coursesWithGrades: coursePerfReport.filter((c) => c.avgGrade !== null).length,
+        topCourses: [...coursePerfReport]
+          .sort((a, b) => (b._count?.enrollments ?? 0) - (a._count?.enrollments ?? 0))
+          .slice(0, 8)
+          .map((c) => ({
+            id: c.id,
+            code: c.code,
+            name: c.name,
+            enrollments: c._count.enrollments,
+            assignments: c._count.assignments,
+            quizAttempts: c._count.quizAttempts,
+            avgGrade: c.avgGrade,
+            instructor: c.instructor?.name ?? 'TBA',
+          })),
+      },
       attendanceSummary,
       studentAttendanceReport,
       coursePerfReport,

@@ -1,11 +1,11 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
-import { requireAuth, ADMIN_ROLES, requireRoles } from '@/lib/auth-helpers';
+import { requireMastersRead, requireMastersWrite, auditMasterMutation, mastersError, applyMastersDepartmentScope } from '@/lib/masters-helpers';
 
 export async function GET(request: Request) {
   try {
-    const { error } = await requireRoles(ADMIN_ROLES);
-    if (error) return error;
+    const { error, session } = await requireMastersRead();
+    if (error || !session) return error;
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '50');
@@ -16,6 +16,7 @@ export async function GET(request: Request) {
     const search = searchParams.get('search');
 
     const where: Record<string, unknown> = {};
+    await applyMastersDepartmentScope(session, where);
     if (departmentId) where.departmentId = departmentId;
     if (code) where.code = code;
     if (type) where.type = type;
@@ -52,30 +53,21 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { error } = await requireRoles(ADMIN_ROLES);
-    if (error) return error;
+    const { error, session } = await requireMastersWrite();
+    if (error || !session) return error;
 
     const body = await request.json();
     const { name, code, departmentId, duration, type, description, isActive } = body;
 
     if (!name || !code || !departmentId) {
-      return NextResponse.json(
-        { error: 'Missing required fields: name, code, and departmentId are required' },
-        { status: 400 }
-      );
+      return mastersError('Missing required fields: name, code, and departmentId are required');
     }
 
-    // Check for unique code
     const existing = await db.program.findUnique({ where: { code } });
-    if (existing) {
-      return NextResponse.json({ error: 'Program with this code already exists' }, { status: 409 });
-    }
+    if (existing) return mastersError('Program with this code already exists', 409);
 
-    // Verify department exists
     const department = await db.department.findUnique({ where: { id: departmentId } });
-    if (!department) {
-      return NextResponse.json({ error: 'Department not found' }, { status: 404 });
-    }
+    if (!department) return mastersError('Department not found', 404);
 
     const program = await db.program.create({
       data: {
@@ -92,6 +84,8 @@ export async function POST(request: Request) {
       },
     });
 
+    await auditMasterMutation(request, session.user.id, 'masters.program.create', `program:${program.id}`, { code });
+
     return NextResponse.json({ program }, { status: 201 });
   } catch (error) {
     console.error('Create Program API error:', error);
@@ -101,38 +95,27 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const { error } = await requireRoles(ADMIN_ROLES);
-    if (error) return error;
+    const { error, session } = await requireMastersWrite();
+    if (error || !session) return error;
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
-
-    if (!id) {
-      return NextResponse.json({ error: 'Missing required parameter: id' }, { status: 400 });
-    }
+    if (!id) return mastersError('Missing required parameter: id');
 
     const existing = await db.program.findUnique({ where: { id } });
-    if (!existing) {
-      return NextResponse.json({ error: 'Program not found' }, { status: 404 });
-    }
+    if (!existing) return mastersError('Program not found', 404);
 
     const body = await request.json();
     const { name, code, departmentId, duration, type, description, isActive } = body;
 
-    // Check unique code if being changed
     if (code && code !== existing.code) {
       const duplicate = await db.program.findUnique({ where: { code } });
-      if (duplicate) {
-        return NextResponse.json({ error: 'Program with this code already exists' }, { status: 409 });
-      }
+      if (duplicate) return mastersError('Program with this code already exists', 409);
     }
 
-    // Verify department exists if being changed
     if (departmentId && departmentId !== existing.departmentId) {
       const department = await db.department.findUnique({ where: { id: departmentId } });
-      if (!department) {
-        return NextResponse.json({ error: 'Department not found' }, { status: 404 });
-      }
+      if (!department) return mastersError('Department not found', 404);
     }
 
     const program = await db.program.update({
@@ -151,6 +134,8 @@ export async function PUT(request: Request) {
       },
     });
 
+    await auditMasterMutation(request, session.user.id, 'masters.program.update', `program:${id}`, { code: program.code });
+
     return NextResponse.json({ program });
   } catch (error) {
     console.error('Update Program API error:', error);
@@ -160,38 +145,28 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const { error } = await requireRoles(ADMIN_ROLES);
-    if (error) return error;
+    const { error, session } = await requireMastersWrite();
+    if (error || !session) return error;
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
-
-    if (!id) {
-      return NextResponse.json({ error: 'Missing required parameter: id' }, { status: 400 });
-    }
+    if (!id) return mastersError('Missing required parameter: id');
 
     const existing = await db.program.findUnique({
       where: { id },
-      include: {
-        _count: { select: { courses: true } },
-      },
+      include: { _count: { select: { courses: true } } },
     });
+    if (!existing) return mastersError('Program not found', 404);
 
-    if (!existing) {
-      return NextResponse.json({ error: 'Program not found' }, { status: 404 });
-    }
-
-    // Check for dependent records
     if (existing._count.courses > 0) {
-      return NextResponse.json(
-        {
-          error: `Cannot delete program. It has ${existing._count.courses} course(s) associated with it. Please remove them first.`,
-        },
-        { status: 409 }
+      return mastersError(
+        `Cannot delete program. It has ${existing._count.courses} course(s) associated with it. Please remove them first.`,
+        409
       );
     }
 
     await db.program.delete({ where: { id } });
+    await auditMasterMutation(request, session.user.id, 'masters.program.delete', `program:${id}`, { code: existing.code });
 
     return NextResponse.json({ message: 'Program deleted successfully' });
   } catch (error) {

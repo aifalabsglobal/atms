@@ -155,7 +155,8 @@ function StudentMarkAttendance() {
     queryKey: ['active-sessions', currentUser?.id],
     queryFn: () => fetch(`/api/attendance/active-sessions?studentId=${currentUser!.id}`).then(r => r.json()),
     enabled: !!currentUser,
-    refetchInterval: 10000,
+    refetchInterval: 30_000,
+    staleTime: 20_000,
   });
 
   const activeSessions: ActiveSession[] = activeData?.sessions ?? [];

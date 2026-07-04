@@ -9,6 +9,7 @@ import type { Role } from '@/lib/store';
 import { logAudit, getClientIp } from '@/lib/audit';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { sendWelcomeEmail } from '@/lib/email';
+import { maybeProvisionWalletOnCreate } from '@/lib/knuct';
 import {
   ALL_ROLES,
   canAssignRole,
@@ -154,6 +155,8 @@ export async function POST(request: Request) {
         console.warn('[email] welcome failed:', err)
       );
     }
+
+    maybeProvisionWalletOnCreate(user.id);
 
     return NextResponse.json(
       { user, tempPassword: password?.trim() ? undefined : tempPassword },

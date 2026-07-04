@@ -2,6 +2,7 @@ import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { requireAuth, resolveStudentId, getCampusScope, buildCourseIdFilter, CAMPUS_READ_ROLES } from '@/lib/auth-helpers';
 import type { Role } from '@/lib/store';
+import { requireLmsWrite, assertInstructorOwnsCourse, auditLms } from '@/lib/lms-helpers';
 
 export async function GET(request: Request) {
   try {
@@ -106,5 +107,115 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error('Assignments API error:', error);
     return NextResponse.json({ error: 'Failed to load assignments' }, { status: 500 });
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const { error, session } = await requireLmsWrite();
+    if (error || !session) return error;
+
+    const body = await request.json();
+    const { courseId, title, description, maxScore, dueDate, type, allowLate, latePenalty, status } = body;
+
+    if (!courseId || !title || !dueDate) {
+      return NextResponse.json({ error: 'courseId, title, and dueDate are required' }, { status: 400 });
+    }
+
+    const scopeErr = await assertInstructorOwnsCourse(session, courseId);
+    if (scopeErr) return scopeErr;
+
+    const assignment = await db.assignment.create({
+      data: {
+        courseId,
+        title,
+        description: description || null,
+        maxScore: maxScore ?? 100,
+        dueDate: new Date(dueDate),
+        type: type || 'individual',
+        allowLate: allowLate !== false,
+        latePenalty: latePenalty ?? 0,
+        status: status || 'published',
+      },
+      include: { course: { select: { name: true, code: true } } },
+    });
+
+    await auditLms(request, session.user.id, 'lms.assignment.create', `assignment:${assignment.id}`, { title });
+
+    return NextResponse.json({ assignment }, { status: 201 });
+  } catch (error) {
+    console.error('Create assignment error:', error);
+    return NextResponse.json({ error: 'Failed to create assignment' }, { status: 500 });
+  }
+}
+
+export async function PUT(request: Request) {
+  try {
+    const { error, session } = await requireLmsWrite();
+    if (error || !session) return error;
+
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+    if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
+
+    const existing = await db.assignment.findUnique({ where: { id } });
+    if (!existing) return NextResponse.json({ error: 'Assignment not found' }, { status: 404 });
+
+    const scopeErr = await assertInstructorOwnsCourse(session, existing.courseId);
+    if (scopeErr) return scopeErr;
+
+    const body = await request.json();
+    const { title, description, maxScore, dueDate, type, allowLate, latePenalty, status } = body;
+
+    const assignment = await db.assignment.update({
+      where: { id },
+      data: {
+        ...(title !== undefined && { title }),
+        ...(description !== undefined && { description }),
+        ...(maxScore !== undefined && { maxScore }),
+        ...(dueDate !== undefined && { dueDate: new Date(dueDate) }),
+        ...(type !== undefined && { type }),
+        ...(allowLate !== undefined && { allowLate }),
+        ...(latePenalty !== undefined && { latePenalty }),
+        ...(status !== undefined && { status }),
+      },
+      include: { course: { select: { name: true, code: true } } },
+    });
+
+    await auditLms(request, session.user.id, 'lms.assignment.update', `assignment:${id}`, { title: assignment.title });
+
+    return NextResponse.json({ assignment });
+  } catch (error) {
+    console.error('Update assignment error:', error);
+    return NextResponse.json({ error: 'Failed to update assignment' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const { error, session } = await requireLmsWrite();
+    if (error || !session) return error;
+
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+    if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 });
+
+    const existing = await db.assignment.findUnique({ where: { id } });
+    if (!existing) return NextResponse.json({ error: 'Assignment not found' }, { status: 404 });
+
+    const scopeErr = await assertInstructorOwnsCourse(session, existing.courseId);
+    if (scopeErr) return scopeErr;
+
+    await db.$transaction([
+      db.submission.deleteMany({ where: { assignmentId: id } }),
+      db.assignment.delete({ where: { id } }),
+    ]);
+
+    await auditLms(request, session.user.id, 'lms.assignment.delete', `assignment:${id}`, { title: existing.title });
+
+    return NextResponse.json({ message: 'Assignment deleted' });
+  } catch (error) {
+    console.error('Delete assignment error:', error);
+    return NextResponse.json({ error: 'Failed to delete assignment' }, { status: 500 });
   }
 }

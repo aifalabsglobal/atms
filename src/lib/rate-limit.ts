@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { allowsInMemoryRateLimit, isUpstashConfigured } from '@/lib/env';
 
 type Bucket = { count: number; resetAt: number };
 
@@ -33,7 +34,13 @@ async function upstashCheck(
 ): Promise<{ ok: true } | { ok: false; retryAfterSec: number }> {
   const url = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-  if (!url || !token) return memoryCheck(key, limit, windowMs);
+  if (!url || !token) {
+    if (!allowsInMemoryRateLimit()) {
+      console.error('[rate-limit] Upstash not configured in production');
+      return { ok: false, retryAfterSec: 60 };
+    }
+    return memoryCheck(key, limit, windowMs);
+  }
 
   const windowSec = Math.max(1, Math.ceil(windowMs / 1000));
   const redisKey = `rl:${key}`;
@@ -51,6 +58,9 @@ async function upstashCheck(
 
     if (!res.ok) {
       console.warn('[rate-limit] Upstash error, falling back to memory');
+      if (!allowsInMemoryRateLimit()) {
+        return { ok: false, retryAfterSec: 60 };
+      }
       return memoryCheck(key, limit, windowMs);
     }
 
@@ -72,6 +82,9 @@ async function upstashCheck(
     return { ok: true };
   } catch (err) {
     console.warn('[rate-limit] Upstash unavailable:', err);
+    if (!allowsInMemoryRateLimit()) {
+      return { ok: false, retryAfterSec: 60 };
+    }
     return memoryCheck(key, limit, windowMs);
   }
 }
@@ -87,4 +100,8 @@ export async function enforceRateLimit(key: string, limit = 60, windowMs = 60_00
   const result = await upstashCheck(key, limit, windowMs);
   if (!result.ok) return rateLimitResponse(result.retryAfterSec);
   return null;
+}
+
+export function getRateLimitBackend(): 'upstash' | 'memory' {
+  return isUpstashConfigured() ? 'upstash' : 'memory';
 }

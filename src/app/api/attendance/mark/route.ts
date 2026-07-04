@@ -6,22 +6,26 @@ import { requireAuth, resolveStudentId, SELF_MARK_METHODS } from '@/lib/auth-hel
 import type { Role } from '@/lib/store';
 import { verifyFaceMatch } from '@/lib/face-verification';
 import { validateGeofenceLocation } from '@/lib/geofence';
+import { rateLimitByUser } from '@/lib/api-rate-limit';
 
 export async function POST(request: Request) {
   try {
-    const { error, session: authSession } = await requireAuth();
-    if (error) return error;
+    const { error, session } = await requireAuth();
+    if (error || !session) return error;
+
+    const limited = await rateLimitByUser(request, session.user.id, 'attendance-mark', 20, 60_000);
+    if (limited) return limited;
 
     const body = await request.json();
     const { sessionId, studentId: requestedStudentId, latitude, longitude, selfieBase64, captureMethod } = body;
     const method = captureMethod || 'self_geo_face';
 
-    const role = authSession!.user.role as Role;
+    const role = session.user.role as Role;
     if (SELF_MARK_METHODS.includes(method as typeof SELF_MARK_METHODS[number]) && role !== 'student' && role !== 'parent') {
       return NextResponse.json({ error: 'Self-mark attendance is only available for students and parents' }, { status: 403 });
     }
 
-    const { studentId, error: studentError } = await resolveStudentId(authSession!, requestedStudentId ?? null);
+    const { studentId, error: studentError } = await resolveStudentId(session, requestedStudentId ?? null);
     if (studentError) return studentError;
     if (!studentId) {
       return NextResponse.json({ error: 'studentId is required' }, { status: 400 });

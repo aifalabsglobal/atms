@@ -32,7 +32,7 @@ function createPrismaClient() {
               if (!isConnectionError(error) || attempt === maxAttempts - 1) {
                 throw error;
               }
-              await delay(400 * (attempt + 1));
+              await delay(200 * (attempt + 1));
             }
           }
         },

@@ -5,6 +5,8 @@ import { db } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
 import type { Role } from '@/lib/store';
 
+const JWT_DB_REFRESH_MS = 5 * 60 * 1000;
+
 function initialsFromName(name: string): string {
   return name
     .split(' ')
@@ -80,27 +82,32 @@ export const authOptions: NextAuthOptions = {
       }
 
       if (token.id) {
-        try {
-          const dbUser = await db.user.findUnique({
-            where: { id: token.id as string },
-            select: {
-              role: true,
-              department: true,
-              profileImageUrl: true,
-              linkedStudentId: true,
-              status: true,
-              name: true,
-            },
-          });
-          if (dbUser && dbUser.status === 'active') {
-            token.role = dbUser.role as Role;
-            token.department = dbUser.department ?? undefined;
-            token.profileImageUrl = dbUser.profileImageUrl ?? undefined;
-            token.linkedStudentId = dbUser.linkedStudentId ?? undefined;
-            token.name = dbUser.name;
+        const lastRefresh = (token.refreshedAt as number | undefined) ?? 0;
+        const shouldRefresh = user || Date.now() - lastRefresh > JWT_DB_REFRESH_MS;
+        if (shouldRefresh) {
+          try {
+            const dbUser = await db.user.findUnique({
+              where: { id: token.id as string },
+              select: {
+                role: true,
+                department: true,
+                profileImageUrl: true,
+                linkedStudentId: true,
+                status: true,
+                name: true,
+              },
+            });
+            if (dbUser && dbUser.status === 'active') {
+              token.role = dbUser.role as Role;
+              token.department = dbUser.department ?? undefined;
+              token.profileImageUrl = dbUser.profileImageUrl ?? undefined;
+              token.linkedStudentId = dbUser.linkedStudentId ?? undefined;
+              token.name = dbUser.name;
+            }
+            token.refreshedAt = Date.now();
+          } catch (err) {
+            console.error('[auth] JWT refresh skipped (DB unavailable):', err);
           }
-        } catch (err) {
-          console.error('[auth] JWT refresh skipped (DB unavailable):', err);
         }
       }
 

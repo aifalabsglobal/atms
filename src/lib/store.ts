@@ -104,11 +104,11 @@ export const ROLE_PRESETS: Record<Role, CurrentUser> = {
 export const ROLE_SECTIONS: Record<Role, Section[]> = {
   super_admin: ['dashboard', 'masters', 'attendance', 'lms', 'users', 'violations', 'reports', 'geofences', 'calendar', 'settings'],
   admin: ['dashboard', 'masters', 'attendance', 'lms', 'users', 'violations', 'reports', 'geofences', 'calendar', 'settings'],
-  hod: ['dashboard', 'attendance', 'lms', 'users', 'violations', 'reports', 'geofences', 'calendar'],
+  hod: ['dashboard', 'masters', 'attendance', 'lms', 'users', 'violations', 'reports', 'geofences', 'calendar'],
   faculty: ['dashboard', 'attendance', 'lms', 'violations', 'reports', 'calendar'],
   lab_assistant: ['dashboard', 'attendance', 'geofences', 'calendar'],
   student: ['dashboard', 'attendance', 'lms', 'reports', 'geofences', 'calendar'],
-  parent: ['dashboard', 'attendance', 'reports', 'calendar'],
+  parent: ['dashboard', 'attendance', 'lms', 'reports', 'calendar'],
   visitor: ['dashboard', 'geofences', 'calendar'],
   security: ['dashboard', 'attendance', 'violations', 'geofences', 'calendar'],
 };

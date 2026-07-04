@@ -2,11 +2,26 @@ import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { requireSection, resolveStudentId, requireCampusRead, getCampusScope } from '@/lib/auth-helpers';
 import type { Role } from '@/lib/store';
+import {
+  attendanceRiskStatus,
+  buildDepartmentAnalytics,
+  buildStudentAttendanceStats,
+  buildWeeklyTrend,
+  getDepartmentName,
+  scopeLabel,
+} from '@/lib/reports-analytics';
+import { getKnuctDashboardStats } from '@/lib/knuct';
 
 async function buildStudentDashboard(studentId: string) {
-  const [records, enrollments, enrolledCourseIds] = await Promise.all([
+  const [present, absent, late, total, enrollments, records, activeSessionsList] = await Promise.all([
+    db.attendanceRecord.count({ where: { studentId, status: 'present' } }),
+    db.attendanceRecord.count({ where: { studentId, status: 'absent' } }),
+    db.attendanceRecord.count({ where: { studentId, status: 'late' } }),
+    db.attendanceRecord.count({ where: { studentId } }),
+    db.courseEnrollment.count({ where: { studentId, status: 'enrolled' } }),
     db.attendanceRecord.findMany({
       where: { studentId },
+      take: 40,
       include: {
         session: {
           select: {
@@ -17,19 +32,21 @@ async function buildStudentDashboard(studentId: string) {
       },
       orderBy: { createdAt: 'desc' },
     }),
-    db.courseEnrollment.count({ where: { studentId, status: 'enrolled' } }),
-    db.courseEnrollment.findMany({
-      where: { studentId, status: 'enrolled' },
-      select: { courseId: true },
+    db.attendanceSession.findMany({
+      where: {
+        status: 'active',
+        course: { enrollments: { some: { studentId, status: 'enrolled' } } },
+      },
+      take: 10,
+      include: {
+        course: { select: { name: true, code: true } },
+        creator: { select: { name: true } },
+        geofence: { select: { name: true } },
+        timetableSlot: { select: { roomNumber: true, building: true } },
+      },
     }),
   ]);
 
-  const courseIds = enrolledCourseIds.map((e) => e.courseId);
-
-  const present = records.filter((r) => r.status === 'present').length;
-  const absent = records.filter((r) => r.status === 'absent').length;
-  const late = records.filter((r) => r.status === 'late').length;
-  const total = records.length;
   const overallAttendance = total > 0 ? Math.round((present / total) * 100) : 0;
 
   const courseMap = new Map<string, { id: string; name: string; code: string; present: number; total: number }>();
@@ -50,11 +67,22 @@ async function buildStudentDashboard(studentId: string) {
     percentage: c.total > 0 ? Math.round((c.present / c.total) * 100) : 0,
   }));
 
-  const weeklyTrend = records.slice(0, 7).reverse().map((r) => ({
-    date: r.session.sessionDate,
-    present: r.status === 'present' ? 1 : 0,
-    absent: r.status === 'absent' ? 1 : 0,
-    late: r.status === 'late' ? 1 : 0,
+  const weeklyRateTrend = buildWeeklyTrend(
+    records.map((r) => ({
+      sessionDate: r.session.sessionDate,
+      presentCount: r.status === 'present' ? 1 : 0,
+      absentCount: r.status === 'absent' ? 1 : 0,
+      lateCount: r.status === 'late' ? 1 : 0,
+      expectedCount: 1,
+    }))
+  );
+
+  const weeklyTrend = weeklyRateTrend.map((w) => ({
+    date: w.week,
+    present: w.present,
+    absent: w.absent,
+    late: w.late,
+    rate: w.rate,
   }));
 
   const recentActivity = records.slice(0, 10).map((r) => ({
@@ -66,18 +94,10 @@ async function buildStudentDashboard(studentId: string) {
     session: { course: r.session.course, sessionDate: r.session.sessionDate },
   }));
 
-  const activeSessionsList = await db.attendanceSession.findMany({
-    where: { status: 'active', courseId: { in: courseIds.length > 0 ? courseIds : ['__none__'] } },
-    include: {
-      course: { select: { name: true, code: true } },
-      creator: { select: { name: true } },
-      geofence: { select: { name: true } },
-      timetableSlot: { select: { roomNumber: true, building: true } },
-    },
-  });
-
   return {
     scope: 'student' as const,
+    riskStatus: attendanceRiskStatus(overallAttendance, total),
+    weeklyRateTrend,
     stats: {
       totalStudents: 0,
       totalFaculty: 0,
@@ -171,6 +191,11 @@ export async function GET() {
       violationWhere = { violator: { departmentId: scope.departmentId } };
     }
 
+    const deptName = scope.level === 'department' ? await getDepartmentName(scope.departmentId) : undefined;
+    const { scope: analyticsScope, label: scopeLabelText } = scopeLabel(scope, deptName);
+
+    const courseFilter = scope.level === 'all' ? undefined : { in: scope.courseIds.length > 0 ? scope.courseIds : ['__none__'] };
+
     const [
       totalStudents,
       totalFaculty,
@@ -179,14 +204,19 @@ export async function GET() {
       activeSessions,
       totalViolations,
       totalEnrollments,
-      completedSessions,
+      completedAgg,
       courses,
-      sessions,
+      captureMethodGroups,
       recentSessions,
       recentRecords,
       activeSessionsList,
       violations,
       deptStudentsRaw,
+      studentReport,
+      trendSessionsRaw,
+      gradeSamples,
+      quizAgg,
+      submissionCount,
     ] = await Promise.all([
       db.user.count({ where: studentWhere }),
       db.user.count({ where: facultyWhere }),
@@ -199,18 +229,19 @@ export async function GET() {
           ? { status: 'enrolled' }
           : { status: 'enrolled', courseId: { in: scope.courseIds.length > 0 ? scope.courseIds : ['__none__'] } },
       }),
-      db.attendanceSession.findMany({
+      db.attendanceSession.aggregate({
         where: { ...sessionWhere, status: 'completed' },
-        select: { presentCount: true, absentCount: true, lateCount: true, expectedCount: true },
+        _sum: { presentCount: true, absentCount: true, lateCount: true, expectedCount: true },
       }),
       db.course.findMany({
         where: courseWhere,
-        select: { id: true, name: true, code: true, attendanceSessions: { select: { presentCount: true, expectedCount: true } } },
+        select: { id: true, name: true, code: true, attendanceSessions: { select: { presentCount: true, expectedCount: true }, take: 20 } },
         take: 8,
       }),
-      db.attendanceSession.findMany({
+      db.attendanceSession.groupBy({
+        by: ['captureMethod'],
         where: sessionWhere,
-        select: { captureMethod: true },
+        _count: { _all: true },
       }),
       db.attendanceSession.findMany({
         where: { ...sessionWhere, status: 'completed' },
@@ -242,17 +273,49 @@ export async function GET() {
         select: { type: true, severity: true, reviewStatus: true },
       }),
       scope.level === 'all'
-        ? db.user.findMany({
+        ? db.user.groupBy({
+            by: ['department'],
             where: { role: 'student', status: 'active' },
-            select: { department: true },
+            _count: { _all: true },
           })
         : Promise.resolve([]),
+      buildStudentAttendanceStats(studentWhere, scope.level === 'all' ? 60 : 40),
+      db.attendanceSession.findMany({
+        where: { ...sessionWhere, status: 'completed' },
+        select: {
+          sessionDate: true,
+          presentCount: true,
+          absentCount: true,
+          lateCount: true,
+          expectedCount: true,
+        },
+        orderBy: { sessionDate: 'desc' },
+        take: 60,
+      }),
+      db.gradeBook.findMany({
+        where:
+          scope.level === 'all'
+            ? {}
+            : scope.level === 'department'
+              ? { student: { departmentId: scope.departmentId } }
+              : { courseId: courseFilter },
+        select: { score: true, maxScore: true },
+        take: 800,
+      }),
+      db.quizAttempt.aggregate({
+        where: scope.level === 'all' ? {} : { courseId: courseFilter },
+        _count: { _all: true },
+        _avg: { percentage: true },
+      }),
+      db.submission.count({
+        where: scope.level === 'all' ? {} : { assignment: { courseId: courseFilter } },
+      }),
     ]);
 
-    const totalPresent = completedSessions.reduce((s, r) => s + r.presentCount, 0);
-    const totalAbsent = completedSessions.reduce((s, r) => s + r.absentCount, 0);
-    const totalLate = completedSessions.reduce((s, r) => s + r.lateCount, 0);
-    const totalExpected = completedSessions.reduce((s, r) => s + r.expectedCount, 0);
+    const totalPresent = completedAgg._sum.presentCount ?? 0;
+    const totalAbsent = completedAgg._sum.absentCount ?? 0;
+    const totalLate = completedAgg._sum.lateCount ?? 0;
+    const totalExpected = completedAgg._sum.expectedCount ?? 0;
     const overallAttendance = totalExpected > 0 ? Math.round((totalPresent / totalExpected) * 100) : 0;
 
     const courseAttendance = courses.map((c) => {
@@ -262,9 +325,7 @@ export async function GET() {
     });
 
     const captureMethods: Record<string, number> = {};
-    sessions.forEach((s) => { captureMethods[s.captureMethod] = (captureMethods[s.captureMethod] || 0) + 1; });
-
-    const weeklyTrend = recentSessions.reverse().map((s) => ({ date: s.sessionDate, present: s.presentCount, absent: s.absentCount, late: s.lateCount }));
+    captureMethodGroups.forEach((s) => { captureMethods[s.captureMethod] = s._count._all; });
 
     const violationByType: Record<string, number> = {};
     const violationBySeverity: Record<string, number> = {};
@@ -275,19 +336,63 @@ export async function GET() {
 
     let deptAttendance: { department: string; students: number }[] = [];
     if (scope.level === 'department') {
-      const deptName = await db.department.findUnique({ where: { id: scope.departmentId }, select: { name: true } });
-      deptAttendance = [{ department: deptName?.name ?? 'Department', students: totalStudents }];
+      deptAttendance = [{ department: deptName ?? 'Department', students: totalStudents }];
     } else if (scope.level === 'all') {
-      const deptMap: Record<string, number> = {};
-      deptStudentsRaw.forEach((u) => { const d = u.department || 'N/A'; deptMap[d] = (deptMap[d] || 0) + 1; });
-      deptAttendance = Object.entries(deptMap).map(([department, students]) => ({ department, students }));
+      deptAttendance = deptStudentsRaw.map((g) => ({
+        department: g.department || 'N/A',
+        students: g._count._all,
+      }));
     }
 
-    const scopeLabel = scope.level === 'all' ? 'campus' : scope.level === 'department' ? 'department' : 'instructor';
+    const weeklyRateTrend = buildWeeklyTrend(trendSessionsRaw);
+    const weeklyTrend = weeklyRateTrend.map((w) => ({
+      date: w.week,
+      present: w.present,
+      absent: w.absent,
+      late: w.late,
+      rate: w.rate,
+    }));
+
+    const departmentAnalytics =
+      analyticsScope === 'campus' ? buildDepartmentAnalytics(studentReport) : [];
+
+    const atRiskStudents = studentReport
+      .filter((s) => s.stats.total > 0 && s.stats.percentage < 75)
+      .slice(0, 8);
+
+    const topPerformers = [...studentReport]
+      .filter((s) => s.stats.total >= 3)
+      .sort((a, b) => b.stats.percentage - a.stats.percentage)
+      .slice(0, 5);
+
+    const avgGradePct =
+      gradeSamples.length > 0
+        ? Math.round(
+            gradeSamples.reduce((s, g) => s + (g.score / g.maxScore) * 100, 0) / gradeSamples.length
+          )
+        : 0;
+
+    const scopeKey = scope.level === 'all' ? 'campus' : scope.level === 'department' ? 'department' : 'instructor';
+
+    const knuct = role === 'super_admin' ? await getKnuctDashboardStats() : undefined;
 
     return NextResponse.json({
-      scope: scopeLabel,
+      scope: scopeKey,
+      scopeLabel: scopeLabelText,
+      analyticsScope,
+      knuct,
       stats: { totalStudents, totalFaculty, totalCourses, totalSessions, activeSessions, pendingViolations: totalViolations, totalEnrollments, overallAttendance, totalPresent, totalAbsent, totalLate },
+      analytics: {
+        atRiskCount: atRiskStudents.length,
+        avgGradePct,
+        quizAttempts: quizAgg._count._all,
+        avgQuizScore: Math.round(quizAgg._avg.percentage ?? 0),
+        submissions: submissionCount,
+        weeklyRateTrend,
+        departmentAnalytics,
+        atRiskStudents,
+        topPerformers,
+      },
       courseAttendance, captureMethods, weeklyTrend, recentActivity: recentRecords, activeSessionsList,
       deptAttendance, violationByType, violationBySeverity,
     });

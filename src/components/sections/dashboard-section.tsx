@@ -1,6 +1,7 @@
 'use client';
 
 import { useAppStore, ROLE_LABELS, type Role } from '@/lib/store';
+import { cn } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import {
   Users, GraduationCap, BookOpen, ScanLine, Activity,
@@ -9,7 +10,7 @@ import {
   AlertTriangle, RefreshCw, Calendar, ClipboardCheck,
   TrendingUp, FileText, Award, Bell, Eye, Radio,
   Building2, Wifi, ShieldCheck, CheckCircle2, XCircle,
-  Timer, BookMarked, BarChart2, Target,
+  Timer, BookMarked,   BarChart2, Target, Download, Link2, Wallet,
 } from 'lucide-react';
 import {
   Card, CardHeader, CardTitle, CardContent, CardDescription,
@@ -61,6 +62,19 @@ interface WeeklyTrend {
   present: number;
   absent: number;
   late: number;
+  rate?: number;
+}
+
+interface DashboardAnalytics {
+  atRiskCount: number;
+  avgGradePct: number;
+  quizAttempts: number;
+  avgQuizScore: number;
+  submissions: number;
+  weeklyRateTrend: { week: string; present: number; absent: number; late: number; sessions: number; rate: number }[];
+  departmentAnalytics: { department: string; students: number; avgAttendance: number; atRisk: number }[];
+  atRiskStudents: { id: string; name: string; employeeId: string | null; department: string | null; stats: { percentage: number; total: number } }[];
+  topPerformers: { id: string; name: string; employeeId: string | null; department: string | null; stats: { percentage: number; total: number } }[];
 }
 
 interface RecentActivity {
@@ -85,8 +99,26 @@ interface ActiveSession {
   timetableSlot: { roomNumber: string; building: string } | null;
 }
 
+interface KnuctDashboardStats {
+  enabled: boolean;
+  adapterMode: 'mock' | 'live';
+  health: 'ok' | 'degraded' | 'down';
+  circuitBreakerOpen: boolean;
+  wallets: { total: number; active: number; failed: number; pending: number };
+  didCoveragePct: number;
+  credentials: { today: number; week: number; failed: number; byType: Record<string, number> };
+  anchors: { today: number; byModule: Record<string, number> };
+  recentActivity: Array<{ type: 'anchor' | 'credential'; module: string; ref: string; at: string }>;
+}
+
 interface DashboardData {
-  scope?: 'student' | 'parent' | 'campus' | 'visitor';
+  scope?: 'student' | 'parent' | 'campus' | 'department' | 'instructor' | 'visitor';
+  scopeLabel?: string;
+  analyticsScope?: 'campus' | 'department' | 'instructor';
+  riskStatus?: 'on_track' | 'watch' | 'at_risk' | 'no_data';
+  analytics?: DashboardAnalytics;
+  knuct?: KnuctDashboardStats;
+  weeklyRateTrend?: { week: string; present: number; absent: number; late: number; sessions: number; rate: number }[];
   ward?: { id: string; name: string; department: string | null; employeeId: string | null };
   stats: DashboardStats;
   courseAttendance: CourseAttendance[];
@@ -413,26 +445,62 @@ function ActiveSessionsCard({ sessions }: { sessions: ActiveSession[] }) {
 
 // ─── Charts ──────────────────────────────────────────────────────────────────
 
+function ChartBox({ height, children }: { height: number; children: React.ReactNode }) {
+  return (
+    <div className="relative isolate w-full overflow-hidden" style={{ height, minHeight: height }}>
+      {children}
+    </div>
+  );
+}
+
+const chartContainerClass = 'aspect-auto h-64 w-full min-h-64 shrink-0 overflow-hidden';
+
 function CourseAttendanceChart({ data }: { data: CourseAttendance[] }) {
   const chartData = data.map((c) => ({ code: c.code, percentage: c.percentage, name: c.name }));
   return (
-    <Card>
+    <Card className="overflow-hidden min-w-0">
       <CardHeader className="pb-2"><CardTitle className="text-base">Course-wise Attendance</CardTitle></CardHeader>
-      <CardContent>
-        <ChartContainer config={courseChartConfig} className="h-64 w-full">
-          <BarChart data={chartData} margin={{ top: 8, right: 8, bottom: 4, left: -4 }}>
-            <CartesianGrid vertical={false} strokeDasharray="3 3" />
-            <XAxis dataKey="code" tickLine={false} axisLine={false} fontSize={11} className="fill-muted-foreground" />
-            <YAxis tickLine={false} axisLine={false} fontSize={11} domain={[0, 100]} className="fill-muted-foreground" />
-            <ChartTooltip content={<ChartTooltipContent formatter={(value, _name, item) => (
-              <div className="flex flex-col gap-0.5">
-                <span className="font-medium">{(item as { payload?: { name?: string } }).payload?.name}</span>
-                <span>{Number(value)}% attendance</span>
+      <CardContent className="space-y-4 overflow-hidden">
+        <ChartBox height={256}>
+          <ChartContainer config={courseChartConfig} className={chartContainerClass}>
+            <BarChart data={chartData} margin={{ top: 8, right: 8, bottom: 4, left: -4 }}>
+              <CartesianGrid vertical={false} strokeDasharray="3 3" />
+              <XAxis dataKey="code" tickLine={false} axisLine={false} fontSize={11} className="fill-muted-foreground" />
+              <YAxis tickLine={false} axisLine={false} fontSize={11} domain={[0, 100]} className="fill-muted-foreground" />
+              <ChartTooltip content={<ChartTooltipContent formatter={(value, _name, item) => (
+                <div className="flex flex-col gap-0.5">
+                  <span className="font-medium">{(item as { payload?: { name?: string } }).payload?.name}</span>
+                  <span>{Number(value)}% attendance</span>
+                </div>
+              )} />} />
+              <Bar dataKey="percentage" fill={NAVY} radius={[4, 4, 0, 0]} maxBarSize={40} />
+            </BarChart>
+          </ChartContainer>
+        </ChartBox>
+        {data.length > 0 && (
+          <>
+            <Separator />
+            <ScrollArea className="max-h-48">
+              <div className="space-y-3 pr-3">
+                {data.map((course) => (
+                  <div key={course.id} className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-2 text-sm">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Badge variant="secondary" className="text-[10px] font-mono shrink-0">{course.code}</Badge>
+                        <span className="font-medium text-xs truncate" title={course.name}>{course.name}</span>
+                      </div>
+                      <span className={cn(
+                        'text-xs font-semibold shrink-0',
+                        course.percentage >= 75 ? 'text-green-600' : course.percentage >= 50 ? 'text-amber-600' : 'text-red-600'
+                      )}>{course.percentage}%</span>
+                    </div>
+                    <Progress value={course.percentage} className="h-2" />
+                  </div>
+                ))}
               </div>
-            )} />} />
-            <Bar dataKey="percentage" fill={NAVY} radius={[4, 4, 0, 0]} maxBarSize={40} />
-          </BarChart>
-        </ChartContainer>
+            </ScrollArea>
+          </>
+        )}
       </CardContent>
     </Card>
   );
@@ -445,10 +513,11 @@ function CaptureMethodsChart({ data }: { data: Record<string, number> }) {
   const total = chartData.reduce((s, d) => s + d.count, 0);
 
   return (
-    <Card>
+    <Card className="overflow-hidden min-w-0">
       <CardHeader className="pb-2"><CardTitle className="text-base">Capture Method Distribution</CardTitle></CardHeader>
-      <CardContent>
-        <ChartContainer config={captureChartConfig} className="h-64 w-full">
+      <CardContent className="overflow-hidden">
+        <ChartBox height={256}>
+          <ChartContainer config={captureChartConfig} className={chartContainerClass}>
           <PieChart>
             <Pie data={chartData} dataKey="count" nameKey="method" cx="50%" cy="50%" innerRadius={55} outerRadius={85} paddingAngle={3} strokeWidth={2} stroke="var(--background)">
               {chartData.map((entry) => (<Cell key={entry.method} fill={entry.fill} />))}
@@ -469,6 +538,7 @@ function CaptureMethodsChart({ data }: { data: Record<string, number> }) {
             <ChartLegend content={<ChartLegendContent nameKey="method" className="flex-wrap gap-x-4 gap-y-1 text-[11px]" />} />
           </PieChart>
         </ChartContainer>
+        </ChartBox>
         <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 pt-2 px-4">
           {chartData.map((entry) => {
             const Icon = captureMethodConfig[entry.method]?.icon || Hand;
@@ -487,10 +557,151 @@ function CaptureMethodsChart({ data }: { data: Record<string, number> }) {
   );
 }
 
+function WeeklyRateTrendChart({ data }: { data: { week: string; rate: number }[] }) {
+  if (!data.length) return null;
+  return (
+    <Card className="overflow-hidden min-w-0">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base flex items-center gap-2">
+          <TrendingUp className="h-4 w-4" style={{ color: NAVY }} />
+          Attendance rate trend
+        </CardTitle>
+        <CardDescription>Weekly present % in your scope</CardDescription>
+      </CardHeader>
+      <CardContent className="overflow-hidden">
+        <ChartBox height={220}>
+          <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="week" fontSize={10} tickFormatter={(v) => v.slice(5)} />
+            <YAxis domain={[0, 100]} fontSize={11} />
+            <RechartsTooltip formatter={(v: number) => [`${v}%`, 'Rate']} />
+            <Line type="monotone" dataKey="rate" stroke={NAVY} strokeWidth={2} dot={{ r: 3 }} />
+          </LineChart>
+        </ResponsiveContainer>
+        </ChartBox>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AnalyticsInsightsPanel({ data }: { data: DashboardData }) {
+  const analytics = data.analytics;
+  if (!analytics) return null;
+
+  const rateData = analytics.weeklyRateTrend ?? [];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Depth analytics</h2>
+        {data.scopeLabel && (
+          <Badge className="text-white" style={{ backgroundColor: NAVY }}>{data.scopeLabel}</Badge>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+        {[
+          { label: 'At risk (<75%)', value: analytics.atRiskCount, icon: AlertTriangle, color: '#E74C3C' },
+          { label: 'Avg grade', value: `${analytics.avgGradePct}%`, icon: Award, color: NAVY },
+          { label: 'Quiz attempts', value: analytics.quizAttempts, icon: ClipboardCheck, color: '#7C3AED' },
+          { label: 'Avg quiz score', value: `${analytics.avgQuizScore}%`, icon: Target, color: '#1B6B4A' },
+          { label: 'Submissions', value: analytics.submissions, icon: FileText, color: '#B45309' },
+        ].map((k) => (
+          <Card key={k.label} className="py-3">
+            <CardContent className="flex items-center gap-3 px-3">
+              <div className="h-9 w-9 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${k.color}12` }}>
+                <k.icon className="h-4 w-4" style={{ color: k.color }} />
+              </div>
+              <div>
+                <p className="text-lg font-bold">{k.value}</p>
+                <p className="text-[10px] text-muted-foreground">{k.label}</p>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+        <div className="min-w-0">
+          <WeeklyRateTrendChart data={rateData} />
+        </div>
+
+        <div className="min-w-0">
+        {data.analyticsScope === 'campus' && analytics.departmentAnalytics.length > 0 ? (
+          <Card className="overflow-hidden min-w-0">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Department attendance</CardTitle>
+              <CardDescription>Average % by department</CardDescription>
+            </CardHeader>
+            <CardContent className="overflow-hidden">
+              <ChartBox height={220}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={analytics.departmentAnalytics.slice(0, 6)}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="department" fontSize={9} interval={0} angle={-15} textAnchor="end" height={50} />
+                    <YAxis domain={[0, 100]} fontSize={11} />
+                    <RechartsTooltip />
+                    <Bar dataKey="avgAttendance" fill="#1B6B4A" name="Avg %" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </ChartBox>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="overflow-hidden min-w-0">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Top performers</CardTitle>
+              <CardDescription>Highest attendance in your scope</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {analytics.topPerformers.slice(0, 5).map((s, i) => (
+                <div key={s.id} className="flex items-center justify-between text-sm border-b pb-2 last:border-0">
+                  <span className="font-medium truncate">{i + 1}. {s.name}</span>
+                  <Badge variant="secondary">{s.stats.percentage}%</Badge>
+                </div>
+              ))}
+              {analytics.topPerformers.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-6">No attendance data yet</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+        </div>
+      </div>
+
+      {analytics.atRiskStudents.length > 0 && (
+        <Card className="border-amber-200 bg-amber-50/50 dark:bg-amber-950/20">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2 text-amber-800">
+              <AlertTriangle className="h-4 w-4" /> Students below 75% ({analytics.atRiskCount})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <ScrollArea className="max-h-48">
+              <div className="divide-y">
+                {analytics.atRiskStudents.map((s) => (
+                  <div key={s.id} className="flex items-center justify-between px-4 py-2.5 text-sm">
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">{s.name}</p>
+                      <p className="text-xs text-muted-foreground">{s.department ?? '—'}</p>
+                    </div>
+                    <Badge variant="outline" className="text-red-600 border-red-200 shrink-0">{s.stats.percentage}%</Badge>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 function WeeklyTrendChart({ data }: { data: WeeklyTrend[] }) {
   const chartData = data.map((d) => ({ ...d, date: formatDate(d.date) }));
   return (
-    <Card className="lg:col-span-2">
+    <Card className="overflow-hidden min-w-0">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="text-base">Weekly Attendance Trend</CardTitle>
@@ -501,8 +712,9 @@ function WeeklyTrendChart({ data }: { data: WeeklyTrend[] }) {
           </div>
         </div>
       </CardHeader>
-      <CardContent>
-        <ChartContainer config={weeklyChartConfig} className="h-56 w-full">
+      <CardContent className="overflow-hidden">
+        <ChartBox height={224}>
+          <ChartContainer config={weeklyChartConfig} className="aspect-auto h-56 w-full min-h-56 shrink-0 overflow-hidden">
           <BarChart data={chartData} margin={{ top: 8, right: 8, bottom: 4, left: -4 }}>
             <CartesianGrid vertical={false} strokeDasharray="3 3" />
             <XAxis dataKey="date" tickLine={false} axisLine={false} fontSize={11} className="fill-muted-foreground" />
@@ -513,6 +725,7 @@ function WeeklyTrendChart({ data }: { data: WeeklyTrend[] }) {
             <Bar dataKey="absent" stackId="a" fill="#E74C3C" radius={[4, 4, 0, 0]} maxBarSize={36} />
           </BarChart>
         </ChartContainer>
+        </ChartBox>
       </CardContent>
     </Card>
   );
@@ -524,10 +737,11 @@ function ViolationsChart({ byType, bySeverity }: { byType: Record<string, number
   const severityData = Object.entries(bySeverity).map(([sev, count]) => ({ severity: sev.charAt(0).toUpperCase() + sev.slice(1), count }));
 
   return (
-    <Card>
+    <Card className="overflow-hidden min-w-0">
       <CardHeader className="pb-2"><CardTitle className="text-base">Violations Overview</CardTitle></CardHeader>
-      <CardContent className="space-y-4">
-        <ChartContainer config={violationChartConfig} className="h-36 w-full">
+      <CardContent className="space-y-4 overflow-hidden">
+        <ChartBox height={144}>
+          <ChartContainer config={violationChartConfig} className="aspect-auto h-36 w-full min-h-36 shrink-0 overflow-hidden">
           <BarChart data={chartData} layout="vertical" margin={{ top: 4, right: 8, bottom: 4, left: 8 }}>
             <CartesianGrid horizontal={false} strokeDasharray="3 3" />
             <XAxis type="number" tickLine={false} axisLine={false} fontSize={11} className="fill-muted-foreground" />
@@ -536,6 +750,7 @@ function ViolationsChart({ byType, bySeverity }: { byType: Record<string, number
             <Bar dataKey="count" fill="#E74C3C" radius={[0, 4, 4, 0]} maxBarSize={20} />
           </BarChart>
         </ChartContainer>
+        </ChartBox>
         <Separator />
         <div className="space-y-2">
           <p className="text-xs font-medium text-muted-foreground">Severity Breakdown</p>
@@ -601,13 +816,79 @@ function RecentActivityFeed({ activities }: { activities: RecentActivity[] }) {
 
 // ─── ROLE-SPECIFIC DASHBOARD SECTIONS ────────────────────────────────────────
 
+// ─── Super Admin Knuct Operations Center ────────────────────────────────────
+
+function KnuctOpsPanel({ knuct }: { knuct: KnuctDashboardStats }) {
+  const { setActiveSection } = useAppStore();
+  const healthBadge = {
+    ok: { label: 'Healthy', className: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
+    degraded: { label: 'Degraded', className: 'bg-amber-100 text-amber-800 border-amber-200' },
+    down: { label: 'Down', className: 'bg-red-100 text-red-800 border-red-200' },
+  }[knuct.health];
+
+  return (
+    <Card className="border-[#1A3C6E]/20 bg-gradient-to-br from-[#1A3C6E]/5 to-transparent">
+      <CardHeader className="pb-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <CardTitle className="text-base flex items-center gap-2" style={{ color: NAVY }}>
+            <Link2 className="h-4 w-4" /> Knuct Operations Center
+          </CardTitle>
+          <div className="flex flex-wrap gap-2">
+            <Badge variant="outline" className={healthBadge.className}>{healthBadge.label}</Badge>
+            <Badge variant="outline">{knuct.adapterMode === 'live' ? 'Live adapter' : 'Mock adapter'}</Badge>
+            {knuct.circuitBreakerOpen && (
+              <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Circuit open</Badge>
+            )}
+          </div>
+        </div>
+        <CardDescription>
+          Blockchain identity pilot — wallet provisioning and campus DID coverage (super_admin)
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+          {[
+            { label: 'Active wallets', value: knuct.wallets.active, icon: Wallet, color: NAVY },
+            { label: 'Pending', value: knuct.wallets.pending, icon: Timer, color: '#B45309' },
+            { label: 'Failed', value: knuct.wallets.failed, icon: XCircle, color: '#E74C3C' },
+            { label: 'DID coverage', value: `${knuct.didCoveragePct}%`, icon: Users, color: '#1B6B4A' },
+            { label: 'Total tracked', value: knuct.wallets.total, icon: ShieldCheck, color: '#7C3AED' },
+            { label: 'Knuct enabled', value: knuct.enabled ? 'Yes' : 'No', icon: Radio, color: '#0E7490' },
+          ].map((k) => (
+            <div key={k.label} className="rounded-lg border bg-card p-3">
+              <div className="flex items-center gap-2 mb-1">
+                <k.icon className="h-3.5 w-3.5" style={{ color: k.color }} />
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wide">{k.label}</span>
+              </div>
+              <p className="text-lg font-bold">{k.value}</p>
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={() => setActiveSection('settings')}>
+            Settings
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setActiveSection('users')}>
+            Users (retry failed)
+          </Button>
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          Phase 2 credentials and Phase 3 anchor metrics will appear here when vendor APIs are available.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Admin / Super Admin Dashboard (Full View) ──────────────────────────────
 
-function AdminDashboard({ data }: { data: DashboardData }) {
+function AdminDashboard({ data, role }: { data: DashboardData; role: Role }) {
   const { stats, courseAttendance, captureMethods, weeklyTrend, recentActivity, activeSessionsList, violationByType, violationBySeverity } = data;
 
   return (
     <div className="space-y-6">
+      {role === 'super_admin' && data.knuct && <KnuctOpsPanel knuct={data.knuct} />}
+      <AnalyticsInsightsPanel data={data} />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Total Students" value={stats.totalStudents} icon={Users} format="number" indicator="up" indicatorValue="12%" />
         <StatCard label="Total Faculty" value={stats.totalFaculty} icon={GraduationCap} format="number" indicator="up" indicatorValue="5%" />
@@ -618,10 +899,11 @@ function AdminDashboard({ data }: { data: DashboardData }) {
         <StatCard label="Total Enrollments" value={stats.totalEnrollments} icon={UserPlus} format="number" indicator="up" indicatorValue="10%" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <ActiveSessionsCard sessions={activeSessionsList} />
-        <ViolationsChart byType={violationByType} bySeverity={violationBySeverity} />
-        <Card>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+        <div className="min-w-0"><ActiveSessionsCard sessions={activeSessionsList} /></div>
+        <div className="min-w-0"><ViolationsChart byType={violationByType} bySeverity={violationBySeverity} /></div>
+        <div className="min-w-0">
+        <Card className="overflow-hidden">
           <CardHeader className="pb-2"><CardTitle className="text-base">Attendance Breakdown</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-3">
@@ -647,11 +929,12 @@ function AdminDashboard({ data }: { data: DashboardData }) {
             </div>
           </CardContent>
         </Card>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <CourseAttendanceChart data={courseAttendance} />
-        <CaptureMethodsChart data={captureMethods} />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+        <div className="min-w-0"><CourseAttendanceChart data={courseAttendance} /></div>
+        <div className="min-w-0"><CaptureMethodsChart data={captureMethods} /></div>
       </div>
       <WeeklyTrendChart data={weeklyTrend} />
       <RecentActivityFeed activities={recentActivity} />
@@ -666,6 +949,7 @@ function HODDashboard({ data }: { data: DashboardData }) {
 
   return (
     <div className="space-y-6">
+      <AnalyticsInsightsPanel data={data} />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Department Students" value={stats.totalStudents} icon={Users} format="number" indicator="up" indicatorValue="8%" color="#1B6B4A" />
         <StatCard label="Department Faculty" value={stats.totalFaculty} icon={GraduationCap} format="number" />
@@ -673,12 +957,12 @@ function HODDashboard({ data }: { data: DashboardData }) {
         <StatCard label="Pending Violations" value={stats.pendingViolations} icon={ShieldAlert} format="number" color="#E74C3C" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <ActiveSessionsCard sessions={activeSessionsList} />
-        <ViolationsChart byType={violationByType} bySeverity={violationBySeverity} />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+        <div className="min-w-0"><ActiveSessionsCard sessions={activeSessionsList} /></div>
+        <div className="min-w-0"><ViolationsChart byType={violationByType} bySeverity={violationBySeverity} /></div>
       </div>
 
-      <CourseAttendanceChart data={courseAttendance} />
+      <div className="min-w-0"><CourseAttendanceChart data={courseAttendance} /></div>
       <WeeklyTrendChart data={weeklyTrend} />
       <RecentActivityFeed activities={data.recentActivity} />
     </div>
@@ -692,6 +976,7 @@ function FacultyDashboard({ data }: { data: DashboardData }) {
 
   return (
     <div className="space-y-6">
+      <AnalyticsInsightsPanel data={data} />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="My Courses" value={stats.totalCourses} icon={BookOpen} format="number" color="#7C3AED" />
         <StatCard label="Active Sessions" value={stats.activeSessions} icon={ScanLine} format="number" color="#7C3AED" />
@@ -701,9 +986,10 @@ function FacultyDashboard({ data }: { data: DashboardData }) {
 
       <ActiveSessionsCard sessions={activeSessionsList} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <CourseAttendanceChart data={courseAttendance} />
-        <Card>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+        <div className="min-w-0"><CourseAttendanceChart data={courseAttendance} /></div>
+        <div className="min-w-0">
+        <Card className="overflow-hidden">
           <CardHeader className="pb-2"><CardTitle className="text-base">Quick Actions</CardTitle></CardHeader>
           <CardContent className="grid grid-cols-2 gap-3">
             {[
@@ -722,6 +1008,7 @@ function FacultyDashboard({ data }: { data: DashboardData }) {
             ))}
           </CardContent>
         </Card>
+        </div>
       </div>
 
       <WeeklyTrendChart data={weeklyTrend} />
@@ -782,11 +1069,22 @@ function LabAssistantDashboard({ data }: { data: DashboardData }) {
 // ─── Student Dashboard ───────────────────────────────────────────────────────
 
 function StudentDashboard({ data }: { data: DashboardData }) {
-  const { stats, courseAttendance, weeklyTrend } = data;
+  const { stats, courseAttendance, weeklyTrend, riskStatus, weeklyRateTrend } = data;
   const attendanceColor = stats.overallAttendance >= 75 ? '#0E7490' : stats.overallAttendance >= 50 ? '#B45309' : '#E74C3C';
+  const riskBadge = {
+    on_track: { label: 'On track', className: 'bg-emerald-100 text-emerald-800' },
+    watch: { label: 'Watch list', className: 'bg-amber-100 text-amber-800' },
+    at_risk: { label: 'At risk (<75%)', className: 'bg-red-100 text-red-800' },
+    no_data: { label: 'No attendance yet', className: 'bg-muted text-muted-foreground' },
+  }[riskStatus ?? 'no_data'];
+  const rateTrend = weeklyRateTrend ?? weeklyTrend.map((w) => ({ week: w.date, rate: w.rate ?? 0 }));
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center gap-2 flex-wrap">
+        <Badge className={riskBadge.className}>{riskBadge.label}</Badge>
+        <Badge variant="outline" className="gap-1"><BarChart2 className="h-3 w-3" /> Personal analytics</Badge>
+      </div>
       {/* Attendance Ring + Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="sm:col-span-2 lg:col-span-1">
@@ -861,6 +1159,10 @@ function StudentDashboard({ data }: { data: DashboardData }) {
           </CardContent>
         </Card>
       </div>
+
+      {rateTrend.length > 0 && (
+        <WeeklyRateTrendChart data={rateTrend.map((w) => ({ week: w.week, rate: w.rate }))} />
+      )}
 
       <WeeklyTrendChart data={weeklyTrend} />
     </div>
@@ -1042,6 +1344,7 @@ function SecurityDashboard({ data }: { data: DashboardData }) {
 
   return (
     <div className="space-y-6">
+      <AnalyticsInsightsPanel data={data} />
       {/* Alert Banner */}
       {stats.pendingViolations > 0 && (
         <Card className="border-l-4 border-l-red-500 bg-red-50 dark:bg-red-950/20">
@@ -1119,8 +1422,8 @@ export default function DashboardSection() {
       return r.json();
     }),
     enabled: !!currentUser,
-    refetchInterval: 30000,
-    staleTime: 15000,
+    staleTime: 2 * 60 * 1000,
+    refetchInterval: 2 * 60 * 1000,
   });
 
   if (!currentUser) return <DashboardSkeleton />;
@@ -1151,18 +1454,25 @@ export default function DashboardSection() {
           </h1>
           <p className="text-sm text-muted-foreground">
             JNTUH Engineering College &mdash; {roleDescriptions[role]}
+            {data.scopeLabel && (
+              <Badge className="ml-2 text-[10px] text-white align-middle" style={{ backgroundColor: ROLE_COLORS[role] }}>
+                {data.scopeLabel}
+              </Badge>
+            )}
           </p>
         </div>
+        <div className="flex gap-2">
         <Button variant="outline" size="sm" onClick={() => refetch()} className="gap-2 w-fit">
           <RefreshCw className="h-3.5 w-3.5" /> Refresh
         </Button>
+        </div>
       </div>
 
       {/* Role-specific Welcome */}
       <WelcomeBanner />
 
       {/* Role-specific content */}
-      {(role === 'super_admin' || role === 'admin') && <AdminDashboard data={data} />}
+      {(role === 'super_admin' || role === 'admin') && <AdminDashboard data={data} role={role} />}
       {role === 'hod' && <HODDashboard data={data} />}
       {role === 'faculty' && <FacultyDashboard data={data} />}
       {role === 'lab_assistant' && <LabAssistantDashboard data={data} />}

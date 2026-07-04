@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { requireAuth, STAFF_ROLES, requireRoles, requireCampusRead, getCampusScope, assertCourseInScope } from '@/lib/auth-helpers';
+import { rateLimitByUser } from '@/lib/api-rate-limit';
 
 export async function GET(request: Request) {
   try {
@@ -90,6 +91,9 @@ export async function POST(request: Request) {
   try {
     const { error, session } = await requireRoles(STAFF_ROLES);
     if (error || !session) return error;
+
+    const limited = await rateLimitByUser(request, session.user.id, 'attendance-sessions', 20, 60_000);
+    if (limited) return limited;
 
     const body = await request.json();
     const { courseId, sessionDate, startTime, endTime, captureMethod, geofenceId, timetableSlotId, expectedCount } = body;

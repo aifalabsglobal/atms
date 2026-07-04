@@ -389,6 +389,20 @@ async function main() {
       enrollmentData.push({ courseId: course.id, studentId, status: 'enrolled' });
     }
   }
+
+  // Coding practice problems are on CS201ES — must be outside the first-10 slice
+  const codingCourse = courses.find((c) => c.code === 'CS201ES');
+  if (codingCourse) {
+    for (const studentId of cseStudentIds) {
+      const exists = enrollmentData.some(
+        (e) => e.courseId === codingCourse.id && e.studentId === studentId
+      );
+      if (!exists) {
+        enrollmentData.push({ courseId: codingCourse.id, studentId, status: 'enrolled' });
+      }
+    }
+  }
+
   await db.courseEnrollment.createMany({ data: enrollmentData });
 
   // ==========================================
@@ -657,6 +671,26 @@ async function main() {
     db.quizQuestion.create({ data: { courseId: courses[13].id, question: 'Which normal form eliminates transitive dependencies?', type: 'mcq', options: JSON.stringify(['1NF', '2NF', '3NF', 'BCNF']), correctAnswer: '3NF', points: 2, difficulty: 'medium' } }),
     db.quizQuestion.create({ data: { courseId: courses[14].id, question: 'Java supports multiple inheritance through classes.', type: 'true_false', options: JSON.stringify(['True', 'False']), correctAnswer: 'False', points: 1, difficulty: 'easy' } }),
   ]);
+
+  // LeetCode-style coding problems
+  console.log('📦 Creating coding problems...');
+  const { BUNDLED_CODING_PROBLEMS } = await import('../src/data/leetcode-problems');
+  for (const prob of BUNDLED_CODING_PROBLEMS) {
+    const course = courses.find((c) => c.code === prob.courseCode);
+    if (!course) continue;
+    await db.quizQuestion.create({
+      data: {
+        courseId: course.id,
+        question: prob.statement,
+        type: 'coding',
+        options: JSON.stringify(prob.meta),
+        correctAnswer: null,
+        points: prob.points,
+        difficulty: prob.difficulty,
+        explanation: `Reference: hash-map / stack / Kadane / DFS approaches for ${prob.meta.title}`,
+      },
+    });
+  }
 
   // Quiz attempts
   for (const student of students.slice(0, 5)) {

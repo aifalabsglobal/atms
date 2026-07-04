@@ -19,7 +19,7 @@ type Endpoint = { name: string; path: string; section?: Section; allowed: Role[]
 
 const ENDPOINTS: Endpoint[] = [
   { name: 'dashboard', path: '/api/dashboard', section: 'dashboard', allowed: ['super_admin', 'admin', 'hod', 'faculty', 'lab_assistant', 'student', 'parent', 'visitor', 'security'] },
-  { name: 'masters', path: '/api/masters/departments?limit=5', section: 'masters', allowed: ['super_admin', 'admin'] },
+  { name: 'masters', path: '/api/masters/departments?limit=5', section: 'masters', allowed: ['super_admin', 'admin', 'hod'] },
   { name: 'users', path: '/api/users?limit=5', section: 'users', allowed: ['super_admin', 'admin', 'hod'] },
   { name: 'lms', path: '/api/lms/courses?limit=5', section: 'lms', allowed: ['super_admin', 'admin', 'hod', 'faculty', 'student', 'parent'] },
   { name: 'violations', path: '/api/attendance/violations?limit=1', section: 'violations', allowed: ['super_admin', 'admin', 'hod', 'faculty', 'security'] },
@@ -133,6 +133,24 @@ async function main() {
         rows.push({ role: account.label, check: ep.name, ok: true, detail: `${note}${uiNote}`, ms });
       } catch (e) {
         rows.push({ role: account.label, check: ep.name, ok: false, detail: e instanceof Error ? e.message : String(e), ms: Date.now() - start });
+      }
+    }
+
+    if (account.role === 'hod') {
+      const start = Date.now();
+      try {
+        const res = await fetch(`${BASE}/api/lms/assignments`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Cookie: cookie },
+          body: JSON.stringify({ courseId: 'x', title: 'x', dueDate: new Date().toISOString() }),
+        });
+        if (res.status !== 403) {
+          rows.push({ role: account.label, check: 'lms-write-blocked', ok: false, detail: `expected 403 got ${res.status}`, ms: Date.now() - start });
+        } else {
+          rows.push({ role: account.label, check: 'lms-write-blocked', ok: true, detail: '403', ms: Date.now() - start });
+        }
+      } catch (e) {
+        rows.push({ role: account.label, check: 'lms-write-blocked', ok: false, detail: e instanceof Error ? e.message : String(e), ms: Date.now() - start });
       }
     }
   }

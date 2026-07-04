@@ -1,11 +1,11 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
-import { requireAuth, ADMIN_ROLES, requireRoles } from '@/lib/auth-helpers';
+import { requireMastersRead, requireMastersWrite, auditMasterMutation, mastersError, applySemesterDepartmentScope } from '@/lib/masters-helpers';
 
 export async function GET(request: Request) {
   try {
-    const { error } = await requireRoles(ADMIN_ROLES);
-    if (error) return error;
+    const { error, session } = await requireMastersRead();
+    if (error || !session) return error;
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '50');
@@ -25,6 +25,8 @@ export async function GET(request: Request) {
     if (isActive !== null && isActive !== undefined && isActive !== '') {
       where.isActive = isActive === 'true';
     }
+
+    await applySemesterDepartmentScope(session, where);
 
     const [semesters, total] = await Promise.all([
       db.semester.findMany({
@@ -49,35 +51,21 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { error } = await requireRoles(ADMIN_ROLES);
-    if (error) return error;
+    const { error, session } = await requireMastersWrite();
+    if (error || !session) return error;
 
     const body = await request.json();
     const { academicYearId, name, code, year, semester, startDate, endDate, status, isActive } = body;
 
     if (!academicYearId || !name || !code || !startDate || !endDate) {
-      return NextResponse.json(
-        { error: 'Missing required fields: academicYearId, name, code, startDate, and endDate are required' },
-        { status: 400 }
-      );
+      return mastersError('Missing required fields: academicYearId, name, code, startDate, and endDate are required');
     }
 
-    // Check unique constraint on academicYearId + code
-    const existing = await db.semester.findFirst({
-      where: { academicYearId, code },
-    });
-    if (existing) {
-      return NextResponse.json(
-        { error: 'Semester with this code already exists for the given academic year' },
-        { status: 409 }
-      );
-    }
+    const existing = await db.semester.findFirst({ where: { academicYearId, code } });
+    if (existing) return mastersError('Semester with this code already exists for the given academic year', 409);
 
-    // Verify academic year exists
     const academicYear = await db.academicYear.findUnique({ where: { id: academicYearId } });
-    if (!academicYear) {
-      return NextResponse.json({ error: 'Academic year not found' }, { status: 404 });
-    }
+    if (!academicYear) return mastersError('Academic year not found', 404);
 
     const semesterRecord = await db.semester.create({
       data: {
@@ -96,6 +84,8 @@ export async function POST(request: Request) {
       },
     });
 
+    await auditMasterMutation(request, session.user.id, 'masters.semester.create', `semester:${semesterRecord.id}`, { code });
+
     return NextResponse.json({ semester: semesterRecord }, { status: 201 });
   } catch (error) {
     console.error('Create Semester API error:', error);
@@ -105,45 +95,31 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const { error } = await requireRoles(ADMIN_ROLES);
-    if (error) return error;
+    const { error, session } = await requireMastersWrite();
+    if (error || !session) return error;
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
-
-    if (!id) {
-      return NextResponse.json({ error: 'Missing required parameter: id' }, { status: 400 });
-    }
+    if (!id) return mastersError('Missing required parameter: id');
 
     const existing = await db.semester.findUnique({ where: { id } });
-    if (!existing) {
-      return NextResponse.json({ error: 'Semester not found' }, { status: 404 });
-    }
+    if (!existing) return mastersError('Semester not found', 404);
 
     const body = await request.json();
     const { academicYearId, name, code, year, semester, startDate, endDate, status, isActive } = body;
 
-    // If academicYearId or code is being changed, check unique constraint
     const checkAYId = academicYearId || existing.academicYearId;
     const checkCode = code || existing.code;
     if ((academicYearId && academicYearId !== existing.academicYearId) || (code && code !== existing.code)) {
       const duplicate = await db.semester.findFirst({
         where: { academicYearId: checkAYId, code: checkCode, id: { not: id } },
       });
-      if (duplicate) {
-        return NextResponse.json(
-          { error: 'Semester with this code already exists for the given academic year' },
-          { status: 409 }
-        );
-      }
+      if (duplicate) return mastersError('Semester with this code already exists for the given academic year', 409);
     }
 
-    // Verify academic year exists if being changed
     if (academicYearId && academicYearId !== existing.academicYearId) {
       const academicYear = await db.academicYear.findUnique({ where: { id: academicYearId } });
-      if (!academicYear) {
-        return NextResponse.json({ error: 'Academic year not found' }, { status: 404 });
-      }
+      if (!academicYear) return mastersError('Academic year not found', 404);
     }
 
     const semesterRecord = await db.semester.update({
@@ -164,6 +140,8 @@ export async function PUT(request: Request) {
       },
     });
 
+    await auditMasterMutation(request, session.user.id, 'masters.semester.update', `semester:${id}`, { code: semesterRecord.code });
+
     return NextResponse.json({ semester: semesterRecord });
   } catch (error) {
     console.error('Update Semester API error:', error);
@@ -173,38 +151,28 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const { error } = await requireRoles(ADMIN_ROLES);
-    if (error) return error;
+    const { error, session } = await requireMastersWrite();
+    if (error || !session) return error;
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
-
-    if (!id) {
-      return NextResponse.json({ error: 'Missing required parameter: id' }, { status: 400 });
-    }
+    if (!id) return mastersError('Missing required parameter: id');
 
     const existing = await db.semester.findUnique({
       where: { id },
-      include: {
-        _count: { select: { subjects: true, timetableSlots: true } },
-      },
+      include: { _count: { select: { subjects: true, timetableSlots: true } } },
     });
+    if (!existing) return mastersError('Semester not found', 404);
 
-    if (!existing) {
-      return NextResponse.json({ error: 'Semester not found' }, { status: 404 });
-    }
-
-    // Check for dependent records
     if (existing._count.subjects > 0) {
-      return NextResponse.json(
-        {
-          error: `Cannot delete semester. It has ${existing._count.subjects} subject(s) associated with it. Please remove them first.`,
-        },
-        { status: 409 }
+      return mastersError(
+        `Cannot delete semester. It has ${existing._count.subjects} subject(s) associated with it. Please remove them first.`,
+        409
       );
     }
 
     await db.semester.delete({ where: { id } });
+    await auditMasterMutation(request, session.user.id, 'masters.semester.delete', `semester:${id}`, { code: existing.code });
 
     return NextResponse.json({ message: 'Semester deleted successfully' });
   } catch (error) {

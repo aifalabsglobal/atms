@@ -2,15 +2,18 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   Settings as SettingsIcon, Shield, Bell, Database, Server,
-  ScanFace, MapPin, Clock, Lock, CheckCircle, X as XIcon, ScrollText
+  ScanFace, MapPin, Clock, Lock, CheckCircle, X as XIcon, ScrollText,
+  Link2, RefreshCw, Wallet,
 } from 'lucide-react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAppStore, ROLE_SECTIONS, ROLE_LABELS, type Role, type Section } from '@/lib/store';
+import { useToast } from '@/hooks/use-toast';
 
 const roles: Role[] = ['super_admin', 'admin', 'hod', 'faculty', 'lab_assistant', 'student', 'parent', 'visitor', 'security'];
 
@@ -45,12 +48,16 @@ const systemConfig = [
   { label: 'Rate Limiting', value: 'Upstash Redis (prod) or in-memory (dev)', icon: Server, status: 'active' as const },
   { label: 'Email', value: 'Resend or SMTP — welcome & password-reset on user CRUD', icon: Bell, status: 'active' as const },
   { label: 'Database', value: 'PostgreSQL (Neon) + Prisma migrations', icon: Database, status: 'active' as const },
+  { label: 'Knuct Blockchain', value: 'Mock by default; set KNUCT_ENABLED=true for vendor sandbox', icon: Link2, status: 'active' as const },
   { label: 'API', value: 'Next.js App Router (/api/*)', icon: Server, status: 'active' as const },
 ];
 
 export default function SettingsSection() {
   const { currentUser } = useAppStore();
   const isAdmin = currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
+  const isSuperAdmin = currentUser?.role === 'super_admin';
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const { data: auditData, isLoading: auditLoading } = useQuery({
     queryKey: ['audit-logs'],
@@ -59,6 +66,39 @@ export default function SettingsSection() {
       return r.json();
     }),
     enabled: isAdmin,
+  });
+
+  const { data: knuctData, isLoading: knuctLoading, isError: knuctError, error: knuctQueryError, refetch: refetchKnuct } = useQuery({
+    queryKey: ['knuct-status'],
+    queryFn: () => fetch('/api/knuct').then((r) => {
+      if (!r.ok) throw new Error('Failed to load Knuct status');
+      return r.json();
+    }),
+    enabled: isAdmin,
+  });
+
+  const provisionMutation = useMutation({
+    mutationFn: (userId?: string) =>
+      fetch('/api/knuct', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(userId ? { userId } : {}),
+      }).then((r) => {
+        if (!r.ok) throw new Error('Provisioning failed');
+        return r.json();
+      }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['knuct-status'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      if (data.wallet?.status === 'active') {
+        toast({ title: 'Wallet provisioned', description: `DID: ${data.wallet.did?.slice(0, 20)}…` });
+      } else if (data.wallet?.status === 'failed') {
+        toast({ title: 'Provisioning failed', description: data.wallet.lastError ?? 'Unknown error', variant: 'destructive' });
+      }
+    },
+    onError: (err: Error) => {
+      toast({ title: 'Provisioning failed', description: err.message, variant: 'destructive' });
+    },
   });
 
   if (!currentUser) return null;
@@ -71,9 +111,10 @@ export default function SettingsSection() {
       </div>
 
       <Tabs defaultValue="config" className="space-y-4">
-        <TabsList className={isAdmin ? 'grid w-full max-w-2xl grid-cols-4' : 'grid w-full max-w-lg grid-cols-3'}>
+        <TabsList className={isAdmin ? 'grid w-full max-w-3xl grid-cols-5' : 'grid w-full max-w-lg grid-cols-3'}>
           <TabsTrigger value="config">Configuration</TabsTrigger>
           <TabsTrigger value="rbac">RBAC Matrix</TabsTrigger>
+          {isAdmin && <TabsTrigger value="knuct">Knuct</TabsTrigger>}
           {isAdmin && <TabsTrigger value="audit">Audit Log</TabsTrigger>}
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
         </TabsList>
@@ -165,6 +206,101 @@ export default function SettingsSection() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {isAdmin && (
+          <TabsContent value="knuct" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Link2 className="h-4 w-4 text-[#1A3C6E]" /> Knuct Wallet & DID
+                </CardTitle>
+                <CardDescription>
+                  Decentralized identity pilot — mock adapter by default; enable KNUCT_ENABLED for vendor sandbox
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {knuctLoading ? (
+                  <div className="space-y-2">
+                    <Skeleton className="h-8 w-full" />
+                    <Skeleton className="h-8 w-2/3" />
+                  </div>
+                ) : knuctError ? (
+                  <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+                    Failed to load Knuct status: {(knuctQueryError as Error)?.message ?? 'Unknown error'}.
+                    {' '}Try <button type="button" className="underline font-medium" onClick={() => refetchKnuct()}>refresh</button>.
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid gap-3 md:grid-cols-2">
+                      <div className="rounded-lg border p-4 space-y-2">
+                        <p className="text-sm font-medium flex items-center gap-2"><Wallet className="h-4 w-4" /> Your wallet</p>
+                        <p className="text-xs text-muted-foreground font-mono break-all">
+                          DID: {knuctData?.wallet?.did ?? 'Not provisioned'}
+                        </p>
+                        <Badge variant="outline" className={
+                          knuctData?.wallet?.status === 'active' ? 'bg-green-50 text-green-700' :
+                          knuctData?.wallet?.status === 'failed' ? 'bg-red-50 text-red-700' :
+                          'bg-amber-50 text-amber-700'
+                        }>
+                          {knuctData?.wallet?.status === 'active' ? 'active' :
+                          knuctData?.wallet?.status === 'failed' ? 'failed' :
+                          knuctData?.wallet?.status === 'pending' ? 'pending' :
+                          'not provisioned'}
+                        </Badge>
+                        {knuctData?.wallet?.lastError && (
+                          <p className="text-xs text-red-600">{knuctData.wallet.lastError}</p>
+                        )}
+                      </div>
+                      <div className="rounded-lg border p-4 space-y-2">
+                        <p className="text-sm font-medium">Adapter</p>
+                        <p className="text-sm text-muted-foreground">
+                          Mode: {knuctData?.health?.adapterMode ?? 'mock'} ·
+                          Health: {knuctData?.health?.health ?? 'unknown'}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          KNUCT_ENABLED: {knuctData?.config?.enabled ? 'true' : 'false'}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          Auto-provision on user create: {knuctData?.config?.walletOnUserCreate ? 'on' : 'off'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {isSuperAdmin && knuctData?.stats && (
+                      <div className="rounded-lg border p-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {[
+                          { label: 'Active', value: knuctData.stats.wallets.active },
+                          { label: 'Pending', value: knuctData.stats.wallets.pending },
+                          { label: 'Failed', value: knuctData.stats.wallets.failed },
+                          { label: 'DID coverage', value: `${knuctData.stats.didCoveragePct}%` },
+                        ].map((s) => (
+                          <div key={s.label}>
+                            <p className="text-lg font-bold">{s.value}</p>
+                            <p className="text-[10px] text-muted-foreground">{s.label}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-2"
+                        disabled={provisionMutation.isPending}
+                        onClick={() => provisionMutation.mutate(undefined)}
+                      >
+                        <RefreshCw className={`h-3.5 w-3.5 ${provisionMutation.isPending ? 'animate-spin' : ''}`} />
+                        {knuctData?.wallet?.status === 'active' ? 'Re-provision wallet' : 'Provision my wallet'}
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => refetchKnuct()}>Refresh status</Button>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
 
         {isAdmin && (
           <TabsContent value="audit" className="space-y-4">

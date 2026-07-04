@@ -35,6 +35,7 @@ import MastersSection from '@/components/sections/masters-section';
 import CalendarSection from '@/components/sections/calendar-section';
 import { RoleSwitcherMenu } from '@/components/role-switcher-menu';
 import { GlobalSearch } from '@/components/global-search';
+import { DemoBanner } from '@/components/demo-banner';
 
 const allNavItems: { id: Section; label: string; icon: React.ElementType }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -72,7 +73,8 @@ function AppContent() {
       return r.json();
     }),
     enabled: status === 'authenticated' && !!currentUser,
-    refetchInterval: 30000,
+    staleTime: 2 * 60 * 1000,
+    refetchInterval: 2 * 60 * 1000,
   });
 
   const showViolationsBadge = !!currentUser && VIOLATION_ROLES.includes(currentUser.role);
@@ -83,7 +85,8 @@ function AppContent() {
       return r.json();
     }),
     enabled: status === 'authenticated' && !!currentUser && showViolationsBadge,
-    refetchInterval: 60000,
+    staleTime: 2 * 60 * 1000,
+    refetchInterval: 3 * 60 * 1000,
   });
 
   if (roleSwitching) {
@@ -300,6 +303,7 @@ function AppContent() {
 
           <main className="flex-1 flex flex-col overflow-hidden">
             <div className="flex-1 overflow-y-auto p-4 md:p-6 max-w-[1600px] mx-auto w-full">
+              <DemoBanner />
               {renderSection()}
             </div>
             <footer className="border-t shrink-0">

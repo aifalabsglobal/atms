@@ -11,14 +11,16 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient({
     defaultOptions: {
       queries: {
-        staleTime: 30 * 1000,
+        staleTime: 2 * 60 * 1000,
+        gcTime: 10 * 60 * 1000,
         retry: 1,
+        refetchOnWindowFocus: false,
       },
     },
   }));
 
   return (
-    <SessionProvider>
+    <SessionProvider refetchInterval={5 * 60} refetchOnWindowFocus={false}>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           <SessionSync />

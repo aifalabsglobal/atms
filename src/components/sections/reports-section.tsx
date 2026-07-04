@@ -11,15 +11,17 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
+import { exportStaffReportCsv, exportStudentReportCsv } from '@/lib/report-export';
+import { Button } from '@/components/ui/button';
 import {
   BarChart3, Users, BookOpen, ShieldAlert, TrendingUp, TrendingDown,
   FileText, Calendar, Clock, CheckCircle2, AlertTriangle, XCircle,
   GraduationCap, Award, Target, Trophy, Send, Star, MessageSquare,
-  HelpCircle, ClipboardList, Zap,
+  HelpCircle, ClipboardList, Zap, Download,
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend,
+  PieChart, Pie, Cell, Legend, LineChart, Line,
 } from 'recharts';
 
 const COLORS = ['#1A3C6E', '#2E7D32', '#E65100', '#6A1B9A', '#C62828', '#00838F', '#F9A825'];
@@ -40,6 +42,7 @@ const ROLE_COLORS: Record<string, string> = {
 
 interface StudentReportData {
   isStudent: true;
+  isParent?: boolean;
   student: { id: string; name: string; email: string; employeeId: string | null; department: string | null };
   enrolledCourses: { id: string; name: string; code: string; credits: number; type: string; semester: number; instructor: { name: string } | null; _count: { assignments: number; modules: number; enrollments: number } }[];
   attendance: {
@@ -47,13 +50,16 @@ interface StudentReportData {
     overallPercentage: number;
     courseAttendance: { course: { id: string; name: string; code: string }; present: number; absent: number; late: number; total: number; percentage: number }[];
     recentSessions: { id: string; sessionDate: string; presentCount: number; expectedCount: number; absentCount: number; lateCount: number; course: { name: string; code: string } }[];
+    weeklyTrend?: { week: string; present: number; absent: number; late: number; sessions: number; rate: number }[];
   };
+  analyticsScope?: 'student';
+  riskStatus?: 'on_track' | 'watch' | 'at_risk' | 'no_data';
   assignments: {
     total: number; graded: number; pending: number; avgScore: number | null;
     recent: { id: string; title: string; course: { id: string; name: string; code: string }; score: number | null; maxScore: number; status: string; feedback: string | null; submittedAt: string; gradedAt: string | null }[];
   };
   quizzes: {
-    totalAttempts: number; avgScore: number; bestScore: number;
+    totalAttempts: number; avgScore: number; bestScore: number; codingAttempts?: number;
     recent: { id: string; score: number; totalPoints: number; percentage: number; timeTaken: number | null; status: string; course: { name: string; code: string }; startedAt: string }[];
   };
   grades: {
@@ -65,7 +71,15 @@ interface StudentReportData {
 }
 
 function StudentReportView({ data }: { data: StudentReportData }) {
-  const { student, enrolledCourses, attendance, assignments, quizzes, grades, violations } = data;
+  const { student, enrolledCourses, attendance, assignments, quizzes, grades, violations, riskStatus } = data;
+  const isWardView = !!data.isParent;
+
+  const riskBadge = {
+    on_track: { label: 'On track', className: 'bg-emerald-100 text-emerald-800' },
+    watch: { label: 'Watch list', className: 'bg-amber-100 text-amber-800' },
+    at_risk: { label: 'At risk (<75%)', className: 'bg-red-100 text-red-800' },
+    no_data: { label: 'No attendance yet', className: 'bg-muted text-muted-foreground' },
+  }[riskStatus ?? 'no_data'];
 
   // Grade distribution chart data
   const gradeData = Object.entries(grades.distribution).map(([grade, count]) => ({
@@ -91,14 +105,29 @@ function StudentReportView({ data }: { data: StudentReportData }) {
           </AvatarFallback>
         </Avatar>
         <div className="flex-1 min-w-0">
-          <h1 className="text-2xl font-bold text-[#1A3C6E]">{student.name}</h1>
+          <h1 className="text-2xl font-bold text-[#1A3C6E]">
+            {isWardView ? `${student.name}'s Report` : student.name}
+          </h1>
           <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground flex-wrap">
             {student.employeeId && <span className="font-mono">{student.employeeId}</span>}
             {student.department && <span>{student.department}</span>}
-            <Badge className="text-[10px] text-white" style={{ backgroundColor: ROLE_COLORS.student }}>Student</Badge>
+            {isWardView ? (
+              <Badge className="text-[10px] text-white" style={{ backgroundColor: ROLE_COLORS.parent }}>Parent view</Badge>
+            ) : (
+              <Badge className="text-[10px] text-white" style={{ backgroundColor: ROLE_COLORS.student }}>Student</Badge>
+            )}
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => exportStudentReportCsv(data)}
+          >
+            <Download className="h-3.5 w-3.5" /> Export CSV
+          </Button>
+          <Badge className={cn('text-[10px]', riskBadge.className)}>{riskBadge.label}</Badge>
           <Badge variant="outline" className="gap-1"><Calendar className="h-3 w-3" /> Academic Year 2025-26</Badge>
           <Badge variant="outline" className="gap-1"><BookOpen className="h-3 w-3" /> {enrolledCourses.length} Courses</Badge>
         </div>
@@ -287,6 +316,33 @@ function StudentReportView({ data }: { data: StudentReportData }) {
               </CardContent>
             </Card>
           </div>
+
+          {attendance.weeklyTrend && attendance.weeklyTrend.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-[#1A3C6E]" /> Weekly attendance trend
+                </CardTitle>
+                <CardDescription>Your present rate over the last {attendance.weeklyTrend.length} weeks</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={240}>
+                  <LineChart data={attendance.weeklyTrend}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="week" fontSize={10} tickFormatter={(v) => v.slice(5)} />
+                    <YAxis domain={[0, 100]} fontSize={11} />
+                    <RechartsTooltip
+                      formatter={(v: number, name: string) => {
+                        if (name === 'rate') return [`${v}%`, 'Present rate'];
+                        return [v, name];
+                      }}
+                    />
+                    <Line type="monotone" dataKey="rate" stroke="#1A3C6E" strokeWidth={2} dot={{ r: 3 }} name="rate" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Course Attendance Table */}
           <Card>
@@ -760,8 +816,34 @@ function StudentReportView({ data }: { data: StudentReportData }) {
 
 // ─── Admin / General Report View ─────────────────────────────────────
 
-interface AdminReportData {
+interface StaffReportData {
   isStudent: false;
+  analyticsScope: 'campus' | 'department' | 'instructor';
+  scopeLabel: string;
+  role: string;
+  kpis: {
+    totalStudents: number;
+    totalCourses: number;
+    totalEnrollments: number;
+    completedSessions: number;
+    avgAttendancePct: number;
+    atRiskCount: number;
+    pendingViolations: number;
+    avgGradePct: number;
+    quizAttempts: number;
+    avgQuizScore: number;
+    submissions: number;
+  };
+  weeklyAttendanceTrend: { week: string; present: number; absent: number; late: number; sessions: number; rate: number }[];
+  departmentAnalytics: { department: string; students: number; avgAttendance: number; atRisk: number }[];
+  atRiskStudents: { id: string; name: string; employeeId: string | null; department: string | null; stats: { percentage: number; total: number } }[];
+  topPerformers: { id: string; name: string; employeeId: string | null; department: string | null; stats: { percentage: number; total: number } }[];
+  violationAnalytics: { byType: Record<string, number>; bySeverity: Record<string, number>; pending: number; confirmed: number; dismissed: number; total: number };
+  captureMethodBreakdown: Record<string, number>;
+  lmsEngagement: {
+    coursesWithGrades: number;
+    topCourses: { id: string; code: string; name: string; enrollments: number; assignments: number; quizAttempts: number; avgGrade: number | null; instructor: string }[];
+  };
   attendanceSummary: { id: string; sessionDate: string; presentCount: number; expectedCount: number; absentCount: number; lateCount: number; course: { name: string; code: string } }[];
   studentAttendanceReport: { id: string; name: string; employeeId: string | null; department: string | null; stats: { present: number; absent: number; late: number; total: number; percentage: number } }[];
   coursePerfReport: { id: string; code: string; name: string; _count: { enrollments: number }; avgGrade: number | null }[];
@@ -769,8 +851,12 @@ interface AdminReportData {
   gradeDistribution: Record<string, number>;
 }
 
-function AdminReportView({ data }: { data: AdminReportData }) {
-  const { attendanceSummary, studentAttendanceReport, coursePerfReport, violationReport, gradeDistribution } = data;
+function StaffAnalyticsView({ data }: { data: StaffReportData }) {
+  const {
+    kpis, weeklyAttendanceTrend, departmentAnalytics, atRiskStudents, topPerformers,
+    violationAnalytics, captureMethodBreakdown, lmsEngagement, scopeLabel, analyticsScope,
+    attendanceSummary, studentAttendanceReport, coursePerfReport, violationReport, gradeDistribution,
+  } = data;
 
   // Grade distribution chart data
   const gradeData = Object.entries(gradeDistribution || {}).map(([grade, count]) => ({
@@ -786,26 +872,216 @@ function AdminReportView({ data }: { data: AdminReportData }) {
     avgGrade: c.avgGrade,
   }));
 
+  const captureData = Object.entries(captureMethodBreakdown || {}).map(([method, count]) => ({
+    name: method.replace(/_/g, ' '),
+    value: count,
+  }));
+
+  const violationTypeData = Object.entries(violationAnalytics?.byType ?? {}).map(([type, count]) => ({
+    name: type.replace(/_/g, ' '),
+    value: count,
+  }));
+
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-[#1A3C6E]">Reports & Analytics</h1>
-          <p className="text-sm text-muted-foreground mt-1">Comprehensive analytics for attendance, academics, and compliance</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            Role-scoped depth analytics — attendance, academics, LMS, compliance
+          </p>
         </div>
-        <div className="flex gap-2">
-          <Badge variant="outline" className="gap-1"><Calendar className="h-3 w-3" /> Academic Year 2025-26</Badge>
+        <div className="flex gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => exportStaffReportCsv({
+              scopeLabel: data.scopeLabel,
+              analyticsScope: data.analyticsScope,
+              kpis: data.kpis,
+              weeklyAttendanceTrend: data.weeklyAttendanceTrend,
+              departmentAnalytics: data.departmentAnalytics,
+              atRiskStudents: data.atRiskStudents,
+              studentAttendanceReport: data.studentAttendanceReport,
+              lmsEngagement: { topCourses: data.lmsEngagement.topCourses },
+            })}
+          >
+            <Download className="h-3.5 w-3.5" /> Export CSV
+          </Button>
+          <Badge className="bg-[#1A3C6E] text-white">{scopeLabel}</Badge>
+          <Badge variant="outline" className="gap-1"><Calendar className="h-3 w-3" /> AY 2025-26</Badge>
         </div>
       </div>
 
-      <Tabs defaultValue="attendance" className="space-y-4">
-        <TabsList className="grid w-full max-w-lg grid-cols-4">
+      <Tabs defaultValue="overview" className="space-y-4">
+        <TabsList className="grid w-full max-w-3xl grid-cols-3 md:grid-cols-6">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="attendance">Attendance</TabsTrigger>
           <TabsTrigger value="students">Students</TabsTrigger>
-          <TabsTrigger value="courses">Courses</TabsTrigger>
-          <TabsTrigger value="grades">Grades</TabsTrigger>
+          <TabsTrigger value="courses">Academic</TabsTrigger>
+          <TabsTrigger value="lms">LMS</TabsTrigger>
+          <TabsTrigger value="compliance">Compliance</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="overview" className="space-y-4">
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-4 lg:grid-cols-5">
+            {[
+              { label: 'Students', value: kpis.totalStudents, icon: Users },
+              { label: 'Avg attendance', value: `${kpis.avgAttendancePct}%`, icon: TrendingUp },
+              { label: 'At risk (<75%)', value: kpis.atRiskCount, icon: AlertTriangle },
+              { label: 'Avg grade', value: `${kpis.avgGradePct}%`, icon: Award },
+              { label: 'Quiz attempts', value: kpis.quizAttempts, icon: HelpCircle },
+            ].map((k) => (
+              <Card key={k.label} className="py-3">
+                <CardContent className="flex items-center gap-3 px-3">
+                  <div className="h-9 w-9 rounded-lg bg-[#1A3C6E]/10 flex items-center justify-center shrink-0">
+                    <k.icon className="h-4 w-4 text-[#1A3C6E]" />
+                  </div>
+                  <div>
+                    <p className="text-lg font-bold">{k.value}</p>
+                    <p className="text-[10px] text-muted-foreground">{k.label}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Weekly attendance trend</CardTitle>
+                <CardDescription>Present rate by week (scoped to your role)</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={260}>
+                  <LineChart data={weeklyAttendanceTrend}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="week" fontSize={10} tickFormatter={(v) => v.slice(5)} />
+                    <YAxis domain={[0, 100]} fontSize={12} />
+                    <RechartsTooltip formatter={(v: number) => [`${v}%`, 'Rate']} />
+                    <Line type="monotone" dataKey="rate" stroke="#1A3C6E" strokeWidth={2} dot={{ r: 3 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+
+            {analyticsScope === 'campus' && departmentAnalytics.length > 0 ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Department breakdown</CardTitle>
+                  <CardDescription>Avg attendance & at-risk count by department</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={260}>
+                    <BarChart data={departmentAnalytics.slice(0, 8)}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="department" fontSize={9} interval={0} angle={-20} textAnchor="end" height={60} />
+                      <YAxis domain={[0, 100]} fontSize={12} />
+                      <RechartsTooltip />
+                      <Bar dataKey="avgAttendance" fill="#1B6B4A" name="Avg %" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Top performers</CardTitle>
+                  <CardDescription>Highest attendance % in your scope</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  {topPerformers.slice(0, 6).map((s, i) => (
+                    <div key={s.id} className="flex items-center justify-between text-sm border-b pb-2 last:border-0">
+                      <span className="font-medium truncate">{i + 1}. {s.name}</span>
+                      <Badge variant="secondary">{s.stats.percentage}%</Badge>
+                    </div>
+                  ))}
+                  {topPerformers.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-6">No attendance data yet</p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="lms" className="space-y-4">
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+            <Card className="py-3"><CardContent className="px-3"><p className="text-lg font-bold">{kpis.totalEnrollments}</p><p className="text-[10px] text-muted-foreground">Enrollments</p></CardContent></Card>
+            <Card className="py-3"><CardContent className="px-3"><p className="text-lg font-bold">{kpis.submissions}</p><p className="text-[10px] text-muted-foreground">Submissions</p></CardContent></Card>
+            <Card className="py-3"><CardContent className="px-3"><p className="text-lg font-bold">{kpis.avgQuizScore}%</p><p className="text-[10px] text-muted-foreground">Avg quiz score</p></CardContent></Card>
+            <Card className="py-3"><CardContent className="px-3"><p className="text-lg font-bold">{lmsEngagement.coursesWithGrades}</p><p className="text-[10px] text-muted-foreground">Graded courses</p></CardContent></Card>
+          </div>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Top courses by enrollment</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Code</TableHead>
+                    <TableHead>Course</TableHead>
+                    <TableHead>Instructor</TableHead>
+                    <TableHead>Enrolled</TableHead>
+                    <TableHead>Quizzes</TableHead>
+                    <TableHead>Avg grade</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {lmsEngagement.topCourses.map((c) => (
+                    <TableRow key={c.id}>
+                      <TableCell className="font-mono text-xs">{c.code}</TableCell>
+                      <TableCell className="text-sm max-w-[180px] truncate">{c.name}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{c.instructor}</TableCell>
+                      <TableCell>{c.enrollments}</TableCell>
+                      <TableCell>{c.quizAttempts}</TableCell>
+                      <TableCell>{c.avgGrade !== null ? `${c.avgGrade}%` : '—'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="compliance" className="space-y-4">
+          <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
+            <Card className="py-3"><CardContent className="px-3"><p className="text-lg font-bold">{violationAnalytics.total}</p><p className="text-[10px] text-muted-foreground">Total violations</p></CardContent></Card>
+            <Card className="py-3"><CardContent className="px-3"><p className="text-lg font-bold text-amber-600">{violationAnalytics.pending}</p><p className="text-[10px] text-muted-foreground">Pending review</p></CardContent></Card>
+            <Card className="py-3"><CardContent className="px-3"><p className="text-lg font-bold text-red-600">{violationAnalytics.confirmed}</p><p className="text-[10px] text-muted-foreground">Confirmed</p></CardContent></Card>
+            <Card className="py-3"><CardContent className="px-3"><p className="text-lg font-bold">{violationAnalytics.dismissed}</p><p className="text-[10px] text-muted-foreground">Dismissed</p></CardContent></Card>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card>
+              <CardHeader><CardTitle className="text-base">Violations by type</CardTitle></CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={220}>
+                  <PieChart>
+                    <Pie data={violationTypeData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
+                      {violationTypeData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                    </Pie>
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader><CardTitle className="text-base">Capture methods</CardTitle></CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={captureData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" fontSize={10} />
+                    <YAxis fontSize={12} />
+                    <Bar dataKey="value" fill="#6A1B9A" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
 
         {/* Attendance Report Tab */}
         <TabsContent value="attendance" className="space-y-4">
@@ -893,6 +1169,40 @@ function AdminReportView({ data }: { data: AdminReportData }) {
 
         {/* Students Tab */}
         <TabsContent value="students" className="space-y-4">
+          {atRiskStudents.length > 0 && (
+            <Card className="border-amber-200 bg-amber-50/50 dark:bg-amber-950/20">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2 text-amber-800">
+                  <AlertTriangle className="h-4 w-4" /> At-risk students ({atRiskStudents.length})
+                </CardTitle>
+                <CardDescription>Below 75% attendance — JNTUH minimum threshold</CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="max-h-48">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Student</TableHead>
+                        <TableHead>Dept</TableHead>
+                        <TableHead>Sessions</TableHead>
+                        <TableHead>%</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {atRiskStudents.map((s) => (
+                        <TableRow key={s.id}>
+                          <TableCell className="font-medium text-sm">{s.name}</TableCell>
+                          <TableCell className="text-xs">{s.department}</TableCell>
+                          <TableCell>{s.stats.total}</TableCell>
+                          <TableCell className="text-red-600 font-semibold">{s.stats.percentage}%</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          )}
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Student Attendance Report</CardTitle>
@@ -995,10 +1305,7 @@ function AdminReportView({ data }: { data: AdminReportData }) {
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
 
-        {/* Grades Tab */}
-        <TabsContent value="grades" className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             <Card>
               <CardHeader>
@@ -1125,5 +1432,5 @@ export default function ReportsSection() {
     return <StudentReportView data={data} />;
   }
 
-  return <AdminReportView data={data} />;
+  return <StaffAnalyticsView data={data} />;
 }

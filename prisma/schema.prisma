@@ -126,6 +126,21 @@ model User {
   gradedEntries      GradeBook[]         @relation("GradeGrader")
   studentGrades      GradeBook[]         @relation("GradeStudent")
   calendarEvents     CalendarEvent[]
+  knuctWallet        KnuctWallet?
+}
+
+model KnuctWallet {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  did          String?
+  privShareEnc Bytes?
+  status       String   @default("pending") // pending | active | failed
+  lastError    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([status])
 }
 
 model FaceEmbedding {

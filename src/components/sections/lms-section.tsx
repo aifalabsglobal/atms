@@ -1,14 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   BookOpen, Users, FileText, ClipboardList, Clock, ChevronDown,
   ChevronRight, GraduationCap, Layers, CheckCircle2, AlertCircle,
   PenTool, CalendarDays, BarChart3, Award, Timer, HelpCircle,
   ListChecks, TrendingUp, BookMarked, Search, Filter, Send,
   Eye, Upload, MessageSquare, Star, AlertTriangle, CheckCircle,
-  XCircle, Loader2, Trophy, Target, Zap,
+  XCircle, Loader2, Trophy, Target, Zap, Plus, Code2, Pencil, Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/lib/store';
@@ -25,9 +25,16 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { useToast } from '@/hooks/use-toast';
+import {
   BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip,
   ResponsiveContainer, CartesianGrid,
 } from 'recharts';
+import { CreateCourseDialog, CreateAssignmentDialog, EditAssignmentDialog, SubmitAssignmentDialog, CourseRosterDialog, GradeSubmissionsDialog, CreateQuizDialog, EditQuizDialog, TakeQuizDialog, ManageModulesDialog, CreateCodingProblemDialog } from '@/components/lms/lms-dialogs';
+import { CodingWorkspace } from '@/components/lms/coding-workspace';
 
 // ─── Type Definitions ───────────────────────────────────────────────────────
 
@@ -64,14 +71,16 @@ interface Assignment {
 interface AssignmentResponse { assignments: Assignment[]; total: number }
 
 interface QuizQuestion {
-  id: string; question: string; type: 'mcq' | 'true_false' | 'short_answer';
+  id: string; question: string; type: 'mcq' | 'true_false' | 'short_answer' | 'coding';
   options: string; correctAnswer: string; points: number; difficulty: 'easy' | 'medium' | 'hard';
   course: { name: string; code: string };
+  codingMeta?: { slug: string; title: string; topics: string[] } | null;
 }
 
 interface QuizAttempt {
   id: string; studentId: string; courseId: string; score: number; totalPoints: number;
   percentage: number; timeTaken: number; status: 'completed' | 'in_progress' | 'abandoned';
+  answers?: string;
   student: { name: string; employeeId: string };
   course: { name: string; code: string };
   startedAt: string;
@@ -119,6 +128,7 @@ const quizTypeIcons: Record<string, React.ElementType> = {
   mcq: ListChecks,
   true_false: CheckCircle2,
   short_answer: PenTool,
+  coding: Code2,
 };
 
 // ─── Helper Functions ───────────────────────────────────────────────────────
@@ -206,7 +216,16 @@ function LoadingSkeleton() {
 
 // ─── Course Card ────────────────────────────────────────────────────────────
 
-function CourseCard({ course }: { course: Course }) {
+function CourseCard({ course, canManageRoster, canViewRoster, onManageRoster, canManageModules, onManageModules, canDeleteCourse, onDeleteCourse }: {
+  course: Course;
+  canManageRoster?: boolean;
+  canViewRoster?: boolean;
+  onManageRoster?: (c: Course) => void;
+  canManageModules?: boolean;
+  onManageModules?: (c: Course) => void;
+  canDeleteCourse?: boolean;
+  onDeleteCourse?: (c: Course) => void;
+}) {
   const [open, setOpen] = useState(false);
   const typeConf = courseTypeConfig[course.type] || courseTypeConfig.core;
 
@@ -279,7 +298,27 @@ function CourseCard({ course }: { course: Course }) {
         </CollapsibleTrigger>
 
         <CollapsibleContent>
-          <div className="px-4 pt-3 border-t mt-3">
+          <div className="px-4 pt-3 border-t mt-3 space-y-3">
+            {canManageRoster && onManageRoster && (
+              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 w-full" onClick={(e) => { e.stopPropagation(); onManageRoster(course); }}>
+                <Users className="h-3.5 w-3.5" /> Manage Roster ({course._count.enrollments})
+              </Button>
+            )}
+            {canViewRoster && !canManageRoster && onManageRoster && (
+              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 w-full" onClick={(e) => { e.stopPropagation(); onManageRoster(course); }}>
+                <Users className="h-3.5 w-3.5" /> View Roster ({course._count.enrollments})
+              </Button>
+            )}
+            {canManageModules && onManageModules && (
+              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 w-full" onClick={(e) => { e.stopPropagation(); onManageModules(course); }}>
+                <Layers className="h-3.5 w-3.5" /> Manage Modules ({course._count.modules})
+              </Button>
+            )}
+            {canDeleteCourse && onDeleteCourse && (
+              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 w-full text-destructive hover:text-destructive" onClick={(e) => { e.stopPropagation(); onDeleteCourse(course); }}>
+                <Trash2 className="h-3.5 w-3.5" /> {course._count.enrollments > 0 ? 'Deactivate Course' : 'Delete Course'}
+              </Button>
+            )}
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
               Course Modules
             </p>
@@ -322,7 +361,7 @@ function CourseCard({ course }: { course: Course }) {
 
 // ─── Student Assignments Tab ────────────────────────────────────────────────
 
-function StudentAssignmentsTab({ assignments }: { assignments: Assignment[] }) {
+function StudentAssignmentsTab({ assignments, onSubmit }: { assignments: Assignment[]; onSubmit: (a: Assignment) => void }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const pending = assignments.filter(a => a.myStatus === 'not_started' || a.myStatus === 'overdue');
@@ -520,7 +559,7 @@ function StudentAssignmentsTab({ assignments }: { assignments: Assignment[] }) {
                               <XCircle className="h-3 w-3 mr-0.5" /> Deadline passed
                             </Badge>
                           ) : a.status === 'published' ? (
-                            <Button size="sm" className="h-7 text-xs bg-[#1A3C6E] hover:bg-[#1A3C6E]/90 text-white gap-1">
+                            <Button size="sm" className="h-7 text-xs bg-[#1A3C6E] hover:bg-[#1A3C6E]/90 text-white gap-1" onClick={() => onSubmit(a)}>
                               <Upload className="h-3 w-3" /> Submit Assignment
                             </Button>
                           ) : null}
@@ -548,12 +587,20 @@ function StudentAssignmentsTab({ assignments }: { assignments: Assignment[] }) {
 
 // ─── Student Quizzes Tab ────────────────────────────────────────────────────
 
-function StudentQuizzesTab({ questions, attempts, summary }: {
+function StudentQuizzesTab({ questions, attempts, summary, onTakeQuiz }: {
   questions: QuizQuestion[]; attempts: QuizAttempt[];
   summary: QuizResponse['summary'];
+  onTakeQuiz?: () => void;
 }) {
   return (
     <div className="space-y-6">
+      {onTakeQuiz && questions.length > 0 && (
+        <div className="flex justify-end">
+          <Button size="sm" className="gap-1.5 bg-[#1A3C6E] text-white" onClick={onTakeQuiz}>
+            <Zap className="h-3.5 w-3.5" /> Take Quiz
+          </Button>
+        </div>
+      )}
       {/* Quick Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card className="py-3">
@@ -725,7 +772,12 @@ function StudentQuizzesTab({ questions, attempts, summary }: {
 
 // ─── Admin Assignments Tab ──────────────────────────────────────────────────
 
-function AdminAssignmentsTab({ assignments }: { assignments: Assignment[] }) {
+function AdminAssignmentsTab({ assignments, onGrade, onEdit, onDelete }: {
+  assignments: Assignment[];
+  onGrade: (a: Assignment) => void;
+  onEdit?: (a: Assignment) => void;
+  onDelete?: (a: Assignment) => void;
+}) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const chartData = assignments
@@ -784,6 +836,7 @@ function AdminAssignmentsTab({ assignments }: { assignments: Assignment[] }) {
                   <TableHead className="text-right hidden md:table-cell">Submissions</TableHead>
                   <TableHead className="text-right hidden lg:table-cell">Avg Score</TableHead>
                   <TableHead>Status</TableHead>
+                  {(onEdit || onDelete) && <TableHead className="w-20" />}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -834,11 +887,27 @@ function AdminAssignmentsTab({ assignments }: { assignments: Assignment[] }) {
                               {overdue && <Badge variant="destructive" className="text-[10px]">Overdue</Badge>}
                             </div>
                           </TableCell>
+                          {(onEdit || onDelete) && (
+                            <TableCell>
+                              <div className="flex gap-0.5">
+                                {onEdit && (
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); onEdit(a); }}>
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
+                                {onDelete && (
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={(e) => { e.stopPropagation(); onDelete(a); }}>
+                                    <XCircle className="h-3.5 w-3.5" />
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
+                          )}
                         </TableRow>
                       </CollapsibleTrigger>
                       <CollapsibleContent>
                         <TableRow className="bg-muted/30 hover:bg-muted/30">
-                          <TableCell colSpan={9} className="p-0">
+                          <TableCell colSpan={onEdit || onDelete ? 10 : 9} className="p-0">
                             <div className="px-6 py-4">
                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                                 <div className="space-y-1">
@@ -862,6 +931,16 @@ function AdminAssignmentsTab({ assignments }: { assignments: Assignment[] }) {
                                 </div>
                               </div>
                               {a.description && <p className="text-xs text-muted-foreground mt-3 line-clamp-2">{a.description}</p>}
+                              <div className="flex flex-wrap gap-2 mt-3">
+                                <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => onGrade(a)}>
+                                  <PenTool className="h-3.5 w-3.5" /> Grade Submissions ({a._count.submissions})
+                                </Button>
+                                {onEdit && (
+                                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5" onClick={() => onEdit(a)}>
+                                    <Pencil className="h-3.5 w-3.5" /> Edit
+                                  </Button>
+                                )}
+                              </div>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -880,7 +959,23 @@ function AdminAssignmentsTab({ assignments }: { assignments: Assignment[] }) {
 
 // ─── Admin Quizzes Tab ──────────────────────────────────────────────────────
 
-function AdminQuizzesTab({ questions, attempts }: { questions: QuizQuestion[]; attempts: QuizAttempt[] }) {
+function AdminQuizzesTab({ questions, attempts, onCreateQuiz, onEditQuiz }: {
+  questions: QuizQuestion[];
+  attempts: QuizAttempt[];
+  onCreateQuiz?: () => void;
+  onEditQuiz?: (q: QuizQuestion) => void;
+}) {
+  const qc = useQueryClient();
+  const deleteMut = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/lms/quizzes?id=${id}`, { method: 'DELETE' });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Failed');
+      return d;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['lms-quizzes'] }),
+  });
+
   const attemptChartData = attempts.slice(0, 8).map(at => ({
     name: at.student.name.length > 10 ? at.student.name.substring(0, 10) + '…' : at.student.name,
     score: at.percentage,
@@ -914,11 +1009,20 @@ function AdminQuizzesTab({ questions, attempts }: { questions: QuizQuestion[]; a
 
       <Card className="py-4">
         <CardHeader className="px-4 pb-0">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <HelpCircle className="h-4 w-4 text-[#1A3C6E]" />
-            Question Bank
-          </CardTitle>
-          <CardDescription>{questions.length} questions available</CardDescription>
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <HelpCircle className="h-4 w-4 text-[#1A3C6E]" />
+                Question Bank
+              </CardTitle>
+              <CardDescription>{questions.length} questions available</CardDescription>
+            </div>
+            {onCreateQuiz && (
+              <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={onCreateQuiz}>
+                <Plus className="h-3 w-3" /> Add Question
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="px-4 pt-2">
           <ScrollArea className="max-h-[400px]">
@@ -931,6 +1035,7 @@ function AdminQuizzesTab({ questions, attempts }: { questions: QuizQuestion[]; a
                   <TableHead className="hidden md:table-cell">Course</TableHead>
                   <TableHead className="text-right">Points</TableHead>
                   <TableHead className="hidden sm:table-cell">Difficulty</TableHead>
+                  {onCreateQuiz && <TableHead className="w-20" />}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -952,6 +1057,20 @@ function AdminQuizzesTab({ questions, attempts }: { questions: QuizQuestion[]; a
                       <TableCell className="hidden sm:table-cell">
                         <Badge variant="outline" className={cn('text-[11px]', diffConf.className)}>{diffConf.label}</Badge>
                       </TableCell>
+                      {onCreateQuiz && (
+                        <TableCell>
+                          <div className="flex gap-0.5">
+                            {onEditQuiz && (
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onEditQuiz(q)}>
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteMut.mutate(q.id)} disabled={deleteMut.isPending}>
+                              <XCircle className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      )}
                     </TableRow>
                   );
                 })}
@@ -1029,13 +1148,273 @@ function AdminQuizzesTab({ questions, attempts }: { questions: QuizQuestion[]; a
   );
 }
 
+// ─── Gradebook Tab ──────────────────────────────────────────────────────────
+
+interface GradebookRow {
+  student: { id: string; name: string; email: string; employeeId: string | null };
+  components: { component: string; score: number; maxScore: number; weightage: number; pct: number }[];
+  bestQuizPct: number | null;
+  overallPct: number | null;
+}
+
+function GradebookTab({ courses }: { courses: Course[] }) {
+  const [courseId, setCourseId] = useState(courses[0]?.id ?? '');
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['lms-gradebook', courseId],
+    queryFn: () => fetch(`/api/lms/gradebook?courseId=${courseId}`).then((r) => {
+      if (!r.ok) throw new Error('Failed to load gradebook');
+      return r.json();
+    }),
+    enabled: !!courseId,
+  });
+
+  const rows: GradebookRow[] = data?.gradebook ?? [];
+
+  return (
+    <Card className="py-4">
+      <CardHeader className="px-4 pb-2">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Award className="h-4 w-4 text-[#1A3C6E]" />
+          Gradebook
+        </CardTitle>
+        <CardDescription>Weighted grades per enrolled student</CardDescription>
+      </CardHeader>
+      <CardContent className="px-4 space-y-4">
+        {courses.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-8">No courses available</p>
+        ) : (
+          <>
+            <div className="flex flex-wrap gap-2">
+              {courses.map((c) => (
+                <Button
+                  key={c.id}
+                  size="sm"
+                  variant={courseId === c.id ? 'default' : 'outline'}
+                  className={cn('h-7 text-xs', courseId === c.id && 'bg-[#1A3C6E] text-white')}
+                  onClick={() => setCourseId(c.id)}
+                >
+                  {c.code}
+                </Button>
+              ))}
+            </div>
+            {isLoading ? (
+              <LoadingSkeleton />
+            ) : rows.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">No enrolled students or grades yet.</p>
+            ) : (
+              <ScrollArea className="max-h-[520px]">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Student</TableHead>
+                      <TableHead className="hidden sm:table-cell">ID</TableHead>
+                      <TableHead className="text-right">Components</TableHead>
+                      <TableHead className="text-right hidden md:table-cell">Best Quiz</TableHead>
+                      <TableHead className="text-right">Overall</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {rows.map((row) => (
+                      <TableRow key={row.student.id}>
+                        <TableCell className="font-medium text-sm">{row.student.name}</TableCell>
+                        <TableCell className="hidden sm:table-cell text-xs font-mono text-muted-foreground">
+                          {row.student.employeeId || '—'}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex flex-wrap justify-end gap-1">
+                            {row.components.length === 0 ? (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            ) : row.components.slice(0, 4).map((c, i) => (
+                              <Badge key={i} variant="outline" className="text-[9px] capitalize">
+                                {c.component}: {c.pct}%
+                              </Badge>
+                            ))}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right hidden md:table-cell text-sm">
+                          {row.bestQuizPct !== null ? `${row.bestQuizPct}%` : '—'}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {row.overallPct !== null ? (
+                            <span className={cn(
+                              'text-sm font-bold',
+                              row.overallPct >= 75 ? 'text-emerald-600' : row.overallPct >= 50 ? 'text-amber-600' : 'text-destructive'
+                            )}>
+                              {row.overallPct}%
+                            </span>
+                          ) : '—'}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </ScrollArea>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function StudentGradebookTab({ studentId, courses }: { studentId: string; courses: Course[] }) {
+  const [courseId, setCourseId] = useState(courses[0]?.id ?? '');
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['lms-gradebook', courseId, studentId],
+    queryFn: () => fetch(`/api/lms/gradebook?courseId=${courseId}&studentId=${studentId}`).then((r) => {
+      if (!r.ok) throw new Error('Failed to load grades');
+      return r.json();
+    }),
+    enabled: !!courseId,
+  });
+
+  const row: GradebookRow | undefined = data?.gradebook?.[0];
+
+  return (
+    <Card className="py-4">
+      <CardHeader className="px-4 pb-2">
+        <CardTitle className="text-base flex items-center gap-2">
+          <Award className="h-4 w-4 text-[#1A3C6E]" />
+          My Grades
+        </CardTitle>
+        <CardDescription>Your scores and weighted overall per course</CardDescription>
+      </CardHeader>
+      <CardContent className="px-4 space-y-4">
+        {courses.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-8">You are not enrolled in any courses yet.</p>
+        ) : (
+          <>
+            <div className="flex flex-wrap gap-2">
+              {courses.map((c) => (
+                <Button
+                  key={c.id}
+                  size="sm"
+                  variant={courseId === c.id ? 'default' : 'outline'}
+                  className={cn('h-7 text-xs', courseId === c.id && 'bg-[#1A3C6E] text-white')}
+                  onClick={() => setCourseId(c.id)}
+                >
+                  {c.code}
+                </Button>
+              ))}
+            </div>
+            {isLoading ? (
+              <LoadingSkeleton />
+            ) : !row ? (
+              <p className="text-sm text-muted-foreground text-center py-8">No grades recorded for this course yet.</p>
+            ) : (
+              <div className="space-y-4">
+                {row.overallPct !== null && (
+                  <div className="flex items-center justify-between p-4 rounded-lg bg-[#1A3C6E]/5 border">
+                    <span className="text-sm font-medium">Overall Grade</span>
+                    <span className={cn(
+                      'text-2xl font-bold',
+                      row.overallPct >= 75 ? 'text-emerald-600' : row.overallPct >= 50 ? 'text-amber-600' : 'text-destructive'
+                    )}>
+                      {row.overallPct}%
+                    </span>
+                  </div>
+                )}
+                <div className="grid gap-2">
+                  {row.components.map((c, i) => (
+                    <div key={i} className="flex items-center justify-between p-3 rounded-lg border text-sm">
+                      <span className="capitalize font-medium">{c.component}</span>
+                      <span>{c.score}/{c.maxScore} ({c.pct}%)</span>
+                    </div>
+                  ))}
+                  {row.bestQuizPct !== null && (
+                    <div className="flex items-center justify-between p-3 rounded-lg border text-sm">
+                      <span className="font-medium">Best Quiz</span>
+                      <span>{row.bestQuizPct}%</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Main LMS Section ───────────────────────────────────────────────────────
 
 export default function LmsSection() {
   const [activeTab, setActiveTab] = useState('courses');
+  const [createCourseOpen, setCreateCourseOpen] = useState(false);
+  const [createAssignmentOpen, setCreateAssignmentOpen] = useState(false);
+  const [createQuizOpen, setCreateQuizOpen] = useState(false);
+  const [createCodingOpen, setCreateCodingOpen] = useState(false);
+  const [quizSubTab, setQuizSubTab] = useState('coding');
+  const [takeQuizOpen, setTakeQuizOpen] = useState(false);
+  const [submitAssignment, setSubmitAssignment] = useState<Assignment | null>(null);
+  const [rosterCourse, setRosterCourse] = useState<Course | null>(null);
+  const [modulesCourse, setModulesCourse] = useState<Course | null>(null);
+  const [gradeAssignment, setGradeAssignment] = useState<Assignment | null>(null);
+  const [editAssignment, setEditAssignment] = useState<Assignment | null>(null);
+  const [editQuiz, setEditQuiz] = useState<QuizQuestion | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<
+    { kind: 'assignment' | 'course' | 'coding'; id: string; label: string; hasEnrollments?: boolean } | null
+  >(null);
+  const { toast } = useToast();
   const { currentUser } = useAppStore();
   if (!currentUser) return null;
   const isStudent = currentUser.role === 'student';
+  const isParent = currentUser.role === 'parent';
+  const isLearner = isStudent || isParent;
+  const learnerQueryKey = isStudent ? currentUser.id : isParent ? (currentUser.linkedStudentId ?? 'ward') : 'all';
+  const learnerStudentId = isStudent ? currentUser.id : currentUser.linkedStudentId;
+  const canManage = ['super_admin', 'admin', 'faculty', 'lab_assistant', 'hod'].includes(currentUser.role);
+  const canWriteLms = ['super_admin', 'admin', 'faculty', 'lab_assistant'].includes(currentUser.role);
+  const isHodLmsReadOnly = currentUser.role === 'hod';
+  const canCreateCourse = ['super_admin', 'admin'].includes(currentUser.role);
+  const canDeleteCourse = ['super_admin', 'admin'].includes(currentUser.role);
+  const qc = useQueryClient();
+  const deleteAssignmentMut = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/lms/assignments?id=${id}`, { method: 'DELETE' });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Failed');
+      return d;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['lms-assignments'] });
+      toast({ title: 'Assignment deleted' });
+      setDeleteTarget(null);
+    },
+    onError: (e: Error) => toast({ title: 'Delete failed', description: e.message, variant: 'destructive' }),
+  });
+  const deleteCourseMut = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/lms/courses?id=${id}`, { method: 'DELETE' });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Failed');
+      return d;
+    },
+    onSuccess: (d) => {
+      qc.invalidateQueries({ queryKey: ['lms-courses'] });
+      toast({ title: d.deactivated ? 'Course deactivated' : 'Course deleted', description: d.message });
+      setDeleteTarget(null);
+    },
+    onError: (e: Error) => toast({ title: 'Delete failed', description: e.message, variant: 'destructive' }),
+  });
+  const deleteQuizMut = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/lms/quizzes?id=${id}`, { method: 'DELETE' });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Failed');
+      return d;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['lms-quizzes'] });
+      qc.invalidateQueries({ queryKey: ['lms-coding-problems'] });
+      toast({ title: 'Problem deleted' });
+      setDeleteTarget(null);
+    },
+    onError: (e: Error) => toast({ title: 'Delete failed', description: e.message, variant: 'destructive' }),
+  });
 
   const { data: courseData, isLoading: coursesLoading } = useQuery<CourseResponse>({
     queryKey: ['lms-courses'],
@@ -1043,7 +1422,7 @@ export default function LmsSection() {
   });
 
   const { data: assignmentData, isLoading: assignmentsLoading } = useQuery<AssignmentResponse>({
-    queryKey: ['lms-assignments', isStudent ? currentUser.id : 'all'],
+    queryKey: ['lms-assignments', learnerQueryKey],
     queryFn: () => fetch(`/api/lms/assignments?page=1&limit=20${isStudent ? `&studentId=${currentUser.id}` : ''}`).then((r) => {
       if (!r.ok) throw new Error('Failed to load assignments');
       return r.json();
@@ -1051,7 +1430,7 @@ export default function LmsSection() {
   });
 
   const { data: quizData, isLoading: quizzesLoading } = useQuery<QuizResponse>({
-    queryKey: ['lms-quizzes', isStudent ? currentUser.id : 'all'],
+    queryKey: ['lms-quizzes', learnerQueryKey],
     queryFn: () => fetch(`/api/lms/quizzes${isStudent ? `?studentId=${currentUser.id}` : ''}`).then((r) => {
       if (!r.ok) throw new Error('Failed to load quizzes');
       return r.json();
@@ -1062,6 +1441,13 @@ export default function LmsSection() {
   const assignments = assignmentData?.assignments ?? [];
   const questions = quizData?.questions ?? [];
   const attempts = quizData?.attempts ?? [];
+
+  const confirmDelete = () => {
+    if (!deleteTarget) return;
+    if (deleteTarget.kind === 'assignment') deleteAssignmentMut.mutate(deleteTarget.id);
+    else if (deleteTarget.kind === 'course') deleteCourseMut.mutate(deleteTarget.id);
+    else deleteQuizMut.mutate(deleteTarget.id);
+  };
   const quizSummary = quizData?.summary ?? { totalQuestions: 0, totalAttempts: 0, avgScore: 0, bestScore: 0, courseBreakdown: [] };
 
   const totalCourses = courseData?.total ?? 0;
@@ -1080,30 +1466,50 @@ export default function LmsSection() {
         <div>
           <h2 className="text-2xl font-bold text-[#1A3C6E] dark:text-[#7BA5E0] flex items-center gap-2">
             <BookOpen className="h-6 w-6" />
-            {isStudent ? 'My Learning' : 'Learning Management'}
+            {isLearner ? (isParent ? "My Ward's Learning" : 'My Learning') : 'Learning Management'}
           </h2>
           <p className="text-sm text-muted-foreground mt-1">
-            {isStudent ? 'Your courses, assignments, and assessments' : 'Manage courses, assignments, and assessments'}
+            {isLearner ? (isParent ? "Your ward's courses, assignments, and assessments" : 'Your courses, assignments, and assessments') : isHodLmsReadOnly ? 'View department courses, assignments, and assessments (read-only)' : 'Manage courses, assignments, and assessments'}
           </p>
+          {isHodLmsReadOnly && (
+            <Badge variant="outline" className="mt-2 text-[10px] border-amber-300 text-amber-700">HOD read-only LMS</Badge>
+          )}
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
-            <Filter className="h-3.5 w-3.5" />
-            Filter
-          </Button>
-          <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5">
-            <Search className="h-3.5 w-3.5" />
-            Search
-          </Button>
+          {canCreateCourse && (
+            <Button size="sm" className="h-8 text-xs gap-1.5 bg-[#1A3C6E] text-white" onClick={() => setCreateCourseOpen(true)}>
+              <Plus className="h-3.5 w-3.5" /> New Course
+            </Button>
+          )}
+          {canWriteLms && !isLearner && (
+            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => setCreateAssignmentOpen(true)}>
+              <Plus className="h-3.5 w-3.5" /> New Assignment
+            </Button>
+          )}
+          {canWriteLms && !isLearner && (
+            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => setCreateCodingOpen(true)}>
+              <Code2 className="h-3.5 w-3.5" /> Add Coding Problem
+            </Button>
+          )}
+          {canWriteLms && !isLearner && (
+            <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5" onClick={() => setCreateQuizOpen(true)}>
+              <Plus className="h-3.5 w-3.5" /> Add MCQ
+            </Button>
+          )}
+          {isLearner && (
+            <Button size="sm" className="h-8 text-xs gap-1.5 bg-[#1A3C6E] text-white" onClick={() => { setActiveTab('quizzes'); setQuizSubTab('coding'); }}>
+              <Code2 className="h-3.5 w-3.5" /> Code Practice
+            </Button>
+          )}
         </div>
       </div>
 
       {/* Overview Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard icon={BookOpen} label={isStudent ? 'Enrolled Courses' : 'Total Courses'} value={totalCourses} color="bg-[#1A3C6E]" />
-        <StatCard icon={isStudent ? ClipboardList : Users} label={isStudent ? 'Pending Assignments' : 'Enrollments'} value={isStudent ? studentPending : totalEnrollments} color={isStudent ? 'bg-amber-600' : 'bg-emerald-600'} />
-        <StatCard icon={isStudent ? CheckCircle2 : FileText} label={isStudent ? 'Graded' : 'Assignments'} value={isStudent ? studentGraded : totalAssignments} color={isStudent ? 'bg-emerald-600' : 'bg-amber-600'} />
-        <StatCard icon={isStudent ? Trophy : HelpCircle} label={isStudent ? 'Quiz Best' : 'Quiz Questions'} value={isStudent ? `${Math.round(quizSummary.bestScore)}%` : totalQuizzes} color="bg-purple-600" />
+        <StatCard icon={BookOpen} label={isLearner ? 'Enrolled Courses' : 'Total Courses'} value={totalCourses} color="bg-[#1A3C6E]" />
+        <StatCard icon={isLearner ? ClipboardList : Users} label={isLearner ? 'Pending Assignments' : 'Enrollments'} value={isLearner ? studentPending : totalEnrollments} color={isLearner ? 'bg-amber-600' : 'bg-emerald-600'} />
+        <StatCard icon={isLearner ? CheckCircle2 : FileText} label={isLearner ? 'Graded' : 'Assignments'} value={isLearner ? studentGraded : totalAssignments} color={isLearner ? 'bg-emerald-600' : 'bg-amber-600'} />
+        <StatCard icon={isLearner ? Trophy : HelpCircle} label={isLearner ? 'Quiz Best' : 'Quiz Questions'} value={isLearner ? `${Math.round(quizSummary.bestScore)}%` : totalQuizzes} color="bg-purple-600" />
       </div>
 
       {/* Tabs */}
@@ -1115,12 +1521,24 @@ export default function LmsSection() {
           </TabsTrigger>
           <TabsTrigger value="assignments" className="gap-1.5 text-xs sm:text-sm">
             <FileText className="h-4 w-4" />
-            {isStudent ? 'My Assignments' : 'Assignments'}
+            {isLearner ? (isParent ? "Ward's Assignments" : 'My Assignments') : 'Assignments'}
           </TabsTrigger>
           <TabsTrigger value="quizzes" className="gap-1.5 text-xs sm:text-sm">
             <ClipboardList className="h-4 w-4" />
-            {isStudent ? 'My Quizzes' : 'Quizzes'}
+            {isLearner ? (isParent ? "Ward's Quizzes" : 'My Quizzes') : 'Quizzes'}
           </TabsTrigger>
+          {(canWriteLms || isHodLmsReadOnly) && !isLearner && (
+            <TabsTrigger value="rosters" className="gap-1.5 text-xs sm:text-sm">
+              <Users className="h-4 w-4" />
+              Rosters
+            </TabsTrigger>
+          )}
+          {(canManage || isLearner) && (
+            <TabsTrigger value="gradebook" className="gap-1.5 text-xs sm:text-sm">
+              <Award className="h-4 w-4" />
+              {isLearner ? (isParent ? "Ward's Grades" : 'My Grades') : 'Gradebook'}
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {/* Courses Tab */}
@@ -1132,7 +1550,22 @@ export default function LmsSection() {
               {courses.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {courses.map(course => (
-                    <CourseCard key={course.id} course={course} />
+                    <CourseCard
+                      key={course.id}
+                      course={course}
+                      canManageRoster={canWriteLms && !isLearner}
+                      canViewRoster={isHodLmsReadOnly && !isLearner}
+                      onManageRoster={setRosterCourse}
+                      canManageModules={canWriteLms && !isLearner}
+                      onManageModules={setModulesCourse}
+                      canDeleteCourse={canDeleteCourse}
+                      onDeleteCourse={(c) => setDeleteTarget({
+                        kind: 'course',
+                        id: c.id,
+                        label: c.code,
+                        hasEnrollments: c._count.enrollments > 0,
+                      })}
+                    />
                   ))}
                 </div>
               ) : (
@@ -1152,24 +1585,246 @@ export default function LmsSection() {
         <TabsContent value="assignments">
           {assignmentsLoading ? (
             <LoadingSkeleton />
-          ) : isStudent ? (
-            <StudentAssignmentsTab assignments={assignments} />
+          ) : isLearner ? (
+            <StudentAssignmentsTab assignments={assignments} onSubmit={setSubmitAssignment} />
           ) : (
-            <AdminAssignmentsTab assignments={assignments} />
+            <AdminAssignmentsTab
+              assignments={assignments}
+              onGrade={setGradeAssignment}
+              onEdit={canWriteLms ? setEditAssignment : undefined}
+              onDelete={canWriteLms ? (a) => setDeleteTarget({ kind: 'assignment', id: a.id, label: a.title }) : undefined}
+            />
           )}
         </TabsContent>
+
+        {(canWriteLms || isHodLmsReadOnly) && !isLearner && (
+          <TabsContent value="rosters">
+            <Card className="py-4">
+              <CardHeader className="px-4 pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Users className="h-4 w-4 text-[#1A3C6E]" />
+                  Class Rosters
+                </CardTitle>
+                <CardDescription>
+                  {isHodLmsReadOnly ? 'View enrolled students per course (read-only)' : 'View and manage enrolled students per course'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="px-4">
+                {coursesLoading ? (
+                  <LoadingSkeleton />
+                ) : courses.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">No courses available</p>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Code</TableHead>
+                        <TableHead>Course</TableHead>
+                        <TableHead>Instructor</TableHead>
+                        <TableHead className="text-right">Enrolled</TableHead>
+                        <TableHead className="w-28" />
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {courses.map((c) => (
+                        <TableRow key={c.id}>
+                          <TableCell className="font-mono text-xs font-semibold">{c.code}</TableCell>
+                          <TableCell className="text-sm max-w-[200px] truncate">{c.name}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{c.instructor?.name || 'TBA'}</TableCell>
+                          <TableCell className="text-right">
+                            <Badge variant="secondary">{c._count.enrollments}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setRosterCourse(c)}>
+                              {isHodLmsReadOnly ? 'View' : 'Manage'}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
 
         {/* Quizzes Tab */}
         <TabsContent value="quizzes">
           {quizzesLoading ? (
             <LoadingSkeleton />
-          ) : isStudent ? (
-            <StudentQuizzesTab questions={questions} attempts={attempts} summary={quizSummary} />
           ) : (
-            <AdminQuizzesTab questions={questions} attempts={attempts} />
+            <div className="space-y-4">
+              <Tabs value={quizSubTab} onValueChange={setQuizSubTab}>
+                <TabsList>
+                  <TabsTrigger value="coding" className="gap-1.5 text-xs">
+                    <Code2 className="h-3.5 w-3.5" /> Coding Practice
+                  </TabsTrigger>
+                  <TabsTrigger value="mcq" className="gap-1.5 text-xs">
+                    <ClipboardList className="h-3.5 w-3.5" /> {isLearner ? 'MCQ Quizzes' : 'MCQ Bank'}
+                  </TabsTrigger>
+                  <TabsTrigger value="submissions" className="gap-1.5 text-xs">
+                    <Trophy className="h-3.5 w-3.5" /> Submissions
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="coding" className="mt-4">
+                  <CodingWorkspace
+                    learnerMode={isLearner || canManage}
+                    onEditProblem={canWriteLms && !isLearner ? (p) => setEditQuiz({
+                      id: p.id,
+                      question: p.question,
+                      type: 'coding',
+                      options: '',
+                      correctAnswer: '',
+                      points: p.points,
+                      difficulty: p.difficulty,
+                      course: p.course,
+                      codingMeta: p.codingMeta,
+                    }) : undefined}
+                    onDeleteProblem={canWriteLms && !isLearner ? (id) => {
+                      const p = questions.find((q) => q.id === id);
+                      setDeleteTarget({ kind: 'coding', id, label: p?.codingMeta?.slug ?? p?.question?.slice(0, 30) ?? 'problem' });
+                    } : undefined}
+                  />
+                </TabsContent>
+                <TabsContent value="mcq" className="mt-4">
+                  {isLearner ? (
+                    <StudentQuizzesTab
+                      questions={questions.filter((q) => q.type !== 'coding')}
+                      attempts={attempts}
+                      summary={quizSummary}
+                      onTakeQuiz={() => setTakeQuizOpen(true)}
+                    />
+                  ) : (
+                    <AdminQuizzesTab
+                      questions={questions.filter((q) => q.type !== 'coding')}
+                      attempts={attempts}
+                      onCreateQuiz={() => setCreateQuizOpen(true)}
+                      onEditQuiz={setEditQuiz}
+                    />
+                  )}
+                </TabsContent>
+                <TabsContent value="submissions" className="mt-4">
+                  <Card className="py-4">
+                    <CardHeader className="px-4 pb-2">
+                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                        <Timer className="h-4 w-4 text-[#1A3C6E]" />
+                        Recent Submissions
+                      </CardTitle>
+                      <CardDescription>{attempts.length} attempts (coding + MCQ)</CardDescription>
+                    </CardHeader>
+                    <CardContent className="px-4">
+                      {attempts.length === 0 ? (
+                        <p className="text-sm text-muted-foreground text-center py-8">No submissions yet.</p>
+                      ) : (
+                        <ScrollArea className="max-h-[400px]">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                {canManage && !isLearner && <TableHead>Student</TableHead>}
+                                <TableHead>Course</TableHead>
+                                <TableHead>Score</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead>Time</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {attempts.map((at) => {
+                                let statusLabel = at.status.replace('_', ' ');
+                                try {
+                                  const ans = typeof at.answers === 'string' ? JSON.parse(at.answers) : at.answers;
+                                  if (ans?.status) statusLabel = ans.status;
+                                } catch { /* mcq attempt */ }
+                                return (
+                                  <TableRow key={at.id}>
+                                    {canWriteLms && !isLearner && (
+                                      <TableCell className="text-sm">{at.student.name}</TableCell>
+                                    )}
+                                    <TableCell className="font-mono text-xs">{at.course.code}</TableCell>
+                                    <TableCell className="text-sm font-semibold">{Math.round(at.percentage)}%</TableCell>
+                                    <TableCell>
+                                      <Badge variant="outline" className={cn(
+                                        'text-[10px]',
+                                        statusLabel === 'Accepted' && 'text-emerald-600 border-emerald-300',
+                                        statusLabel === 'Wrong Answer' && 'text-red-600 border-red-300',
+                                      )}>
+                                        {statusLabel}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-xs text-muted-foreground">
+                                      {at.timeTaken ? formatTime(at.timeTaken) : '—'}
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                            </TableBody>
+                          </Table>
+                        </ScrollArea>
+                      )}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+              </Tabs>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="gradebook">
+          {isLearner && learnerStudentId ? (
+            <StudentGradebookTab studentId={learnerStudentId} courses={courses} />
+          ) : isLearner ? (
+            <Card className="py-12"><CardContent className="text-center text-sm text-muted-foreground">No linked student for this parent account.</CardContent></Card>
+          ) : (
+            <GradebookTab courses={courses} />
           )}
         </TabsContent>
       </Tabs>
+
+      <CreateCourseDialog open={createCourseOpen} onOpenChange={setCreateCourseOpen} role={currentUser.role} />
+      <CreateAssignmentDialog open={createAssignmentOpen} onOpenChange={setCreateAssignmentOpen} courses={courses.map((c) => ({ id: c.id, code: c.code, name: c.name }))} />
+      <EditAssignmentDialog open={!!editAssignment} onOpenChange={(o) => !o && setEditAssignment(null)} assignment={editAssignment} />
+      <CreateQuizDialog open={createQuizOpen} onOpenChange={setCreateQuizOpen} courses={courses.map((c) => ({ id: c.id, code: c.code, name: c.name }))} />
+      <EditQuizDialog open={!!editQuiz} onOpenChange={(o) => !o && setEditQuiz(null)} question={editQuiz} />
+      <CreateCodingProblemDialog open={createCodingOpen} onOpenChange={setCreateCodingOpen} courses={courses.map((c) => ({ id: c.id, code: c.code, name: c.name }))} />
+      <TakeQuizDialog open={takeQuizOpen} onOpenChange={setTakeQuizOpen} courses={courses.map((c) => ({ id: c.id, code: c.code, name: c.name }))} />
+      <SubmitAssignmentDialog open={!!submitAssignment} onOpenChange={(o) => !o && setSubmitAssignment(null)} assignment={submitAssignment ? { id: submitAssignment.id, title: submitAssignment.title } : null} />
+      <CourseRosterDialog
+        open={!!rosterCourse}
+        onOpenChange={(o) => !o && setRosterCourse(null)}
+        course={rosterCourse ? { id: rosterCourse.id, code: rosterCourse.code, name: rosterCourse.name } : null}
+        campusWide={['super_admin', 'admin'].includes(currentUser.role)}
+        readOnly={isHodLmsReadOnly}
+      />
+      <ManageModulesDialog open={!!modulesCourse} onOpenChange={(o) => !o && setModulesCourse(null)} course={modulesCourse ? { id: modulesCourse.id, code: modulesCourse.code, name: modulesCourse.name } : null} />
+      <GradeSubmissionsDialog open={!!gradeAssignment} onOpenChange={(o) => !o && setGradeAssignment(null)} assignment={gradeAssignment ? { id: gradeAssignment.id, title: gradeAssignment.title, maxScore: gradeAssignment.maxScore } : null} />
+
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {deleteTarget?.kind === 'course' && deleteTarget.hasEnrollments ? 'Deactivate course?' : 'Delete permanently?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget?.kind === 'course' && deleteTarget.hasEnrollments
+                ? `"${deleteTarget?.label}" has enrollments — it will be deactivated, not removed.`
+                : `This will remove "${deleteTarget?.label}". This action cannot be undone.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteAssignmentMut.isPending || deleteCourseMut.isPending || deleteQuizMut.isPending}
+              onClick={(e) => { e.preventDefault(); confirmDelete(); }}
+            >
+              {(deleteAssignmentMut.isPending || deleteCourseMut.isPending || deleteQuizMut.isPending) && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Confirm
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

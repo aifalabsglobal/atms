@@ -57,6 +57,17 @@ Attendance tracking and Learning Management for JNTUH Engineering College.
 
 Password for all demo users: **`demo123`**
 
+**One-command demo prep:**
+
+```bash
+npm run demo:prep
+npm run dev
+```
+
+**Share with anyone:** open `/login` and click **Copy demo kit for anyone** — copies the URL, password, and all role logins in one paste.
+
+**Presenter:** click **Copy 5-min demo script** on the login page, or use the in-app **Demo mode** banner after login.
+
 | Role | Email |
 |------|-------|
 | Super Admin | `vice.chancellor@jntuh.ac.in` |
@@ -90,9 +101,12 @@ Each role sees only permitted sidebar sections. APIs enforce the same scope serv
 | `npm run db:migrate` | Create/apply migrations (dev) |
 | `npm run db:migrate:deploy` | Apply migrations (production/CI) |
 | `npm run db:baseline` | Mark init migration applied on existing DB |
-| `npm run db:seed` | Seed demo data |
+| `npm run demo:prep` | Push schema + seed demo data (run before demos) |
+| `npm run db:seed` | Seed demo data only |
+| `npm run seed:synthetic` | Add 50+ synthetic students, attendance history, grades (run after seed) |
 | `npm run lint` | ESLint |
-| `npm run smoke` | API smoke tests (requires running server + DB) |
+| `npm run smoke` | Full API smoke tests (requires running server + DB) |
+| `npm run smoke:quick` | Fast smoke (health + login + dashboard, ~30s) |
 | `npm run test:roles` | Role-based API access tests |
 
 ## Enterprise features
@@ -102,10 +116,12 @@ Each role sees only permitted sidebar sections. APIs enforce the same scope serv
 | **Audit logging** | Login, user CRUD, violation reviews, geofence creation — view in Settings → Audit Log (admin only) |
 | **User management** | Create users, suspend/activate, reset passwords with scoped RBAC (admin / HOD) |
 | **Global search** | Header search across users, courses, and attendance sessions (role-scoped) |
-| **Rate limiting** | Upstash Redis when `UPSTASH_REDIS_*` set; in-memory fallback for dev |
+| **Rate limiting** | Upstash Redis when `UPSTASH_REDIS_*` set; auth, coding, and demo routes protected |
+| **Health check** | `GET /api/health` — DB ping, no auth (Docker/load balancer ready) |
+| **Security headers** | HSTS, CSP, X-Frame-Options via `next.config.ts` + middleware |
 | **Email** | Resend or SMTP — auto-sends welcome/reset emails on user CRUD |
 | **Migrations** | Versioned schema in `prisma/migrations/` |
-| **CI** | GitHub Actions: typecheck + build on push/PR (`.github/workflows/ci.yml`) |
+| **CI** | GitHub Actions: typecheck + build + Postgres integration + role tests |
 
 ### Deploy — Vercel
 
@@ -130,13 +146,27 @@ Runs app on port 3000 with a local Postgres container, or point `DATABASE_URL` a
 
 ### Production checklist
 
-1. Set a strong `NEXTAUTH_SECRET` (32+ random bytes)
-2. Use Neon **production** plan (avoid cold-start latency)
+1. Set a strong `NEXTAUTH_SECRET` (32+ random bytes) — app **refuses to start** in production with the dev default
+2. Use Neon **production** plan (avoid cold-start latency) or self-hosted Postgres with connection pooling
 3. `npm run db:baseline` (if upgrading from `db:push`), then `npm run db:migrate:deploy`
-4. Add **Upstash Redis** for multi-instance rate limiting
+4. Add **Upstash Redis** for multi-instance rate limiting (`UPSTASH_REDIS_*`), or `ALLOW_IN_MEMORY_RATE_LIMIT=true` for single-instance Docker only
 5. Add **Resend** or **SMTP** for user onboarding emails
-6. Optional: `FACE_VERIFICATION_ENABLED=true` + `FACE_VERIFICATION_API_URL` for real ArcFace
-7. Replace demo credentials; use hashed passwords via user create/reset APIs
+6. Verify `GET /api/health` returns `{ status: "ok" }` (used by Docker/load balancers)
+7. Optional: `FACE_VERIFICATION_ENABLED=true` + `FACE_VERIFICATION_API_URL` for real ArcFace
+8. Replace demo credentials; use hashed passwords via user create/reset APIs
+9. **Coding judge** uses Node `vm` — suitable for trusted campus users only; use an isolated runner (Judge0/Piston) for untrusted code
+
+## Performance tips
+
+Remote Neon DB adds ~1–2s per query from India. For faster local dev:
+
+```bash
+docker compose up db -d   # local Postgres on :5432
+# Point DATABASE_URL at postgresql://scms:scms@localhost:5432/scms?sslmode=disable
+npm run demo:prep && npm run dev
+```
+
+The app now caches session tokens for 5 minutes and reduces background API polling.
 
 ## Notes
 
