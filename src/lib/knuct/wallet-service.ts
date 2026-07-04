@@ -4,6 +4,7 @@ import { encryptBuffer } from '@/lib/crypto';
 import { getKnuctAdapter } from './index';
 import { getKnuctConfig } from './config';
 import { KNUCT_SEED_WORDS, type KnuctSeedWord } from './types';
+import { enqueueKnuctJob } from './job-queue';
 
 function pickRandomSeedWords(count: number): [KnuctSeedWord, KnuctSeedWord, KnuctSeedWord, KnuctSeedWord] {
   const pool = [...KNUCT_SEED_WORDS];
@@ -72,11 +73,7 @@ export async function provisionWallet(userId: string): Promise<void> {
 
 /** Non-blocking in-process worker for Phase 1 pilot. */
 export function enqueueWalletProvision(userId: string): void {
-  setImmediate(() => {
-    provisionWallet(userId).catch((err) => {
-      console.error('[knuct] enqueue provision failed', { userId, err });
-    });
-  });
+  enqueueKnuctJob(() => provisionWallet(userId));
 }
 
 export function maybeProvisionWalletOnCreate(userId: string): void {

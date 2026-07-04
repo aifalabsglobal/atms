@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { requireRoles } from '@/lib/auth-helpers';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { getClientIp } from '@/lib/audit';
+import { enrichAuditLogsWithAnchors } from '@/lib/knuct/anchor-audit';
 
 export async function GET(request: Request) {
   try {
@@ -40,8 +41,10 @@ export async function GET(request: Request) {
         : [];
     const actorMap = Object.fromEntries(actors.map((a) => [a.id, a]));
 
+    const enriched = await enrichAuditLogsWithAnchors(logs);
+
     return NextResponse.json({
-      logs: logs.map((log) => ({
+      logs: enriched.map((log) => ({
         ...log,
         actor: log.userId ? actorMap[log.userId] ?? null : null,
       })),

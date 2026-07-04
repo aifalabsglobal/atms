@@ -1,7 +1,14 @@
 import { createHash } from 'crypto';
 import { db } from '@/lib/db';
+import { enqueueKnuctJob } from './job-queue';
 
-export type AnchorResourceType = 'attendance_session' | 'violation_review' | 'grade_publish';
+export type AnchorResourceType =
+  | 'attendance_session'
+  | 'violation_review'
+  | 'grade_publish'
+  | 'geofence_policy'
+  | 'calendar_event'
+  | 'subject_publish';
 
 function stableStringify(value: unknown): string {
   if (value === null || typeof value !== 'object') {
@@ -64,9 +71,7 @@ export function enqueueAnchor(
   resourceId: string,
   payload: Record<string, unknown>
 ): void {
-  setImmediate(() => {
-    anchorResource(resourceType, resourceId, payload).catch((err) => {
-      console.error('[knuct] enqueue anchor failed', { resourceType, resourceId, err });
-    });
+  enqueueKnuctJob(async () => {
+    await anchorResource(resourceType, resourceId, payload);
   });
 }

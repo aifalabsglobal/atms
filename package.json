@@ -18,6 +18,8 @@
     "seed:synthetic": "npx tsx scripts/synthetic-data.ts",
     "smoke:quick": "npx tsx scripts/quick-smoke.ts",
     "test:roles": "npx tsx scripts/role-test.ts",
+    "test:knuct:anchor": "npx tsx scripts/test-knuct-anchor.ts",
+    "test:knuct:live": "npx tsx scripts/test-knuct-live.ts",
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:baseline": "npx tsx scripts/db-baseline.ts",

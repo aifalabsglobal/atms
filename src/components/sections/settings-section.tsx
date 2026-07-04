@@ -338,11 +338,13 @@ export default function SettingsSection() {
                           <TableHead>Actor</TableHead>
                           <TableHead>Action</TableHead>
                           <TableHead>Resource</TableHead>
+                          <TableHead>Anchor</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {(auditData?.logs ?? []).map((log: {
                           id: string; action: string; resource: string; createdAt: string;
+                          anchorHash: string | null;
                           actor: { name: string; email: string } | null;
                         }) => (
                           <TableRow key={log.id}>
@@ -356,11 +358,14 @@ export default function SettingsSection() {
                               <Badge variant="outline" className="text-[10px] font-mono">{log.action}</Badge>
                             </TableCell>
                             <TableCell className="text-xs text-muted-foreground font-mono">{log.resource}</TableCell>
+                            <TableCell className="text-xs font-mono text-muted-foreground">
+                              {log.anchorHash ? `${log.anchorHash.slice(0, 12)}…` : '—'}
+                            </TableCell>
                           </TableRow>
                         ))}
                         {(auditData?.logs ?? []).length === 0 && (
                           <TableRow>
-                            <TableCell colSpan={4} className="text-center text-sm text-muted-foreground py-8">
+                            <TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-8">
                               No audit events yet. Actions will appear after logins and admin operations.
                             </TableCell>
                           </TableRow>

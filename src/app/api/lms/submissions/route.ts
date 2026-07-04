@@ -182,7 +182,7 @@ export async function PUT(request: Request) {
           where: { id: existingGrade.id },
           data: { score, maxScore: existing.assignment.maxScore, gradedBy: session.user.id, gradedAt: new Date() },
         });
-        enqueueAnchor('grade_publish', existingGrade.id, {
+        enqueueAnchor('grade_publish', id, {
           courseId: existing.assignment.courseId,
           studentId: existing.studentId,
           component: 'assignment',
@@ -193,7 +193,7 @@ export async function PUT(request: Request) {
           gradedAt: new Date().toISOString(),
         });
       } else {
-        const grade = await db.gradeBook.create({
+        await db.gradeBook.create({
           data: {
             courseId: existing.assignment.courseId,
             studentId: existing.studentId,
@@ -205,7 +205,7 @@ export async function PUT(request: Request) {
             gradedBy: session.user.id,
           },
         });
-        enqueueAnchor('grade_publish', grade.id, {
+        enqueueAnchor('grade_publish', id, {
           courseId: existing.assignment.courseId,
           studentId: existing.studentId,
           component: 'assignment',

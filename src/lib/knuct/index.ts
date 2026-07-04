@@ -3,4 +3,8 @@ export { getKnuctAdapter, getKnuctHealth, getKnuctDashboardStats, getUserKnuctWa
 export { enqueueWalletProvision, maybeProvisionWalletOnCreate, provisionWallet } from './wallet-service';
 export { anchorResource, enqueueAnchor, hashPayload, isAnchorEnabled } from './anchor-service';
 export type { AnchorResourceType } from './anchor-service';
+export { enrichAuditLogsWithAnchors } from './anchor-audit';
+export { enqueueKnuctJob } from './job-queue';
+export { issueCredential, getCredentialStats, getUserCredentials, isCredentialEnabled } from './credential-service';
+export type { CredentialType } from './credential-service';
 export type { KnuctAdapter, KnuctDashboardStats, KnuctWalletResult } from './types';

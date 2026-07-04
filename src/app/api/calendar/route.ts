@@ -1,6 +1,8 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { requireAuth, STAFF_ROLES, requireRoles } from '@/lib/auth-helpers';
+import { logAudit, getClientIp } from '@/lib/audit';
+import { enqueueAnchor } from '@/lib/knuct/anchor-service';
 import type { Role } from '@/lib/store';
 
 const PUBLIC_EVENT_TYPES = ['academic', 'exam', 'holiday', 'event', 'deadline', 'class'];
@@ -80,8 +82,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { error } = await requireRoles(STAFF_ROLES);
-    if (error) return error;
+    const { error, session } = await requireRoles(STAFF_ROLES);
+    if (error || !session) return error;
 
     const body = await request.json();
     const {
@@ -130,6 +132,28 @@ export async function POST(request: Request) {
         academicYear: { select: { id: true, name: true, code: true } },
       },
     });
+
+    const eventType = (type || 'personal') as string;
+    if (PUBLIC_EVENT_TYPES.includes(eventType)) {
+      await logAudit({
+        userId: session.user.id,
+        action: 'calendar.publish',
+        resource: `event:${event.id}`,
+        details: { title, type: eventType, startDate },
+        ipAddress: getClientIp(request),
+      });
+
+      enqueueAnchor('calendar_event', event.id, {
+        title,
+        type: eventType,
+        startDate,
+        endDate: endDate ?? null,
+        academicYearId: academicYearId ?? null,
+        courseId: courseId ?? null,
+        publishedBy: session.user.id,
+        publishedAt: new Date().toISOString(),
+      });
+    }
 
     return NextResponse.json({ event }, { status: 201 });
   } catch (error) {

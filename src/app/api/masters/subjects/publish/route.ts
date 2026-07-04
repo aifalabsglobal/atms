@@ -2,6 +2,7 @@ import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { requireMastersWrite, auditMasterMutation } from '@/lib/masters-helpers';
 import { publishSubjectToLms } from '@/lib/masters-sync';
+import { enqueueAnchor } from '@/lib/knuct/anchor-service';
 
 export async function POST(request: Request) {
   try {
@@ -19,6 +20,16 @@ export async function POST(request: Request) {
 
     await auditMasterMutation(request, session.user.id, 'masters.subject.publish', `course:${course.id}`, {
       subjectCode: course.code,
+    });
+
+    enqueueAnchor('subject_publish', course.id, {
+      subjectId,
+      programId,
+      courseCode: course.code,
+      courseName: course.name,
+      publishedBy: session.user.id,
+      publishedAt: new Date().toISOString(),
+      created,
     });
 
     return NextResponse.json({ course, created }, { status: created ? 201 : 200 });

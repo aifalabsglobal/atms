@@ -2,6 +2,7 @@ import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { requireSection, STAFF_ROLES } from '@/lib/auth-helpers';
 import { logAudit, getClientIp } from '@/lib/audit';
+import { enqueueAnchor } from '@/lib/knuct/anchor-service';
 
 export async function GET() {
   try {
@@ -36,6 +37,15 @@ export async function POST(request: Request) {
       resource: `geofence:${geofence.id}`,
       details: { name: geofence.name },
       ipAddress: getClientIp(request),
+    });
+
+    enqueueAnchor('geofence_policy', geofence.id, {
+      name: geofence.name,
+      centerLat: geofence.centerLat,
+      centerLng: geofence.centerLng,
+      radiusMtrs: geofence.radiusMtrs,
+      createdBy: session.user.id,
+      createdAt: geofence.createdAt.toISOString(),
     });
 
     return NextResponse.json(geofence, { status: 201 });
