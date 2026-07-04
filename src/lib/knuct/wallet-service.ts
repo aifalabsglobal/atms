@@ -1,8 +1,10 @@
 import { randomUUID } from 'crypto';
 import { db } from '@/lib/db';
 import { encryptBuffer } from '@/lib/crypto';
-import { getKnuctAdapter } from './index';
 import { getKnuctConfig } from './config';
+import { isKnuctCircuitOpen } from './circuit-breaker';
+import { createKnuctHttpAdapter } from './knuct-client';
+import { MockKnuctAdapter } from './mock-adapter';
 import { KNUCT_SEED_WORDS, type KnuctSeedWord } from './types';
 import { enqueueKnuctJob } from './job-queue';
 
@@ -21,7 +23,10 @@ function pickRandomSeedWords(count: number): [KnuctSeedWord, KnuctSeedWord, Knuc
 
 export async function provisionWallet(userId: string): Promise<void> {
   const config = getKnuctConfig();
-  const adapter = getKnuctAdapter();
+  const adapter =
+    config.enabled && !isKnuctCircuitOpen()
+      ? createKnuctHttpAdapter(config.baseUrl)
+      : new MockKnuctAdapter();
 
   await db.knuctWallet.upsert({
     where: { userId },
@@ -33,14 +38,18 @@ export async function provisionWallet(userId: string): Promise<void> {
   const attempts = config.maxRetries + 1;
 
   for (let attempt = 1; attempt <= attempts; attempt++) {
+    const sessionAdapter =
+      config.enabled && !isKnuctCircuitOpen()
+        ? createKnuctHttpAdapter(config.baseUrl)
+        : adapter;
     try {
-      await adapter.startTempNode();
+      await sessionAdapter.startTempNode();
 
       const passphrase = randomUUID();
       const seedWords = pickRandomSeedWords(4);
-      const { did, privShareUrl } = await adapter.createWallet(passphrase, seedWords);
+      const { did, privShareUrl } = await sessionAdapter.createWallet(passphrase, seedWords);
 
-      const share = await adapter.fetchPrivateShare(privShareUrl);
+      const share = await sessionAdapter.fetchPrivateShare(privShareUrl);
       const encrypted = encryptBuffer(share.raw);
 
       await db.knuctWallet.update({

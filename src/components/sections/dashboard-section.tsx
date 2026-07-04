@@ -2,7 +2,8 @@
 
 import { useAppStore, ROLE_LABELS, type Role } from '@/lib/store';
 import { cn } from '@/lib/utils';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useToast } from '@/hooks/use-toast';
 import {
   Users, GraduationCap, BookOpen, ScanLine, Activity,
   ShieldAlert, UserPlus, ArrowUpRight, ArrowDownRight,
@@ -820,6 +821,35 @@ function RecentActivityFeed({ activities }: { activities: RecentActivity[] }) {
 
 function KnuctOpsPanel({ knuct }: { knuct: KnuctDashboardStats }) {
   const { setActiveSection } = useAppStore();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const pilotMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch('/api/knuct/pilot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sync: true, limit: 5 }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? 'Pilot failed');
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      const active = data.results?.filter((r: { status: string }) => r.status === 'active').length ?? 0;
+      const failed = data.results?.filter((r: { status: string }) => r.status === 'failed').length ?? 0;
+      toast({
+        title: 'Live pilot run complete',
+        description: `${active} active, ${failed} failed — see Users for details`,
+        variant: failed > 0 ? 'destructive' : 'default',
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: 'Pilot failed', description: err.message, variant: 'destructive' });
+    },
+  });
   const healthBadge = {
     ok: { label: 'Healthy', className: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
     degraded: { label: 'Degraded', className: 'bg-amber-100 text-amber-800 border-amber-200' },
@@ -865,6 +895,16 @@ function KnuctOpsPanel({ knuct }: { knuct: KnuctDashboardStats }) {
           ))}
         </div>
         <div className="flex flex-wrap gap-2">
+          {knuct.adapterMode === 'live' && (
+            <Button
+              size="sm"
+              style={{ backgroundColor: NAVY }}
+              disabled={pilotMutation.isPending}
+              onClick={() => pilotMutation.mutate()}
+            >
+              {pilotMutation.isPending ? 'Provisioning…' : 'Run live pilot (5 users)'}
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={() => setActiveSection('settings')}>
             Settings
           </Button>

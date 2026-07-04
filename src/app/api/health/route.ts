@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getKnuctHealth } from '@/lib/knuct';
+import { getKnuctHealth, getKnuctQueueStats } from '@/lib/knuct';
+import { getKnuctCircuitState } from '@/lib/knuct/circuit-breaker';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -19,12 +20,26 @@ export async function GET() {
 
   try {
     const knuct = await getKnuctHealth();
+    const queue = getKnuctQueueStats();
+    const circuit = getKnuctCircuitState();
     checks.knuct =
       knuct.health === 'ok' ? 'ok' : knuct.health === 'degraded' ? 'degraded' : 'error';
+    checks.knuctQueue = queue.pending > 10 ? 'degraded' : 'ok';
   } catch (err) {
     console.error('[health] knuct check failed:', err);
     checks.knuct = 'error';
   }
+
+  const knuctMeta = (() => {
+    try {
+      return {
+        queue: getKnuctQueueStats(),
+        circuit: getKnuctCircuitState(),
+      };
+    } catch {
+      return undefined;
+    }
+  })();
 
   const latencyMs = Date.now() - started;
   const healthy = checks.database === 'ok' && checks.knuct !== 'error';
@@ -35,6 +50,7 @@ export async function GET() {
       service: 'jntuh-scms',
       version: process.env.npm_package_version ?? '0.2.0',
       checks,
+      knuct: knuctMeta,
       latencyMs,
     },
     { status: healthy ? 200 : 503 }

@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -48,7 +49,7 @@ const systemConfig = [
   { label: 'Rate Limiting', value: 'Upstash Redis (prod) or in-memory (dev)', icon: Server, status: 'active' as const },
   { label: 'Email', value: 'Resend or SMTP — welcome & password-reset on user CRUD', icon: Bell, status: 'active' as const },
   { label: 'Database', value: 'PostgreSQL (Neon) + Prisma migrations', icon: Database, status: 'active' as const },
-  { label: 'Knuct Blockchain', value: 'Mock by default; set KNUCT_ENABLED=true for vendor sandbox', icon: Link2, status: 'active' as const },
+  { label: 'Knuct Blockchain', value: 'Live pilot when KNUCT_ENABLED=true', icon: Link2, status: 'active' as const },
   { label: 'API', value: 'Next.js App Router (/api/*)', icon: Server, status: 'active' as const },
 ];
 
@@ -98,6 +99,29 @@ export default function SettingsSection() {
     },
     onError: (err: Error) => {
       toast({ title: 'Provisioning failed', description: err.message, variant: 'destructive' });
+    },
+  });
+
+  const pilotMutation = useMutation({
+    mutationFn: () =>
+      fetch('/api/knuct/pilot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sync: true, limit: 5 }),
+      }).then(async (r) => {
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error ?? 'Pilot failed');
+        return data;
+      }),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['knuct-status'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      const active = data.results?.filter((r: { status: string }) => r.status === 'active').length ?? 0;
+      toast({ title: 'Live pilot complete', description: `${active} wallets active` });
+    },
+    onError: (err: Error) => {
+      toast({ title: 'Pilot failed', description: err.message, variant: 'destructive' });
     },
   });
 
@@ -215,7 +239,7 @@ export default function SettingsSection() {
                   <Link2 className="h-4 w-4 text-[#1A3C6E]" /> Knuct Wallet & DID
                 </CardTitle>
                 <CardDescription>
-                  Decentralized identity pilot — mock adapter by default; enable KNUCT_ENABLED for vendor sandbox
+                  Live Knuct pilot — set KNUCT_ENABLED=true and optional KNUCT_API_KEY in .env
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -307,6 +331,18 @@ export default function SettingsSection() {
                         {knuctData?.wallet?.status === 'active' ? 'Re-provision wallet' : 'Provision my wallet'}
                       </Button>
                       <Button size="sm" variant="ghost" onClick={() => refetchKnuct()}>Refresh status</Button>
+                      <Button size="sm" variant="ghost" asChild>
+                        <Link href="/verify" target="_blank">Public verify page</Link>
+                      </Button>
+                      {isSuperAdmin && knuctData?.config?.enabled && (
+                        <Button
+                          size="sm"
+                          disabled={pilotMutation.isPending}
+                          onClick={() => pilotMutation.mutate()}
+                        >
+                          {pilotMutation.isPending ? 'Running pilot…' : 'Run live pilot (5)'}
+                        </Button>
+                      )}
                     </div>
                   </>
                 )}

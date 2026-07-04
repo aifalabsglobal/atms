@@ -3,7 +3,7 @@
   "version": "0.2.0",
   "private": true,
   "scripts": {
-    "dev": "next dev -p 3000",
+    "dev": "next dev -p 3000 --webpack",
     "build": "next build",
     "start": "next start -p 3000",
     "lint": "eslint .",
@@ -20,6 +20,8 @@
     "test:roles": "npx tsx scripts/role-test.ts",
     "test:knuct:anchor": "npx tsx scripts/test-knuct-anchor.ts",
     "test:knuct:live": "npx tsx scripts/test-knuct-live.ts",
+    "knuct:pilot": "npx tsx scripts/knuct-pilot-cohort.ts",
+    "knuct:pilot:sync": "npx tsx scripts/knuct-pilot-cohort.ts --sync",
     "db:migrate": "prisma migrate dev",
     "db:migrate:deploy": "prisma migrate deploy",
     "db:baseline": "npx tsx scripts/db-baseline.ts",

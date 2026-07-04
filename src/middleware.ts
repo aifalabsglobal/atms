@@ -19,6 +19,10 @@ export default async function middleware(request: NextRequest, event: NextFetchE
     return applySecurityHeaders(NextResponse.next());
   }
 
+  if (request.nextUrl.pathname.startsWith('/api/verify')) {
+    return applySecurityHeaders(NextResponse.next());
+  }
+
   if (request.nextUrl.pathname.startsWith('/api/auth') && request.method === 'POST') {
     const ip = getClientIp(request);
     const limited = await enforceRateLimit(`auth:${ip}`, 15, 60_000);

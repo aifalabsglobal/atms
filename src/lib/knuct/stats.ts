@@ -2,13 +2,13 @@ import { db } from '@/lib/db';
 import { getKnuctConfig, isKnuctLiveEnabled } from './config';
 import { getKnuctCircuitState, isKnuctCircuitOpen } from './circuit-breaker';
 import { MockKnuctAdapter } from './mock-adapter';
-import { KnuctHttpAdapter } from './knuct-client';
+import { createKnuctHttpAdapter } from './knuct-client';
 import type { KnuctAdapter, KnuctDashboardStats } from './types';
 
 export function getKnuctAdapter(): KnuctAdapter {
   const config = getKnuctConfig();
   if (config.enabled && !isKnuctCircuitOpen()) {
-    return new KnuctHttpAdapter(config.baseUrl);
+    return createKnuctHttpAdapter(config.baseUrl);
   }
   return new MockKnuctAdapter();
 }
@@ -45,7 +45,7 @@ export async function getKnuctHealth(): Promise<{
   }
 
   try {
-    const adapter = new KnuctHttpAdapter(config.baseUrl);
+    const adapter = createKnuctHttpAdapter(config.baseUrl);
     const started = Date.now();
     await adapter.startTempNode();
     console.info('[knuct] health ping ok', { ms: Date.now() - started });

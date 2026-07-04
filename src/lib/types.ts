@@ -126,6 +126,7 @@ export interface UserItem {
   lastLoginAt: string | null;
   createdAt: string;
   _count: { attendanceRecords: number; courseEnrollments: number; submissions: number; taughtCourses: number };
+  knuctWallet?: { did: string | null; status: string } | null;
 }
 
 export interface GeofenceItem {

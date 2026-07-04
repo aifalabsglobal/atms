@@ -9,6 +9,10 @@ export function enqueueKnuctJob(job: KnuctJob): void {
   scheduleDrain();
 }
 
+export function getKnuctQueueStats(): { pending: number; draining: boolean } {
+  return { pending: queue.length, draining };
+}
+
 function scheduleDrain(): void {
   if (draining) return;
   draining = true;

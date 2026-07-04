@@ -49,6 +49,7 @@ export async function GET(request: Request) {
         where,
         select: {
           id: true, email: true, name: true, employeeId: true, department: true, phone: true, role: true, status: true, avatarUrl: true, lastLoginAt: true, createdAt: true,
+          knuctWallet: { select: { did: true, status: true } },
           _count: { select: { attendanceRecords: true, courseEnrollments: true, submissions: true, taughtCourses: true } },
         },
         orderBy: { createdAt: 'desc' },

@@ -23,6 +23,10 @@ export interface KnuctConfig {
   walletOnUserCreate: boolean;
   maxRetries: number;
   circuitBreakerThreshold: number;
+  apiKey?: string;
+  apiSecret?: string;
+  tenantId?: string;
+  pilotCohortLimit: number;
 }
 
 export interface KnuctDashboardStats {

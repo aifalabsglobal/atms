@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Users, Search, Filter, Shield, UserCheck, UserX, ChevronLeft,
   ChevronRight, Eye, MoreHorizontal, Mail, Phone, Building2,
@@ -39,6 +39,7 @@ import {
 } from '@/components/ui/chart';
 import { Pie, PieChart, Cell } from 'recharts';
 import { CreateUserDialog, useUserMutations } from '@/components/users/user-management-dialogs';
+import { useToast } from '@/hooks/use-toast';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -176,6 +177,27 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
+const WALLET_BADGE_STYLES: Record<string, string> = {
+  active: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+  pending: 'bg-amber-100 text-amber-800 border-amber-200',
+  failed: 'bg-red-100 text-red-800 border-red-200',
+};
+
+function WalletBadge({ wallet }: { wallet?: UserItem['knuctWallet'] }) {
+  if (!wallet) {
+    return (
+      <Badge variant="outline" className="text-[10px] text-muted-foreground">
+        No wallet
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className={cn('text-[10px] font-mono', WALLET_BADGE_STYLES[wallet.status] ?? 'bg-gray-100')}>
+      {wallet.status === 'active' && wallet.did ? `${wallet.did.slice(0, 10)}…` : wallet.status}
+    </Badge>
+  );
+}
+
 function StatCard({ title, value, icon: Icon, color, subtitle }: {
   title: string; value: number; icon: React.ElementType; color: string; subtitle?: string;
 }) {
@@ -198,8 +220,13 @@ function StatCard({ title, value, icon: Icon, color, subtitle }: {
   );
 }
 
-function UserDetailDialog({ user, open, onOpenChange }: {
-  user: UserItem | null; open: boolean; onOpenChange: (open: boolean) => void;
+function UserDetailDialog({ user, open, onOpenChange, canManage, onProvisionWallet, provisioning }: {
+  user: UserItem | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  canManage: boolean;
+  onProvisionWallet: (userId: string) => void;
+  provisioning: boolean;
 }) {
   if (!user) return null;
 
@@ -260,6 +287,34 @@ function UserDetailDialog({ user, open, onOpenChange }: {
                 <p className="text-[10px] text-muted-foreground">Last Login</p>
                 <p className="font-medium">{formatLastLogin(user.lastLoginAt)}</p>
               </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Knuct Wallet */}
+          <div>
+            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <Database className="h-3.5 w-3.5" /> Knuct Wallet
+            </h4>
+            <div className="rounded-lg border p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <WalletBadge wallet={user.knuctWallet} />
+                {canManage && user.knuctWallet?.status !== 'active' && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    disabled={provisioning}
+                    onClick={() => onProvisionWallet(user.id)}
+                  >
+                    {provisioning ? 'Provisioning…' : 'Provision'}
+                  </Button>
+                )}
+              </div>
+              {user.knuctWallet?.did && (
+                <p className="text-[10px] font-mono text-muted-foreground break-all">{user.knuctWallet.did}</p>
+              )}
             </div>
           </div>
 
@@ -412,8 +467,33 @@ export default function UsersSection() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const { updateUser } = useUserMutations();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const canManage = currentUser ? ['super_admin', 'admin', 'hod'].includes(currentUser.role) : false;
+  const canProvisionWallet = currentUser ? ['super_admin', 'admin'].includes(currentUser.role) : false;
+
+  const provisionWallet = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await fetch('/api/knuct', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? 'Provisioning failed');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      toast({ title: 'Wallet provisioning started', description: 'Status will update shortly.' });
+    },
+    onError: (err: Error) => {
+      toast({ title: 'Provisioning failed', description: err.message, variant: 'destructive' });
+    },
+  });
 
   // Build query params
   const queryParams = useMemo(() => {
@@ -500,6 +580,11 @@ export default function UsersSection() {
           </h2>
           <p className="text-sm text-muted-foreground">
             Manage users, roles, and permissions across the campus system
+            {canProvisionWallet && (
+              <span className="block mt-1 text-xs">
+                Knuct wallets: click a user row → profile dialog, or use <strong>Settings → Knuct</strong> for your wallet & pilot controls.
+              </span>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -605,6 +690,7 @@ export default function UsersSection() {
                           <TableHead className="hidden md:table-cell">Department</TableHead>
                           <TableHead>Role</TableHead>
                           <TableHead>Status</TableHead>
+                          <TableHead className="hidden md:table-cell">Wallet</TableHead>
                           <TableHead className="hidden lg:table-cell">Last Login</TableHead>
                           <TableHead className="w-[50px]">Actions</TableHead>
                         </TableRow>
@@ -627,6 +713,9 @@ export default function UsersSection() {
                                 <div className="min-w-0">
                                   <p className="text-sm font-medium truncate">{user.name}</p>
                                   <p className="text-[10px] text-muted-foreground truncate">{user.email}</p>
+                                  <div className="mt-1 md:hidden">
+                                    <WalletBadge wallet={user.knuctWallet} />
+                                  </div>
                                 </div>
                               </div>
                             </TableCell>
@@ -641,6 +730,9 @@ export default function UsersSection() {
                             </TableCell>
                             <TableCell>
                               <StatusBadge status={user.status} />
+                            </TableCell>
+                            <TableCell className="hidden md:table-cell">
+                              <WalletBadge wallet={user.knuctWallet} />
                             </TableCell>
                             <TableCell className="hidden lg:table-cell">
                               <span className="text-xs text-muted-foreground">{formatLastLogin(user.lastLoginAt)}</span>
@@ -672,6 +764,14 @@ export default function UsersSection() {
                                       }}>
                                         <Lock className="mr-2 h-3.5 w-3.5" /> Reset Password
                                       </DropdownMenuItem>
+                                      {canProvisionWallet && user.knuctWallet?.status !== 'active' && (
+                                        <DropdownMenuItem onClick={(e) => {
+                                          e.stopPropagation();
+                                          provisionWallet.mutate(user.id);
+                                        }}>
+                                          <Database className="mr-2 h-3.5 w-3.5" /> Provision Wallet
+                                        </DropdownMenuItem>
+                                      )}
                                     </>
                                   )}
                                 </DropdownMenuContent>
@@ -855,7 +955,14 @@ export default function UsersSection() {
       </div>
 
       {/* User Detail Dialog */}
-      <UserDetailDialog user={selectedUser} open={dialogOpen} onOpenChange={setDialogOpen} />
+      <UserDetailDialog
+        user={selectedUser}
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        canManage={canProvisionWallet}
+        onProvisionWallet={(id) => provisionWallet.mutate(id)}
+        provisioning={provisionWallet.isPending}
+      />
       <CreateUserDialog open={createOpen} onOpenChange={setCreateOpen} actorRole={currentUser.role} />
     </div>
   );

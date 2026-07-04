@@ -10,6 +10,10 @@ export function getKnuctConfig(): KnuctConfig {
       1,
       parseInt(process.env.KNUCT_CIRCUIT_BREAKER_THRESHOLD ?? '5', 10) || 5
     ),
+    apiKey: process.env.KNUCT_API_KEY?.trim() || undefined,
+    apiSecret: process.env.KNUCT_API_SECRET?.trim() || undefined,
+    tenantId: process.env.KNUCT_TENANT_ID?.trim() || undefined,
+    pilotCohortLimit: Math.max(1, parseInt(process.env.KNUCT_PILOT_COHORT_LIMIT ?? '25', 10) || 25),
   };
 }
 

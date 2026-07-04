@@ -4,7 +4,11 @@ export { enqueueWalletProvision, maybeProvisionWalletOnCreate, provisionWallet }
 export { anchorResource, enqueueAnchor, hashPayload, isAnchorEnabled } from './anchor-service';
 export type { AnchorResourceType } from './anchor-service';
 export { enrichAuditLogsWithAnchors } from './anchor-audit';
-export { enqueueKnuctJob } from './job-queue';
+export { enqueueKnuctJob, getKnuctQueueStats } from './job-queue';
 export { issueCredential, getCredentialStats, getUserCredentials, isCredentialEnabled } from './credential-service';
 export type { CredentialType } from './credential-service';
+export { startPilotProvisioning, resolvePilotUserIds } from './pilot-service';
+export type { PilotProvisionResult } from './pilot-service';
+export { resetKnuctCircuit } from './circuit-breaker';
+export { createKnuctHttpAdapter } from './knuct-client';
 export type { KnuctAdapter, KnuctDashboardStats, KnuctWalletResult } from './types';

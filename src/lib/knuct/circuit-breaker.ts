@@ -31,3 +31,8 @@ export function isKnuctCircuitOpen(): boolean {
 export function getKnuctCircuitState(): { open: boolean; consecutiveFailures: number } {
   return { open: isKnuctCircuitOpen(), consecutiveFailures };
 }
+
+export function resetKnuctCircuit(): void {
+  consecutiveFailures = 0;
+  openUntil = 0;
+}
