@@ -696,6 +696,29 @@ function AdminSessionsView() {
     },
   });
 
+  const completeMutation = useMutation({
+    mutationFn: (sessionId: string) =>
+      fetch(`/api/attendance/sessions/${sessionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'complete' }),
+      }).then(async (r) => {
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          throw new Error(err.error ?? 'Failed to complete session');
+        }
+        return r.json();
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['attendance-sessions'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      toast({ title: 'Session completed', description: 'Attendance summary anchored for audit trail.' });
+    },
+    onError: (err: Error) => {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    },
+  });
+
   return (
     <div className="space-y-4">
       {/* Summary Cards */}
@@ -805,6 +828,7 @@ function AdminSessionsView() {
                     <TableHead className="text-xs text-center">Present</TableHead>
                     <TableHead className="text-xs">Status</TableHead>
                     <TableHead className="text-xs">Verification</TableHead>
+                    <TableHead className="text-xs text-right">Actions</TableHead>
                   </TableRow></TableHeader>
                   <TableBody>
                     {sessions.map(s => {
@@ -832,6 +856,19 @@ function AdminSessionsView() {
                               {s.captureMethod === 'face' && <ScanFace className="h-3 w-3 text-purple-600" />}
                               {s.captureMethod === 'manual' && <PenLine className="h-3 w-3 text-muted-foreground" />}
                             </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {s.status === 'active' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-[10px]"
+                                disabled={completeMutation.isPending}
+                                onClick={() => completeMutation.mutate(s.id)}
+                              >
+                                Complete
+                              </Button>
+                            )}
                           </TableCell>
                         </TableRow>
                       );

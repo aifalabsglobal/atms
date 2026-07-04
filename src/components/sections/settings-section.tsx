@@ -267,18 +267,31 @@ export default function SettingsSection() {
                     </div>
 
                     {isSuperAdmin && knuctData?.stats && (
-                      <div className="rounded-lg border p-4 grid grid-cols-2 md:grid-cols-4 gap-3">
-                        {[
-                          { label: 'Active', value: knuctData.stats.wallets.active },
-                          { label: 'Pending', value: knuctData.stats.wallets.pending },
-                          { label: 'Failed', value: knuctData.stats.wallets.failed },
-                          { label: 'DID coverage', value: `${knuctData.stats.didCoveragePct}%` },
-                        ].map((s) => (
-                          <div key={s.label}>
-                            <p className="text-lg font-bold">{s.value}</p>
-                            <p className="text-[10px] text-muted-foreground">{s.label}</p>
+                      <div className="rounded-lg border p-4 space-y-3">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                          {[
+                            { label: 'Active wallets', value: knuctData.stats.wallets.active },
+                            { label: 'Anchors today', value: knuctData.stats.anchors.today },
+                            { label: 'Failed wallets', value: knuctData.stats.wallets.failed },
+                            { label: 'DID coverage', value: `${knuctData.stats.didCoveragePct}%` },
+                          ].map((s) => (
+                            <div key={s.label}>
+                              <p className="text-lg font-bold">{s.value}</p>
+                              <p className="text-[10px] text-muted-foreground">{s.label}</p>
+                            </div>
+                          ))}
+                        </div>
+                        {knuctData.stats.recentActivity.length > 0 && (
+                          <div className="space-y-1.5 pt-2 border-t">
+                            <p className="text-xs font-medium">Recent hash anchors</p>
+                            {knuctData.stats.recentActivity.slice(0, 5).map((a: { module: string; ref: string }, i: number) => (
+                              <p key={i} className="text-[10px] font-mono text-muted-foreground flex justify-between">
+                                <span>{a.module}</span>
+                                <span>{a.ref}…</span>
+                              </p>
+                            ))}
                           </div>
-                        ))}
+                        )}
                       </div>
                     )}
 

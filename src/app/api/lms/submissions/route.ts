@@ -2,6 +2,7 @@ import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { requireAuth, resolveStudentId } from '@/lib/auth-helpers';
 import { requireLmsRead, assertInstructorOwnsCourse, auditLms } from '@/lib/lms-helpers';
+import { enqueueAnchor } from '@/lib/knuct/anchor-service';
 
 export async function GET(request: Request) {
   try {
@@ -181,8 +182,18 @@ export async function PUT(request: Request) {
           where: { id: existingGrade.id },
           data: { score, maxScore: existing.assignment.maxScore, gradedBy: session.user.id, gradedAt: new Date() },
         });
+        enqueueAnchor('grade_publish', existingGrade.id, {
+          courseId: existing.assignment.courseId,
+          studentId: existing.studentId,
+          component: 'assignment',
+          componentId: existing.assignmentId,
+          score,
+          maxScore: existing.assignment.maxScore,
+          gradedBy: session.user.id,
+          gradedAt: new Date().toISOString(),
+        });
       } else {
-        await db.gradeBook.create({
+        const grade = await db.gradeBook.create({
           data: {
             courseId: existing.assignment.courseId,
             studentId: existing.studentId,
@@ -193,6 +204,16 @@ export async function PUT(request: Request) {
             weightage: 25,
             gradedBy: session.user.id,
           },
+        });
+        enqueueAnchor('grade_publish', grade.id, {
+          courseId: existing.assignment.courseId,
+          studentId: existing.studentId,
+          component: 'assignment',
+          componentId: existing.assignmentId,
+          score,
+          maxScore: existing.assignment.maxScore,
+          gradedBy: session.user.id,
+          gradedAt: new Date().toISOString(),
         });
       }
     }

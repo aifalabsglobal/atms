@@ -143,6 +143,20 @@ model KnuctWallet {
   @@index([status])
 }
 
+model BlockchainAnchor {
+  id           String   @id @default(cuid())
+  resourceType String   // attendance_session | violation_review | grade_publish
+  resourceId   String
+  payloadHash  String
+  knuctTxRef   String?
+  status       String   @default("anchored") // anchored | pending | unavailable
+  createdAt    DateTime @default(now())
+
+  @@index([resourceType, resourceId])
+  @@index([createdAt])
+  @@index([status])
+}
+
 model FaceEmbedding {
   id           String   @id @default(cuid())
   userId       String

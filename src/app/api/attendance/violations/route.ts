@@ -2,6 +2,7 @@ import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { STAFF_ROLES, requireRoles, getCampusScope, requireSection } from '@/lib/auth-helpers';
 import { logAudit, getClientIp } from '@/lib/audit';
+import { enqueueAnchor } from '@/lib/knuct/anchor-service';
 
 export async function GET(request: Request) {
   try {
@@ -103,6 +104,14 @@ export async function PUT(request: Request) {
       resource: `violation:${id}`,
       details: { reviewStatus, violator: violation.violator.name },
       ipAddress: getClientIp(request),
+    });
+
+    enqueueAnchor('violation_review', id, {
+      reviewStatus,
+      reviewNotes: reviewNotes ?? null,
+      reviewedBy: session.user.id,
+      studentId: existing.studentId,
+      reviewedAt: new Date().toISOString(),
     });
 
     return NextResponse.json(violation);

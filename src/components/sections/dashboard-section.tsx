@@ -849,11 +849,11 @@ function KnuctOpsPanel({ knuct }: { knuct: KnuctDashboardStats }) {
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
           {[
             { label: 'Active wallets', value: knuct.wallets.active, icon: Wallet, color: NAVY },
-            { label: 'Pending', value: knuct.wallets.pending, icon: Timer, color: '#B45309' },
-            { label: 'Failed', value: knuct.wallets.failed, icon: XCircle, color: '#E74C3C' },
-            { label: 'DID coverage', value: `${knuct.didCoveragePct}%`, icon: Users, color: '#1B6B4A' },
-            { label: 'Total tracked', value: knuct.wallets.total, icon: ShieldCheck, color: '#7C3AED' },
-            { label: 'Knuct enabled', value: knuct.enabled ? 'Yes' : 'No', icon: Radio, color: '#0E7490' },
+            { label: 'Anchors today', value: knuct.anchors.today, icon: ShieldCheck, color: '#1B6B4A' },
+            { label: 'Failed wallets', value: knuct.wallets.failed, icon: XCircle, color: '#E74C3C' },
+            { label: 'DID coverage', value: `${knuct.didCoveragePct}%`, icon: Users, color: '#7C3AED' },
+            { label: 'Pending wallets', value: knuct.wallets.pending, icon: Timer, color: '#B45309' },
+            { label: 'Adapter', value: knuct.adapterMode, icon: Radio, color: '#0E7490' },
           ].map((k) => (
             <div key={k.label} className="rounded-lg border bg-card p-3">
               <div className="flex items-center gap-2 mb-1">
@@ -873,8 +873,19 @@ function KnuctOpsPanel({ knuct }: { knuct: KnuctDashboardStats }) {
           </Button>
         </div>
         <p className="text-[11px] text-muted-foreground">
-          Phase 2 credentials and Phase 3 anchor metrics will appear here when vendor APIs are available.
+          Hash-only audit anchors (Phase 3) — stored in PostgreSQL until Knuct chain publish API is available.
         </p>
+        {knuct.recentActivity.length > 0 && (
+          <div className="rounded-lg border p-3 space-y-2">
+            <p className="text-xs font-medium">Recent anchors</p>
+            {knuct.recentActivity.slice(0, 5).map((a, i) => (
+              <div key={i} className="flex items-center justify-between text-[11px] text-muted-foreground font-mono">
+                <span>{a.module}</span>
+                <span>{a.ref}…</span>
+              </div>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
