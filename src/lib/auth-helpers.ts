@@ -34,8 +34,9 @@ export async function requireRoles(allowedRoles: Role[]) {
   return { error: null, session };
 }
 
+export { STAFF_ROLES, CAMPUS_USER_ROLES } from '@/lib/user-management';
+
 export const ADMIN_ROLES: Role[] = ['super_admin', 'admin'];
-export const STAFF_ROLES: Role[] = ['super_admin', 'admin', 'hod', 'faculty', 'lab_assistant', 'security'];
 export const CAMPUS_READ_ROLES: Role[] = ['super_admin', 'admin', 'hod', 'faculty', 'lab_assistant', 'security'];
 
 export function canAccessSection(role: Role, section: Section): boolean {

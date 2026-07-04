@@ -17,7 +17,7 @@ const QUICK_STEPS: { label: string; section: Section; sub?: string; icon: React.
 ];
 
 export function DemoBanner() {
-  const { currentUser, setActiveSection } = useAppStore();
+  const { currentUser, navigateToSection } = useAppStore();
   const [dismissed, setDismissed] = useState(false);
 
   const isDemoUser = currentUser && DEMO_ACCOUNTS.some((a) => a.email === currentUser.email);
@@ -61,7 +61,13 @@ export function DemoBanner() {
               variant="ghost"
               size="sm"
               className="h-7 text-[10px] gap-1 px-2"
-              onClick={() => setActiveSection(step.section)}
+              onClick={() => {
+                if (step.sub === 'quizzes') {
+                  navigateToSection(step.section, { lmsTab: 'quizzes' });
+                } else {
+                  navigateToSection(step.section);
+                }
+              }}
             >
               <Icon className="h-3 w-3" />
               {step.label}

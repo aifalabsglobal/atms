@@ -17,7 +17,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import {
   Building2, GraduationCap, BookOpen, Calendar, Database,
-  Plus, Pencil, Trash2, Loader2, Layers, Search, Rocket, Upload
+  Plus, Pencil, Trash2, Loader2, Layers, Search, Rocket, Upload, Clock
 } from 'lucide-react';
 import { PublishSubjectDialog } from '@/components/lms/lms-dialogs';
 import { useState, useEffect } from 'react';
@@ -806,6 +806,220 @@ function ProgramsTab({ programs, departments, readOnly }: { programs: any[]; dep
   );
 }
 
+const TIMETABLE_DAYS = [
+  { value: '0', label: 'Sunday' },
+  { value: '1', label: 'Monday' },
+  { value: '2', label: 'Tuesday' },
+  { value: '3', label: 'Wednesday' },
+  { value: '4', label: 'Thursday' },
+  { value: '5', label: 'Friday' },
+  { value: '6', label: 'Saturday' },
+];
+
+function TimetableTab({ semesters, readOnly }: { semesters: any[]; readOnly?: boolean }) {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editItem, setEditItem] = useState<any>(null);
+  const [form, setForm] = useState({
+    courseId: '', semesterId: '', dayOfWeek: '1', startTime: '09:00', endTime: '10:00',
+    roomNumber: '', building: '', semester: '', academicYear: '2025-2026', isActive: true,
+  });
+
+  const { data: coursesData } = useQuery({
+    queryKey: ['masters-timetable-courses'],
+    queryFn: () => fetch('/api/lms/courses?limit=200').then(r => r.json()),
+  });
+  const courses = coursesData?.courses ?? [];
+
+  const { data: slotsData, isLoading: slotsLoading } = useQuery({
+    queryKey: ['masters-timetable-slots'],
+    queryFn: () => fetch('/api/masters/timetable-slots?limit=200&includeInactive=true').then(r => r.json()),
+  });
+  const slots = slotsData?.slots ?? [];
+
+  const createMut = useMasterMutation('masters-timetable-slots', 'POST', '/api/masters/timetable-slots');
+  const updateMut = useMasterMutation('masters-timetable-slots', 'PUT', '/api/masters/timetable-slots');
+  const deleteMut = useMasterMutation('masters-timetable-slots', 'DELETE', '/api/masters/timetable-slots');
+
+  const openNew = () => {
+    setEditItem(null);
+    setForm({
+      courseId: courses[0]?.id || '', semesterId: '', dayOfWeek: '1', startTime: '09:00', endTime: '10:00',
+      roomNumber: '', building: '', semester: '', academicYear: '2025-2026', isActive: true,
+    });
+    setDialogOpen(true);
+  };
+
+  const openEdit = (item: any) => {
+    setEditItem(item);
+    setForm({
+      courseId: item.courseId,
+      semesterId: item.semesterId || '',
+      dayOfWeek: String(item.dayOfWeek),
+      startTime: item.startTime,
+      endTime: item.endTime,
+      roomNumber: item.roomNumber || '',
+      building: item.building || '',
+      semester: item.semester || '',
+      academicYear: item.academicYear || '',
+      isActive: item.isActive ?? true,
+    });
+    setDialogOpen(true);
+  };
+
+  const handleSubmit = () => {
+    const payload = {
+      courseId: form.courseId,
+      semesterId: form.semesterId || null,
+      dayOfWeek: parseInt(form.dayOfWeek, 10),
+      startTime: form.startTime,
+      endTime: form.endTime,
+      roomNumber: form.roomNumber || null,
+      building: form.building || null,
+      semester: form.semester || null,
+      academicYear: form.academicYear || null,
+      isActive: form.isActive,
+    };
+    if (editItem) updateMut.mutate({ id: editItem.id, ...payload }, { onSuccess: () => setDialogOpen(false) });
+    else createMut.mutate(payload, { onSuccess: () => setDialogOpen(false) });
+  };
+
+  const dayLabel = (d: number) => TIMETABLE_DAYS.find(x => x.value === String(d))?.label ?? String(d);
+
+  return (
+    <>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+          <div>
+            <CardTitle className="text-lg">Timetable Slots</CardTitle>
+            <CardDescription>Weekly class schedule linked to courses — used when starting attendance sessions</CardDescription>
+            {!slotsLoading && slotsData?.total != null && (
+              <p className="text-xs text-muted-foreground mt-1">{slotsData.total} slot{slotsData.total !== 1 ? 's' : ''} total</p>
+            )}
+          </div>
+          {!readOnly && (
+            <Button size="sm" onClick={openNew} className="gap-1.5" style={{ backgroundColor: NAVY }} disabled={courses.length === 0}>
+              <Plus className="h-4 w-4" /> Add Slot
+            </Button>
+          )}
+        </CardHeader>
+        <CardContent>
+          <ScrollArea className="max-h-[28rem]">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Course</TableHead>
+                  <TableHead>Day</TableHead>
+                  <TableHead>Time</TableHead>
+                  <TableHead>Room</TableHead>
+                  <TableHead>Semester</TableHead>
+                  <TableHead>Sessions</TableHead>
+                  <TableHead>Status</TableHead>
+                  {!readOnly && <TableHead className="w-20">Actions</TableHead>}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {slotsLoading ? (
+                  <TableRow><TableCell colSpan={readOnly ? 7 : 8} className="text-center text-sm text-muted-foreground">Loading...</TableCell></TableRow>
+                ) : slots.length === 0 ? (
+                  <TableRow><TableCell colSpan={readOnly ? 7 : 8} className="text-center text-sm text-muted-foreground">No timetable slots yet</TableCell></TableRow>
+                ) : (
+                  slots.map((s: any) => (
+                    <TableRow key={s.id}>
+                      <TableCell>
+                        <span className="font-mono text-xs font-semibold">{s.course?.code}</span>
+                        <p className="text-xs text-muted-foreground truncate max-w-[160px]">{s.course?.name}</p>
+                      </TableCell>
+                      <TableCell className="text-sm">{dayLabel(s.dayOfWeek)}</TableCell>
+                      <TableCell className="text-sm font-mono">{s.startTime}–{s.endTime}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {[s.building, s.roomNumber].filter(Boolean).join(' · ') || '—'}
+                      </TableCell>
+                      <TableCell className="text-xs">{s.semesterRef?.code || s.semester || '—'}</TableCell>
+                      <TableCell><Badge variant="outline">{s._count?.attendanceSessions ?? 0}</Badge></TableCell>
+                      <TableCell>
+                        <Badge variant={s.isActive ? 'default' : 'destructive'} className="text-xs">
+                          {s.isActive ? 'Active' : 'Inactive'}
+                        </Badge>
+                      </TableCell>
+                      {!readOnly && (
+                        <TableCell>
+                          <div className="flex items-center gap-1">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(s)}><Pencil className="h-3.5 w-3.5" /></Button>
+                            <DeleteConfirm onConfirm={() => deleteMut.mutate({ id: s.id })} isLoading={deleteMut.isPending} />
+                          </div>
+                        </TableCell>
+                      )}
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+        </CardContent>
+      </Card>
+      <FormDialog
+        title={editItem ? 'Edit Timetable Slot' : 'Add Timetable Slot'}
+        description="Define when a course meets each week"
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onSubmit={handleSubmit}
+        isLoading={createMut.isPending || updateMut.isPending}
+      >
+        <div className="grid grid-cols-2 gap-3">
+          <div className="col-span-2">
+            <Label>Course *</Label>
+            <Select value={form.courseId} onValueChange={v => setForm(f => ({ ...f, courseId: v }))}>
+              <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
+              <SelectContent>
+                {courses.map((c: { id: string; code: string; name: string }) => (
+                  <SelectItem key={c.id} value={c.id}>{c.code} — {c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Day *</Label>
+            <Select value={form.dayOfWeek} onValueChange={v => setForm(f => ({ ...f, dayOfWeek: v }))}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {TIMETABLE_DAYS.map(d => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Semester (master)</Label>
+            <Select value={form.semesterId || '__none__'} onValueChange={v => setForm(f => ({ ...f, semesterId: v === '__none__' ? '' : v }))}>
+              <SelectTrigger><SelectValue placeholder="Optional" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">None</SelectItem>
+                {semesters.map((s: { id: string; code: string; name: string }) => (
+                  <SelectItem key={s.id} value={s.id}>{s.code} — {s.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div><Label>Start time *</Label><Input type="time" value={form.startTime} onChange={e => setForm(f => ({ ...f, startTime: e.target.value }))} /></div>
+          <div><Label>End time *</Label><Input type="time" value={form.endTime} onChange={e => setForm(f => ({ ...f, endTime: e.target.value }))} /></div>
+          <div><Label>Building</Label><Input value={form.building} onChange={e => setForm(f => ({ ...f, building: e.target.value }))} placeholder="CSE Block" /></div>
+          <div><Label>Room</Label><Input value={form.roomNumber} onChange={e => setForm(f => ({ ...f, roomNumber: e.target.value }))} placeholder="CSE-301" /></div>
+          <div><Label>Semester label</Label><Input value={form.semester} onChange={e => setForm(f => ({ ...f, semester: e.target.value }))} placeholder="I-I" /></div>
+          <div><Label>Academic year</Label><Input value={form.academicYear} onChange={e => setForm(f => ({ ...f, academicYear: e.target.value }))} placeholder="2025-2026" /></div>
+          <div className="col-span-2">
+            <Label>Status</Label>
+            <Select value={form.isActive ? 'active' : 'inactive'} onValueChange={v => setForm(f => ({ ...f, isActive: v === 'active' }))}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="inactive">Inactive</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </FormDialog>
+    </>
+  );
+}
+
 // ─── Main Masters Section ────────────────────────────────────────────────────
 
 export default function MastersSection() {
@@ -827,6 +1041,7 @@ export default function MastersSection() {
   if (!currentUser) return null;
 
   const mastersReadOnly = currentUser.role === 'hod';
+  const timetableReadOnly = !['super_admin', 'admin', 'hod'].includes(currentUser.role);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -869,18 +1084,20 @@ export default function MastersSection() {
 
       {/* Tabbed Content */}
       <Tabs defaultValue="departments" className="w-full">
-        <TabsList className="grid grid-cols-5 w-full max-w-2xl">
+        <TabsList className="grid grid-cols-3 sm:grid-cols-6 w-full max-w-4xl">
           <TabsTrigger value="departments" className="text-xs sm:text-sm">Departments</TabsTrigger>
           <TabsTrigger value="academic-years" className="text-xs sm:text-sm">Acad. Years</TabsTrigger>
           <TabsTrigger value="semesters" className="text-xs sm:text-sm">Semesters</TabsTrigger>
           <TabsTrigger value="subjects" className="text-xs sm:text-sm">Subjects</TabsTrigger>
           <TabsTrigger value="programs" className="text-xs sm:text-sm">Programs</TabsTrigger>
+          <TabsTrigger value="timetable" className="text-xs sm:text-sm gap-1"><Clock className="h-3 w-3 hidden sm:inline" />Timetable</TabsTrigger>
         </TabsList>
         <TabsContent value="departments" className="mt-4"><DepartmentsTab departments={departments} readOnly={mastersReadOnly} /></TabsContent>
         <TabsContent value="academic-years" className="mt-4"><AcademicYearsTab academicYears={academicYears} readOnly={mastersReadOnly} /></TabsContent>
         <TabsContent value="semesters" className="mt-4"><SemestersTab semesters={semesters} academicYears={academicYears} readOnly={mastersReadOnly} /></TabsContent>
         <TabsContent value="subjects" className="mt-4"><SubjectsTab subjects={subjects} departments={departments} semesters={semesters} programs={programs} readOnly={mastersReadOnly} /></TabsContent>
         <TabsContent value="programs" className="mt-4"><ProgramsTab programs={programs} departments={departments} readOnly={mastersReadOnly} /></TabsContent>
+        <TabsContent value="timetable" className="mt-4"><TimetableTab semesters={semesters} readOnly={timetableReadOnly} /></TabsContent>
       </Tabs>
     </div>
   );

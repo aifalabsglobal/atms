@@ -7,9 +7,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -18,10 +19,17 @@ import {
   MapPin, Plus, Building2, Circle, Pentagon, ToggleLeft, ToggleRight,
   Navigation, ScanFace, CheckCircle2, XCircle, Clock, ShieldCheck,
   ShieldAlert, Loader2, Crosshair, Maximize2, UserCheck, AlertTriangle,
+  Pencil, Trash2,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAppStore, GEOFENCE_WRITE_ROLES } from '@/lib/store';
 import { parsePolygonData } from '@/lib/geofence';
+import {
+  captureMethodRequiresGeofence,
+  checkLocationAgainstSessionGeofence,
+  geofenceStatusLabel,
+  type GeofenceCheckResult,
+} from '@/lib/geofence-policy';
 import { cn } from '@/lib/utils';
 import type { GeofenceItem } from '@/lib/types';
 
@@ -53,7 +61,14 @@ interface ActiveSession {
   presentCount: number;
   course: { name: string; code: string };
   creator: { name: string };
-  geofence: { name: string; centerLat?: number; centerLng?: number; radiusMtrs?: number } | null;
+  geofence: {
+    name: string;
+    type?: string;
+    centerLat?: number;
+    centerLng?: number;
+    radiusMtrs?: number;
+    polygonData?: string | null;
+  } | null;
   timetableSlot: { roomNumber: string | null; building: string | null } | null;
   alreadyMarked: boolean;
   existingRecord?: {
@@ -239,13 +254,17 @@ function MapView({
 
   // Fit bounds to selected session's geofence
   useEffect(() => {
-    if (!leafletMapRef.current || !mapReady || !selectedSession) return;
-    if (selectedSession.geofence?.centerLat && selectedSession.geofence?.centerLng) {
-      leafletMapRef.current.setView(
-        [selectedSession.geofence.centerLat, selectedSession.geofence.centerLng],
-        DEFAULT_ZOOM + 2,
-        { animate: true }
-      );
+    if (!leafletMapRef.current || !mapReady || !selectedSession?.geofence) return;
+    const L = require('leaflet');
+    const g = selectedSession.geofence;
+    if (g.type === 'polygon' && g.polygonData) {
+      const polygon = parsePolygonData(g.polygonData);
+      if (polygon?.length) {
+        const bounds = L.latLngBounds(polygon.map((p) => [p.lat, p.lng]));
+        leafletMapRef.current.fitBounds(bounds, { padding: [24, 24], animate: true });
+      }
+    } else if (g.centerLat != null && g.centerLng != null) {
+      leafletMapRef.current.setView([g.centerLat, g.centerLng], DEFAULT_ZOOM + 2, { animate: true });
     }
   }, [mapReady, selectedSession]);
 
@@ -275,12 +294,7 @@ function StudentMarkPanel() {
   const [selectedSession, setSelectedSession] = useState<ActiveSession | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
-  const [geofenceStatus, setGeofenceStatus] = useState<{
-    inside: boolean;
-    distance: number;
-    geofenceName: string;
-    radius: number;
-  } | null>(null);
+  const [geofenceStatus, setGeofenceStatus] = useState<GeofenceCheckResult | null>(null);
 
   // Fetch active sessions
   const { data: activeData, isLoading: activeLoading } = useQuery({
@@ -290,11 +304,6 @@ function StudentMarkPanel() {
     refetchInterval: 15000,
   });
 
-  if (!currentUser) return null;
-
-  const activeSessions: ActiveSession[] = activeData?.sessions ?? [];
-
-  // Get user location
   const requestLocation = useCallback(() => {
     if (!navigator.geolocation) {
       setLocationError('Geolocation not supported');
@@ -306,19 +315,10 @@ function StudentMarkPanel() {
         setUserLocation(loc);
         setLocationError(null);
 
-        // Check geofence status for selected session
-        if (selectedSession?.geofence?.centerLat && selectedSession?.geofence?.centerLng) {
-          const dist = haversineDistance(
-            loc.lat, loc.lng,
-            selectedSession.geofence.centerLat, selectedSession.geofence.centerLng
-          );
-          const radius = selectedSession.geofence.radiusMtrs ?? 100;
-          setGeofenceStatus({
-            inside: dist <= radius,
-            distance: dist,
-            geofenceName: selectedSession.geofence.name,
-            radius,
-          });
+        if (selectedSession?.geofence) {
+          setGeofenceStatus(checkLocationAgainstSessionGeofence(selectedSession.geofence, loc.lat, loc.lng));
+        } else {
+          setGeofenceStatus(null);
         }
       },
       (err) => setLocationError(err.message),
@@ -353,6 +353,12 @@ function StudentMarkPanel() {
       toast({ title: 'Error', description: err.message, variant: 'destructive' });
     },
   });
+
+  if (!currentUser) return null;
+
+  const activeSessions: ActiveSession[] = activeData?.sessions ?? [];
+  const geoRequiredForSession = (session: ActiveSession) =>
+    captureMethodRequiresGeofence(session.captureMethod);
 
   const handleMarkAttendance = () => {
     if (!selectedSession || !userLocation) return;
@@ -447,22 +453,28 @@ function StudentMarkPanel() {
             {userLocation ? (
               <div className={cn(
                 'p-3 rounded-lg border',
-                geofenceStatus?.inside
-                  ? 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800'
-                  : 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800'
+                !selectedSession.geofence
+                  ? 'bg-muted/50 border-border'
+                  : geofenceStatus?.inside
+                    ? 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800'
+                    : 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800'
               )}>
                 <div className="flex items-center gap-2 mb-2">
-                  {geofenceStatus?.inside ? (
+                  {!selectedSession.geofence ? (
+                    <MapPin className="h-5 w-5 text-muted-foreground" />
+                  ) : geofenceStatus?.inside ? (
                     <ShieldCheck className="h-5 w-5 text-green-600" />
                   ) : (
                     <ShieldAlert className="h-5 w-5 text-red-600" />
                   )}
                   <div>
-                    <p className={cn('text-sm font-semibold', geofenceStatus?.inside ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400')}>
-                      {geofenceStatus?.inside ? '✅ Inside Geofence' : '❌ Outside Geofence'}
+                    <p className="text-sm font-semibold">
+                      {!selectedSession.geofence
+                        ? 'No geofence on this session'
+                        : geofenceStatus?.inside ? '✅ Inside Geofence' : '❌ Outside Geofence'}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {geofenceStatus ? `${Math.round(geofenceStatus.distance)}m from center (radius: ${geofenceStatus.radius}m)` : 'Checking...'}
+                      {geofenceStatus ? geofenceStatusLabel(geofenceStatus) : selectedSession.geofence ? 'Checking...' : 'Location captured for audit'}
                     </p>
                   </div>
                 </div>
@@ -497,7 +509,13 @@ function StudentMarkPanel() {
             <div className="pt-2 border-t">
               <Button
                 className="w-full bg-[#1A3C6E] hover:bg-[#1A3C6E]/90 text-white gap-2"
-                disabled={!userLocation || !geofenceStatus?.inside || markMutation.isPending}
+                disabled={
+                  markMutation.isPending ||
+                  !userLocation ||
+                  (selectedSession.geofence
+                    ? !geofenceStatus?.inside
+                    : geoRequiredForSession(selectedSession))
+                }
                 onClick={handleMarkAttendance}
               >
                 {markMutation.isPending ? (
@@ -509,9 +527,14 @@ function StudentMarkPanel() {
               {!userLocation && (
                 <p className="text-[10px] text-amber-600 mt-1 text-center">⚠️ Location required</p>
               )}
-              {userLocation && !geofenceStatus?.inside && (
+              {userLocation && selectedSession.geofence && geofenceStatus && !geofenceStatus.inside && (
                 <p className="text-[10px] text-red-600 mt-1 text-center">
-                  ❌ You must be within the geofence boundary to mark attendance
+                  ❌ {geofenceStatusLabel(geofenceStatus)}
+                </p>
+              )}
+              {userLocation && !selectedSession.geofence && geoRequiredForSession(selectedSession) && (
+                <p className="text-[10px] text-red-600 mt-1 text-center">
+                  This session requires a geofence — contact faculty.
                 </p>
               )}
             </div>
@@ -529,12 +552,15 @@ export default function GeofencesSection() {
   const { currentUser } = useAppStore();
   const [showCreate, setShowCreate] = useState(false);
   const [newFence, setNewFence] = useState({ name: '', type: 'circle', centerLat: '17.4563', centerLng: '78.6698', radiusMtrs: '200', building: '', floor: '' });
+  const [editTarget, setEditTarget] = useState<GeofenceItem | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', description: '', centerLat: '', centerLng: '', radiusMtrs: '' });
+  const [deleteTarget, setDeleteTarget] = useState<GeofenceItem | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [activeTab, setActiveTab] = useState('map');
 
   const { data, isLoading } = useQuery({
     queryKey: ['geofences'],
-    queryFn: () => fetch('/api/geofences').then(r => r.json()) as Promise<{ geofences: GeofenceItem[] }>,
+    queryFn: () => fetch('/api/geofences?includeInactive=true').then(r => r.json()) as Promise<{ geofences: GeofenceItem[] }>,
   });
 
   const isStudent = currentUser?.role === 'student';
@@ -557,7 +583,9 @@ export default function GeofencesSection() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
-      return res.json();
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to create geofence');
+      return json;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['geofences'] });
@@ -565,7 +593,84 @@ export default function GeofencesSection() {
       setNewFence({ name: '', type: 'circle', centerLat: '17.4563', centerLng: '78.6698', radiusMtrs: '200', building: '', floor: '' });
       toast({ title: 'Geofence Created', description: 'New geofence boundary has been added.' });
     },
+    onError: (err) => {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    },
   });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Record<string, unknown> }) => {
+      const res = await fetch(`/api/geofences/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to update geofence');
+      return json;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['geofences'] });
+      setEditTarget(null);
+      toast({ title: 'Geofence Updated', description: 'Changes saved successfully.' });
+    },
+    onError: (err) => {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    },
+  });
+
+  const toggleActiveMutation = useMutation({
+    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
+      const res = await fetch(`/api/geofences/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isActive }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to update geofence status');
+      return json;
+    },
+    onSuccess: (_, { isActive }) => {
+      qc.invalidateQueries({ queryKey: ['geofences'] });
+      toast({
+        title: isActive ? 'Geofence Activated' : 'Geofence Deactivated',
+        description: `Geofence is now ${isActive ? 'active' : 'inactive'}.`,
+      });
+    },
+    onError: (err) => {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/geofences/${id}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to delete geofence');
+      return json;
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['geofences'] });
+      setDeleteTarget(null);
+      toast({ title: 'Geofence Removed', description: data.message || 'Geofence deleted.' });
+    },
+    onError: (err) => {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    },
+  });
+
+  const openEditDialog = (g: GeofenceItem) => {
+    setEditTarget(g);
+    setEditForm({
+      name: g.name,
+      description: '',
+      centerLat: g.centerLat != null ? String(g.centerLat) : '',
+      centerLng: g.centerLng != null ? String(g.centerLng) : '',
+      radiusMtrs: g.radiusMtrs != null ? String(g.radiusMtrs) : '',
+    });
+  };
+
+  const listColSpan = canManageGeofences ? 8 : 7;
 
   const geofences = data?.geofences || [];
   const activeCount = geofences.filter(g => g.isActive).length;
@@ -755,13 +860,14 @@ export default function GeofencesSection() {
                       <TableHead className="text-xs">Radius</TableHead>
                       <TableHead className="text-xs">Sessions</TableHead>
                       <TableHead className="text-xs">Status</TableHead>
+                      {canManageGeofences && <TableHead className="text-xs text-right">Actions</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {isLoading ? (
-                      <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={listColSpan} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
                     ) : geofences.length === 0 ? (
-                      <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No geofences found</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={listColSpan} className="text-center py-8 text-muted-foreground">No geofences found</TableCell></TableRow>
                     ) : (
                       geofences.map(g => (
                         <TableRow key={g.id}>
@@ -788,6 +894,45 @@ export default function GeofencesSection() {
                               {g.isActive ? 'Active' : 'Inactive'}
                             </Badge>
                           </TableCell>
+                          {canManageGeofences && (
+                            <TableCell>
+                              <div className="flex items-center justify-end gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  title={g.isActive ? 'Deactivate' : 'Activate'}
+                                  disabled={toggleActiveMutation.isPending}
+                                  onClick={() => toggleActiveMutation.mutate({ id: g.id, isActive: !g.isActive })}
+                                >
+                                  {g.isActive ? (
+                                    <ToggleRight className="h-3.5 w-3.5 text-green-600" />
+                                  ) : (
+                                    <ToggleLeft className="h-3.5 w-3.5 text-muted-foreground" />
+                                  )}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  title={g.type === 'circle' ? 'Edit geofence' : 'Only circle geofences can be edited'}
+                                  disabled={g.type !== 'circle'}
+                                  onClick={() => openEditDialog(g)}
+                                >
+                                  <Pencil className={cn('h-3.5 w-3.5', g.type !== 'circle' && 'opacity-40')} />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7 text-destructive hover:text-destructive"
+                                  title="Delete geofence"
+                                  onClick={() => setDeleteTarget(g)}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          )}
                         </TableRow>
                       ))
                     )}
@@ -808,27 +953,17 @@ export default function GeofencesSection() {
           </DialogHeader>
           <div className="space-y-4">
             <div><Label>Name</Label><Input value={newFence.name} onChange={e => setNewFence(p => ({ ...p, name: e.target.value }))} placeholder="e.g., New Science Block" /></div>
-            <div><Label>Type</Label>
-              <Select value={newFence.type} onValueChange={v => setNewFence(p => ({ ...p, type: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="circle">Circle</SelectItem><SelectItem value="polygon">Polygon</SelectItem></SelectContent>
-              </Select>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Center Latitude</Label><Input value={newFence.centerLat} onChange={e => setNewFence(p => ({ ...p, centerLat: e.target.value }))} /></div>
+              <div><Label>Center Longitude</Label><Input value={newFence.centerLng} onChange={e => setNewFence(p => ({ ...p, centerLng: e.target.value }))} /></div>
             </div>
-            {newFence.type === 'circle' && (
-              <>
-                <div className="grid grid-cols-2 gap-3">
-                  <div><Label>Center Latitude</Label><Input value={newFence.centerLat} onChange={e => setNewFence(p => ({ ...p, centerLat: e.target.value }))} /></div>
-                  <div><Label>Center Longitude</Label><Input value={newFence.centerLng} onChange={e => setNewFence(p => ({ ...p, centerLng: e.target.value }))} /></div>
-                </div>
-                <div><Label>Radius (meters)</Label><Input value={newFence.radiusMtrs} onChange={e => setNewFence(p => ({ ...p, radiusMtrs: e.target.value }))} /></div>
-              </>
-            )}
+            <div><Label>Radius (meters)</Label><Input value={newFence.radiusMtrs} onChange={e => setNewFence(p => ({ ...p, radiusMtrs: e.target.value }))} /></div>
             <div><Label>Building</Label><Input value={newFence.building} onChange={e => setNewFence(p => ({ ...p, building: e.target.value }))} placeholder="e.g., CSE Building" /></div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
             <Button className="bg-[#1A3C6E] hover:bg-[#1A3C6E]/90" onClick={() => createMutation.mutate({
-              name: newFence.name, type: newFence.type,
+              name: newFence.name, type: 'circle',
               centerLat: parseFloat(newFence.centerLat), centerLng: parseFloat(newFence.centerLng),
               radiusMtrs: parseFloat(newFence.radiusMtrs), building: newFence.building, isActive: true,
             })} disabled={!newFence.name || createMutation.isPending}>
@@ -838,6 +973,84 @@ export default function GeofencesSection() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Edit Geofence Dialog */}
+      <Dialog open={!!editTarget} onOpenChange={(o) => !o && setEditTarget(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-[#1A3C6E]">Edit Geofence</DialogTitle>
+            <DialogDescription>Update circle geofence boundary details</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div><Label>Name</Label><Input value={editForm.name} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} /></div>
+            <div>
+              <Label>Description</Label>
+              <Textarea
+                rows={2}
+                value={editForm.description}
+                onChange={e => setEditForm(p => ({ ...p, description: e.target.value }))}
+                placeholder="Optional notes about this boundary"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Center Latitude</Label><Input value={editForm.centerLat} onChange={e => setEditForm(p => ({ ...p, centerLat: e.target.value }))} /></div>
+              <div><Label>Center Longitude</Label><Input value={editForm.centerLng} onChange={e => setEditForm(p => ({ ...p, centerLng: e.target.value }))} /></div>
+            </div>
+            <div><Label>Radius (meters)</Label><Input value={editForm.radiusMtrs} onChange={e => setEditForm(p => ({ ...p, radiusMtrs: e.target.value }))} /></div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditTarget(null)}>Cancel</Button>
+            <Button
+              className="bg-[#1A3C6E] hover:bg-[#1A3C6E]/90"
+              disabled={!editForm.name || !editTarget || updateMutation.isPending}
+              onClick={() => {
+                if (!editTarget) return;
+                const payload: Record<string, unknown> = {
+                  name: editForm.name,
+                  centerLat: parseFloat(editForm.centerLat),
+                  centerLng: parseFloat(editForm.centerLng),
+                  radiusMtrs: parseFloat(editForm.radiusMtrs),
+                };
+                if (editForm.description.trim()) payload.description = editForm.description.trim();
+                updateMutation.mutate({ id: editTarget.id, data: payload });
+              }}
+            >
+              {updateMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Geofence Confirm */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {deleteTarget && deleteTarget._count.attendanceSessions > 0 ? 'Deactivate geofence?' : 'Delete geofence?'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget && deleteTarget._count.attendanceSessions > 0
+                ? `"${deleteTarget.name}" has ${deleteTarget._count.attendanceSessions} linked attendance session(s) and will be deactivated instead of deleted.`
+                : `This will permanently remove "${deleteTarget?.name}". This action cannot be undone.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteMutation.isPending}
+              onClick={(e) => {
+                e.preventDefault();
+                if (deleteTarget) deleteMutation.mutate(deleteTarget.id);
+              }}
+            >
+              {deleteMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {deleteTarget && deleteTarget._count.attendanceSessions > 0 ? 'Deactivate' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

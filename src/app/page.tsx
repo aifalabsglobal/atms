@@ -20,8 +20,11 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { signOut, useSession } from 'next-auth/react';
+import { DEMO_ACCOUNTS } from '@/lib/demo-accounts';
 
 import DashboardSection from '@/components/sections/dashboard-section';
 import AttendanceSection from '@/components/sections/attendance-section';
@@ -62,9 +65,17 @@ function LoadingScreen({ message }: { message?: string }) {
 }
 
 function AppContent() {
+  const router = useRouter();
+  const queryClient = useQueryClient();
   const { status } = useSession();
   const { activeSection, setActiveSection, sidebarOpen, setSidebarOpen, currentUser, roleSwitching } = useAppStore();
   const { theme, setTheme } = useTheme();
+
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.replace('/login');
+    }
+  }, [status, router]);
 
   const { data: notifData } = useQuery({
     queryKey: ['notifications', currentUser?.id],
@@ -93,11 +104,24 @@ function AppContent() {
     return <LoadingScreen message={`Switching to ${roleSwitching}…`} />;
   }
 
-  if (status === 'loading' || !currentUser) {
-    return <LoadingScreen message="Loading your session…" />;
+  if (status === 'loading' || status === 'unauthenticated' || !currentUser) {
+    return <LoadingScreen message={status === 'unauthenticated' ? 'Redirecting to login…' : 'Loading your session…'} />;
   }
 
   const role = currentUser.role;
+  const canAccessSettings = ROLE_SECTIONS[role].includes('settings');
+  const isDemoUser = DEMO_ACCOUNTS.some((a) => a.email === currentUser.email);
+
+  async function markNotificationsRead(ids?: string[]) {
+    const res = await fetch('/api/notifications', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(ids?.length ? { ids } : { all: true }),
+    });
+    if (res.ok) {
+      queryClient.invalidateQueries({ queryKey: ['notifications', currentUser?.id] });
+    }
+  }
   const allowedSections = ROLE_SECTIONS[role];
   const navItems = allNavItems.filter((item) => allowedSections.includes(item.id));
   const safeSection = allowedSections.includes(activeSection) ? activeSection : 'dashboard';
@@ -167,10 +191,21 @@ function AppContent() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-80">
-                <div className="p-3 font-semibold text-sm">Notifications</div>
+                <div className="p-3 flex items-center justify-between">
+                  <span className="font-semibold text-sm">Notifications</span>
+                  {unreadCount > 0 && (
+                    <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => markNotificationsRead()}>
+                      Mark all read
+                    </Button>
+                  )}
+                </div>
                 <DropdownMenuSeparator />
                 {(notifData?.notifications || []).slice(0, 5).map((n: { id: string; title: string; message: string; isRead: boolean }) => (
-                  <DropdownMenuItem key={n.id} className="flex flex-col items-start gap-1 p-3 cursor-pointer">
+                  <DropdownMenuItem
+                    key={n.id}
+                    className="flex flex-col items-start gap-1 p-3 cursor-pointer"
+                    onClick={() => { if (!n.isRead) markNotificationsRead([n.id]); }}
+                  >
                     <div className="flex items-center gap-2 w-full">
                       <span className={cn('text-sm font-medium', !n.isRead && 'text-primary')}>{n.title}</span>
                       {!n.isRead && <span className="h-2 w-2 rounded-full bg-primary ml-auto" />}
@@ -221,11 +256,13 @@ function AppContent() {
                   </div>
                 </div>
                 <DropdownMenuSeparator />
-                <RoleSwitcherMenu />
-                <DropdownMenuItem onClick={() => setActiveSection('settings')}>
-                  <Settings className="mr-2 h-4 w-4" /> Settings
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
+                {isDemoUser && <RoleSwitcherMenu />}
+                {canAccessSettings && (
+                  <DropdownMenuItem onClick={() => setActiveSection('settings')}>
+                    <Settings className="mr-2 h-4 w-4" /> Settings
+                  </DropdownMenuItem>
+                )}
+                {(isDemoUser || canAccessSettings) && <DropdownMenuSeparator />}
                 <DropdownMenuItem className="text-destructive" onClick={() => signOut({ callbackUrl: '/login' })}>
                   <LogOut className="mr-2 h-4 w-4" /> Sign out
                 </DropdownMenuItem>
@@ -259,7 +296,7 @@ function AppContent() {
                 </div>
               </div>
               <Separator className="mb-2" />
-              <RoleSwitcherMenu variant="sidebar" />
+              {isDemoUser && <RoleSwitcherMenu variant="sidebar" />}
               <nav className="flex flex-col gap-1 px-2">
                 {navItems.map((item) => {
                   const Icon = item.icon;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   BookOpen, Users, FileText, ClipboardList, Clock, ChevronDown,
@@ -1359,7 +1359,15 @@ export default function LmsSection() {
     { kind: 'assignment' | 'course' | 'coding'; id: string; label: string; hasEnrollments?: boolean } | null
   >(null);
   const { toast } = useToast();
-  const { currentUser } = useAppStore();
+  const { currentUser, sectionContext, setSectionContext } = useAppStore();
+
+  useEffect(() => {
+    if (sectionContext?.lmsTab) {
+      setActiveTab(sectionContext.lmsTab);
+      setSectionContext(null);
+    }
+  }, [sectionContext, setSectionContext]);
+
   if (!currentUser) return null;
   const isStudent = currentUser.role === 'student';
   const isParent = currentUser.role === 'parent';

@@ -200,6 +200,10 @@ model TimetableSlot {
   course             Course              @relation(fields: [courseId], references: [id])
   semesterRef        Semester?           @relation(fields: [semesterId], references: [id])
   attendanceSessions AttendanceSession[]
+
+  @@index([courseId, dayOfWeek, isActive])
+  @@index([semesterId])
+  @@index([academicYear])
 }
 
 model Geofence {
@@ -243,6 +247,9 @@ model AttendanceSession {
   creator        User                 @relation("SessionCreator", fields: [createdBy], references: [id])
   geofence       Geofence?            @relation(fields: [geofenceId], references: [id])
   records        AttendanceRecord[]
+
+  @@index([timetableSlotId, sessionDate, status])
+  @@index([courseId, sessionDate, status])
 }
 
 model AttendanceRecord {

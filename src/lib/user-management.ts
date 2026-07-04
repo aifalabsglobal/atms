@@ -1,5 +1,15 @@
 import type { Role } from '@/lib/store';
-import { ADMIN_ROLES } from '@/lib/auth-helpers';
+
+export const STAFF_ROLES: Role[] = [
+  'super_admin',
+  'admin',
+  'hod',
+  'faculty',
+  'lab_assistant',
+  'security',
+];
+
+export const CAMPUS_USER_ROLES: Role[] = ['student', 'parent', 'visitor'];
 
 export const ALL_ROLES: Role[] = [
   'super_admin',
@@ -22,8 +32,14 @@ export function canAssignRole(actorRole: Role, targetRole: Role): boolean {
   return false;
 }
 
+const ADMIN_ROLES: Role[] = ['super_admin', 'admin'];
+
 export function canManageUsers(actorRole: Role): boolean {
   return ADMIN_ROLES.includes(actorRole) || actorRole === 'hod';
+}
+
+export function isStaffRole(role: Role): boolean {
+  return STAFF_ROLES.includes(role);
 }
 
 export function generateTempPassword(): string {

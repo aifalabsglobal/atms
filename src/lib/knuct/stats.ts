@@ -108,6 +108,7 @@ export async function getKnuctDashboardStats(): Promise<KnuctDashboardStats> {
       type: 'anchor' as const,
       module: a.resourceType,
       ref: a.payloadHash.slice(0, 16),
+      hash: a.payloadHash,
       at: a.createdAt.toISOString(),
     })),
   };

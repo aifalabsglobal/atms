@@ -36,9 +36,10 @@ async function main() {
 
   let cookie = '';
   await check('POST login (Student)', async () => {
+    let jar: string[] = [];
     const csrfRes = await fetch(`${BASE}/api/auth/csrf`);
+    jar = (csrfRes.headers.getSetCookie?.() ?? []).map((c) => c.split(';')[0]).filter(Boolean);
     const { csrfToken } = await csrfRes.json();
-    cookie = csrfRes.headers.get('set-cookie')?.split(';')[0] ?? '';
 
     const body = new URLSearchParams({
       email: 'student.ravi@jntuh.ac.in',
@@ -50,12 +51,14 @@ async function main() {
 
     const loginRes = await fetch(`${BASE}/api/auth/callback/credentials`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookie },
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: jar.join('; ') },
       body,
     });
-    const setCookie = loginRes.headers.get('set-cookie');
-    if (setCookie) cookie = setCookie.split(';')[0];
+    jar = [...jar, ...(loginRes.headers.getSetCookie?.() ?? []).map((c) => c.split(';')[0]).filter(Boolean)];
+    cookie = [...new Set(jar)].join('; ');
     if (loginRes.status !== 200) throw new Error(`login ${loginRes.status}`);
+    const sess = await fetch(`${BASE}/api/auth/session`, { headers: { Cookie: cookie } }).then((r) => r.json());
+    if (!sess?.user?.email) throw new Error('session empty after login');
   });
 
   await check('GET /api/dashboard', async () => {

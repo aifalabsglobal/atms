@@ -12,6 +12,7 @@ import { sendWelcomeEmail } from '@/lib/email';
 import { maybeProvisionWalletOnCreate } from '@/lib/knuct';
 import {
   ALL_ROLES,
+  STAFF_ROLES,
   canAssignRole,
   generateTempPassword,
 } from '@/lib/user-management';
@@ -24,6 +25,7 @@ export async function GET(request: Request) {
     const scope = await getCampusScope(session);
     const { searchParams } = new URL(request.url);
     const role = searchParams.get('role');
+    const category = searchParams.get('category');
     const status = searchParams.get('status');
     const department = searchParams.get('department');
     const search = searchParams.get('search');
@@ -31,7 +33,17 @@ export async function GET(request: Request) {
     const limit = parseInt(searchParams.get('limit') || '50');
 
     const where: Record<string, unknown> = {};
-    if (role) where.role = role;
+    if (category === 'staff') {
+      where.role = role && STAFF_ROLES.includes(role as Role)
+        ? role
+        : { in: STAFF_ROLES };
+    } else if (category === 'campus') {
+      where.role = role && !STAFF_ROLES.includes(role as Role)
+        ? role
+        : { notIn: STAFF_ROLES };
+    } else if (role) {
+      where.role = role;
+    }
     if (status) where.status = status;
     if (department) where.department = department;
     if (search) where.OR = [
@@ -59,7 +71,13 @@ export async function GET(request: Request) {
       db.user.count({ where }),
     ]);
 
-    const roleDistWhere = scope.level === 'department' ? { departmentId: scope.departmentId } : {};
+    const roleDistWhere: Record<string, unknown> =
+      scope.level === 'department' ? { departmentId: scope.departmentId } : {};
+    if (category === 'staff') {
+      roleDistWhere.role = { in: STAFF_ROLES };
+    } else if (category === 'campus') {
+      roleDistWhere.role = { notIn: STAFF_ROLES };
+    }
     const [roleDistribution, departmentGroups] = await Promise.all([
       db.user.groupBy({ by: ['role'], where: roleDistWhere, _count: true }),
       db.user.groupBy({

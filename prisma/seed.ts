@@ -1,5 +1,43 @@
 import { db } from '@/lib/db';
 import bcrypt from 'bcryptjs';
+import { CALENDAR_SEED_EVENTS } from './calendar-events-data';
+
+function localDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function utcDayOfWeek(dateStr: string): number {
+  return new Date(`${dateStr}T12:00:00.000Z`).getUTCDay();
+}
+
+function pickSlotForDate<T extends { id: string; courseId: string; dayOfWeek: number; startTime: string; endTime: string }>(
+  slots: T[],
+  dateStr: string,
+  courseId?: string,
+): T | null {
+  const day = utcDayOfWeek(dateStr);
+  const matches = slots.filter(s => s.dayOfWeek === day && (!courseId || s.courseId === courseId));
+  return matches[0] ?? null;
+}
+
+async function createActiveSession(
+  usedKeys: Set<string>,
+  data: Parameters<typeof db.attendanceSession.create>[0]['data'],
+) {
+  let payload = { ...data };
+  if (payload.timetableSlotId && payload.sessionDate) {
+    const key = `${payload.timetableSlotId}:${payload.sessionDate}`;
+    if (usedKeys.has(key)) {
+      payload = { ...payload, timetableSlotId: null };
+    } else {
+      usedKeys.add(key);
+    }
+  }
+  return db.attendanceSession.create({ data: payload });
+}
 
 async function main() {
   console.log('🌱 Seeding JNTUH SCMS database with R22 Regulation data...');
@@ -454,6 +492,9 @@ async function main() {
     // ECE timetable
     db.timetableSlot.create({ data: { courseId: eceCourses[0]?.id || courses[0].id, semesterId: semI1.id, dayOfWeek: 1, startTime: '14:00', endTime: '14:50', roomNumber: 'ECE-201', building: 'ECE Block', semester: 'I-I', academicYear: '2025-2026', isActive: true } }),
     db.timetableSlot.create({ data: { courseId: eceCourses[1]?.id || courses[0].id, semesterId: semI1.id, dayOfWeek: 2, startTime: '14:00', endTime: '14:50', roomNumber: 'ECE-202', building: 'ECE Block', semester: 'I-I', academicYear: '2025-2026', isActive: true } }),
+    // Weekend demo slots (Saturday) — Prof. Venkat's courses for same-day timetable testing
+    db.timetableSlot.create({ data: { courseId: courses[0].id, semesterId: semI1.id, dayOfWeek: 6, startTime: '09:00', endTime: '09:50', roomNumber: 'CSE-301', building: 'CSE Block', semester: 'I-I', academicYear: '2025-2026', isActive: true } }),
+    db.timetableSlot.create({ data: { courseId: courses[2].id, semesterId: semI1.id, dayOfWeek: 6, startTime: '11:00', endTime: '11:50', roomNumber: 'CSE-303', building: 'CSE Block', semester: 'I-I', academicYear: '2025-2026', isActive: true } }),
   ]);
 
   // ==========================================
@@ -461,11 +502,12 @@ async function main() {
   // ==========================================
   console.log('📦 Creating attendance sessions...');
   const today = new Date();
+  const todayStr = localDateStr(today);
   const dates: string[] = [];
   for (let i = 0; i < 14; i++) {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
-    dates.push(d.toISOString().split('T')[0]);
+    dates.push(localDateStr(d));
   }
 
   const sessions: Awaited<ReturnType<typeof db.attendanceSession.create>>[] = [];
@@ -473,8 +515,8 @@ async function main() {
 
   for (let i = 0; i < Math.min(dates.length, 10); i++) {
     const dateStr = dates[i];
-    const slotIdx = i % timetableSlots.length;
-    const slot = timetableSlots[slotIdx];
+    const dayMatches = timetableSlots.filter(s => s.dayOfWeek === utcDayOfWeek(dateStr));
+    const slot = dayMatches[i % Math.max(dayMatches.length, 1)] ?? null;
     const method = captureMethods[i % captureMethods.length];
     const expectedCount = 6 + Math.floor(Math.random() * 5);
     const presentCount = Math.floor(expectedCount * (0.65 + Math.random() * 0.3));
@@ -483,14 +525,14 @@ async function main() {
 
     const session = await db.attendanceSession.create({
       data: {
-        timetableSlotId: slot.id,
-        courseId: slot.courseId,
+        timetableSlotId: slot?.id ?? null,
+        courseId: slot?.courseId ?? courses[i % courses.length].id,
         createdBy: faculty1.id,
         geofenceId: geofences[0].id,
         sessionDate: dateStr,
-        startTime: slot.startTime,
-        endTime: slot.endTime,
-        status: i === 0 ? 'active' : 'completed',
+        startTime: slot?.startTime ?? '09:00',
+        endTime: slot?.endTime ?? '09:50',
+        status: 'completed',
         captureMethod: method,
         expectedCount,
         presentCount: Math.max(0, presentCount),
@@ -514,7 +556,7 @@ async function main() {
           sessionId: session.id,
           studentId: student.id,
           status,
-          markedAt: status !== 'absent' ? new Date(`${dateStr}T${slot.startTime}:00`) : null,
+          markedAt: status !== 'absent' ? new Date(`${dateStr}T${(slot?.startTime ?? '09:00')}:00`) : null,
           captureMethod: method,
           confidence: method === 'face' ? 0.85 + Math.random() * 0.13 : null,
           gpsLat: method === 'gps' ? 17.4497 + (Math.random() - 0.5) * 0.002 : null,
@@ -524,60 +566,57 @@ async function main() {
     }
   }
 
-  // Live session
-  const liveSession = await db.attendanceSession.create({
-    data: {
-      timetableSlotId: timetableSlots[0].id,
-      courseId: courses[0].id,
-      createdBy: faculty1.id,
-      geofenceId: geofences[0].id,
-      sessionDate: today.toISOString().split('T')[0],
-      startTime: '09:00',
-      endTime: '09:50',
-      status: 'active',
-      captureMethod: 'face',
-      expectedCount: 7,
-      presentCount: 5,
-      absentCount: 1,
-      lateCount: 1,
-    }
+  // Live sessions — one active session per timetable slot + date (matches production DB constraint)
+  const activeSlotKeys = new Set<string>();
+  const liveSlot = pickSlotForDate(timetableSlots, todayStr, courses[0].id);
+  const liveSession = await createActiveSession(activeSlotKeys, {
+    timetableSlotId: liveSlot?.id ?? null,
+    courseId: liveSlot?.courseId ?? courses[0].id,
+    createdBy: faculty1.id,
+    geofenceId: geofences[0].id,
+    sessionDate: todayStr,
+    startTime: liveSlot?.startTime ?? '09:00',
+    endTime: liveSlot?.endTime ?? '09:50',
+    status: 'active',
+    captureMethod: 'face',
+    expectedCount: 7,
+    presentCount: 5,
+    absentCount: 1,
+    lateCount: 1,
   });
 
-  // Self-marking active sessions (geofence + face)
-  const selfMarkSession1 = await db.attendanceSession.create({
-    data: {
-      timetableSlotId: timetableSlots[1 % timetableSlots.length]?.id,
-      courseId: courses[1 % courses.length].id,
-      createdBy: faculty1.id,
-      geofenceId: geofences[0].id,
-      sessionDate: today.toISOString().split('T')[0],
-      startTime: '10:00',
-      endTime: '10:50',
-      status: 'active',
-      captureMethod: 'self_geo_face',
-      expectedCount: 8,
-      presentCount: 0,
-      absentCount: 0,
-      lateCount: 0,
-    }
+  const selfSlot1 = pickSlotForDate(timetableSlots, todayStr, courses[1]?.id);
+  const selfMarkSession1 = await createActiveSession(activeSlotKeys, {
+    timetableSlotId: selfSlot1?.id ?? null,
+    courseId: selfSlot1?.courseId ?? courses[1 % courses.length].id,
+    createdBy: faculty1.id,
+    geofenceId: geofences[0].id,
+    sessionDate: todayStr,
+    startTime: selfSlot1?.startTime ?? '10:00',
+    endTime: selfSlot1?.endTime ?? '10:50',
+    status: 'active',
+    captureMethod: 'self_geo_face',
+    expectedCount: 8,
+    presentCount: 0,
+    absentCount: 0,
+    lateCount: 0,
   });
 
-  const selfMarkSession2 = await db.attendanceSession.create({
-    data: {
-      timetableSlotId: timetableSlots[2 % timetableSlots.length]?.id,
-      courseId: courses[2 % courses.length].id,
-      createdBy: faculty2.id,
-      geofenceId: geofences[1 % geofences.length]?.id,
-      sessionDate: today.toISOString().split('T')[0],
-      startTime: '11:00',
-      endTime: '11:50',
-      status: 'active',
-      captureMethod: 'self_geo_face',
-      expectedCount: 6,
-      presentCount: 0,
-      absentCount: 0,
-      lateCount: 0,
-    }
+  const selfSlot2 = pickSlotForDate(timetableSlots, todayStr, courses[2]?.id);
+  const selfMarkSession2 = await createActiveSession(activeSlotKeys, {
+    timetableSlotId: selfSlot2?.id ?? null,
+    courseId: selfSlot2?.courseId ?? courses[2 % courses.length].id,
+    createdBy: faculty2.id,
+    geofenceId: geofences[1 % geofences.length]?.id,
+    sessionDate: todayStr,
+    startTime: selfSlot2?.startTime ?? '11:00',
+    endTime: selfSlot2?.endTime ?? '11:50',
+    status: 'active',
+    captureMethod: 'self_geo_face',
+    expectedCount: 6,
+    presentCount: 0,
+    absentCount: 0,
+    lateCount: 0,
   });
 
   // Mark u10 (Arun Kumar) as present in liveSession with geo+face data
@@ -773,37 +812,22 @@ async function main() {
   // 17. CALENDAR EVENTS (Academic Calendar)
   // ==========================================
   console.log('📦 Creating calendar events...');
-  const calendarEventsData = [
-    // Academic Events
-    { userId: superAdmin.id, title: 'I Year I Semester Begins', description: 'Start of I Year I Semester classes for AY 2025-2026', type: 'academic', startDate: '2025-07-01', endDate: null, startTime: '09:00', endTime: null, location: 'All Blocks', color: '#22c55e', isAllDay: true, academicYearId: academicYear.id },
-    { userId: superAdmin.id, title: 'I Year II Semester Begins', description: 'Start of I Year II Semester classes', type: 'academic', startDate: '2025-12-01', endDate: null, startTime: '09:00', endTime: null, location: 'All Blocks', color: '#22c55e', isAllDay: true, academicYearId: academicYear.id },
-    { userId: superAdmin.id, title: 'II Year I Semester Begins', description: 'Start of II Year I Semester classes', type: 'academic', startDate: '2025-07-01', endDate: null, startTime: '09:00', endTime: null, location: 'All Blocks', color: '#22c55e', isAllDay: true, academicYearId: academicYear.id },
-    // Exam Events
-    { userId: superAdmin.id, title: 'I Year I Sem Mid Examinations', description: 'Mid semester examinations for I Year I Semester', type: 'exam', startDate: '2025-09-15', endDate: '2025-09-25', startTime: '10:00', endTime: '13:00', location: 'Examination Hall', color: '#ef4444', isAllDay: false, academicYearId: academicYear.id },
-    { userId: superAdmin.id, title: 'I Year I Sem End Examinations', description: 'End semester examinations for I Year I Semester', type: 'exam', startDate: '2025-11-15', endDate: '2025-11-30', startTime: '10:00', endTime: '13:00', location: 'Examination Hall', color: '#ef4444', isAllDay: false, academicYearId: academicYear.id },
-    { userId: superAdmin.id, title: 'II Year I Sem Mid Examinations', description: 'Mid semester examinations for II Year I Semester', type: 'exam', startDate: '2025-09-15', endDate: '2025-09-25', startTime: '14:00', endTime: '17:00', location: 'Examination Hall', color: '#ef4444', isAllDay: false, academicYearId: academicYear.id },
-    { userId: superAdmin.id, title: 'III Year I Sem End Examinations', description: 'End semester examinations for III Year I Semester', type: 'exam', startDate: '2025-11-20', endDate: '2025-12-05', startTime: '10:00', endTime: '13:00', location: 'Examination Hall', color: '#ef4444', isAllDay: false, academicYearId: academicYear.id },
-    // Holidays
-    { userId: superAdmin.id, title: 'Independence Day', description: 'National Holiday - Independence Day', type: 'holiday', startDate: '2025-08-15', endDate: null, startTime: null, endTime: null, color: '#f59e0b', isAllDay: true, academicYearId: academicYear.id },
-    { userId: superAdmin.id, title: 'Ganesh Chaturthi', description: 'Festival Holiday - Ganesh Chaturthi', type: 'holiday', startDate: '2025-08-27', endDate: '2025-08-28', startTime: null, endTime: null, color: '#f59e0b', isAllDay: true, academicYearId: academicYear.id },
-    { userId: superAdmin.id, title: 'Dussehra Holidays', description: 'Festival Holidays - Dussehra / Vijaya Dashami', type: 'holiday', startDate: '2025-10-01', endDate: '2025-10-10', startTime: null, endTime: null, color: '#f59e0b', isAllDay: true, academicYearId: academicYear.id },
-    { userId: superAdmin.id, title: 'Diwali', description: 'Festival Holiday - Diwali', type: 'holiday', startDate: '2025-10-20', endDate: '2025-10-22', startTime: null, endTime: null, color: '#f59e0b', isAllDay: true, academicYearId: academicYear.id },
-    { userId: superAdmin.id, title: 'Christmas Holidays', description: 'Christmas and New Year Holidays', type: 'holiday', startDate: '2025-12-24', endDate: '2026-01-02', startTime: null, endTime: null, color: '#f59e0b', isAllDay: true, academicYearId: academicYear.id },
-    { userId: superAdmin.id, title: 'Republic Day', description: 'National Holiday - Republic Day', type: 'holiday', startDate: '2026-01-26', endDate: null, startTime: null, endTime: null, color: '#f59e0b', isAllDay: true, academicYearId: academicYear.id },
-    { userId: superAdmin.id, title: 'Holi', description: 'Festival Holiday - Holi', type: 'holiday', startDate: '2026-03-10', endDate: null, startTime: null, endTime: null, color: '#f59e0b', isAllDay: true, academicYearId: academicYear.id },
-    // Campus Events
-    { userId: adminUser.id, title: 'Annual Technical Fest - SUDHEE', description: 'JNTUH Annual Technical Festival - SUDHEE 2025', type: 'event', startDate: '2025-10-15', endDate: '2025-10-18', startTime: '09:00', endTime: '18:00', location: 'Main Auditorium', color: '#8b5cf6', isAllDay: false, academicYearId: academicYear.id },
-    { userId: adminUser.id, title: 'Sports Week', description: 'Annual Sports Week celebrations', type: 'event', startDate: '2025-11-01', endDate: '2025-11-07', startTime: '09:00', endTime: '17:00', location: 'Sports Ground', color: '#06b6d4', isAllDay: false, academicYearId: academicYear.id },
-    { userId: adminUser.id, title: 'Industry Connect Day', description: 'Industry connect and placement drive', type: 'event', startDate: '2025-09-05', endDate: null, startTime: '10:00', endTime: '16:00', location: 'Seminar Hall', color: '#8b5cf6', isAllDay: false, academicYearId: academicYear.id },
-    // Deadlines
-    { userId: hodCSE.id, title: 'Assignment Submission Deadline', description: 'Deadline for MA101BS Mathematics-I Assignment', type: 'deadline', startDate: '2025-08-30', endDate: null, startTime: '23:59', endTime: null, location: null, color: '#ec4899', isAllDay: false, courseId: courses[0].id },
-    { userId: hodCSE.id, title: 'Project Phase-I Synopsis Submission', description: 'Last date for IV Year Project Phase-I synopsis submission', type: 'deadline', startDate: '2025-09-30', endDate: null, startTime: '17:00', endTime: null, location: 'CSE Department Office', color: '#ec4899', isAllDay: false },
-    // Personal events for faculty
-    { userId: faculty1.id, title: 'Faculty Development Program', description: 'FDP on AI/ML at CSE Department', type: 'personal', startDate: '2025-08-10', endDate: '2025-08-14', startTime: '09:00', endTime: '17:00', location: 'CSE Block - Room 401', color: '#6366f1', isAllDay: false },
-    { userId: faculty2.id, title: 'Research Paper Review Meeting', description: 'Review meeting for research publications', type: 'personal', startDate: '2025-08-20', endDate: null, startTime: '14:00', endTime: '16:00', location: 'Conference Room', color: '#6366f1', isAllDay: false },
-  ];
-
-  await db.calendarEvent.createMany({ data: calendarEventsData });
+  await db.calendarEvent.createMany({
+    data: CALENDAR_SEED_EVENTS.map((event) => ({
+      userId: superAdmin.id,
+      academicYearId: academicYear.id,
+      title: event.title,
+      description: event.description ?? null,
+      type: event.type,
+      startDate: event.startDate,
+      endDate: event.endDate ?? null,
+      startTime: event.startTime ?? null,
+      endTime: event.endTime ?? null,
+      location: event.location ?? null,
+      color: event.color ?? null,
+      isAllDay: !event.startTime,
+    })),
+  });
 
   // ==========================================
   // 18. NOTIFICATIONS

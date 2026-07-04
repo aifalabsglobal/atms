@@ -27,6 +27,8 @@ const ENDPOINTS: Endpoint[] = [
   { name: 'geofences', path: '/api/geofences', section: 'geofences', allowed: ['super_admin', 'admin', 'hod', 'lab_assistant', 'student', 'visitor', 'security'] },
   { name: 'calendar', path: '/api/calendar?limit=5', section: 'calendar', allowed: ['super_admin', 'admin', 'hod', 'faculty', 'lab_assistant', 'student', 'parent', 'visitor', 'security'] },
   { name: 'attendance-sessions', path: '/api/attendance/sessions?limit=5', section: 'attendance', allowed: ['super_admin', 'admin', 'hod', 'faculty', 'lab_assistant', 'security'] },
+  { name: 'timetable', path: '/api/timetable?date=2026-07-06', section: 'attendance', allowed: ['super_admin', 'admin', 'hod', 'faculty', 'lab_assistant', 'security'] },
+  { name: 'timetable-slots', path: '/api/masters/timetable-slots?limit=5', section: 'masters', allowed: ['super_admin', 'admin', 'hod'] },
   { name: 'active-sessions', path: '/api/attendance/active-sessions', allowed: ['super_admin', 'admin', 'hod', 'faculty', 'lab_assistant', 'student', 'parent', 'security'] },
 ];
 

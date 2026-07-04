@@ -1,6 +1,15 @@
 import { db } from '@/lib/db';
 import type { AnchorResourceType } from './anchor-service';
 
+export const AUDIT_ANCHOR_ACTIONS = [
+  'session.complete',
+  'violation.review',
+  'geofence.create',
+  'masters.subject.publish',
+  'calendar.publish',
+  'lms.submission.grade',
+] as const;
+
 const AUDIT_ANCHOR_MAP: Record<string, { resourceType: AnchorResourceType; prefix: string }> = {
   'session.complete': { resourceType: 'attendance_session', prefix: 'session:' },
   'violation.review': { resourceType: 'violation_review', prefix: 'violation:' },

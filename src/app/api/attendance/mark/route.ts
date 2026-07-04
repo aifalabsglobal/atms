@@ -6,7 +6,9 @@ import { requireAuth, resolveStudentId, SELF_MARK_METHODS } from '@/lib/auth-hel
 import type { Role } from '@/lib/store';
 import { verifyFaceMatch } from '@/lib/face-verification';
 import { validateGeofenceLocation } from '@/lib/geofence';
+import { captureMethodRequiresGeofence } from '@/lib/geofence-policy';
 import { rateLimitByUser } from '@/lib/api-rate-limit';
+import { logAudit, getClientIp } from '@/lib/audit';
 
 export async function POST(request: Request) {
   try {
@@ -35,11 +37,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'sessionId and studentId are required' }, { status: 400 });
     }
 
-    // Get the session with geofence
     const attendanceSession = await db.attendanceSession.findUnique({
       where: { id: sessionId },
       include: {
-        geofence: { select: { name: true, type: true, centerLat: true, centerLng: true, radiusMtrs: true, polygonData: true } },
+        geofence: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            centerLat: true,
+            centerLng: true,
+            radiusMtrs: true,
+            polygonData: true,
+            isActive: true,
+          },
+        },
         course: { select: { name: true, code: true, id: true } },
       },
     });
@@ -52,7 +64,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Session is not active' }, { status: 400 });
     }
 
-    // Check if already marked
     const existing = await db.attendanceRecord.findFirst({
       where: { sessionId, studentId },
     });
@@ -68,37 +79,71 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'You are not enrolled in this course' }, { status: 403 });
     }
 
-    // ── GEOFENCE VALIDATION ──
-    let geofenceValidated = true;
+    const sessionNeedsGeo =
+      !!attendanceSession.geofence ||
+      captureMethodRequiresGeofence(attendanceSession.captureMethod) ||
+      captureMethodRequiresGeofence(method);
+
+    if (sessionNeedsGeo && !attendanceSession.geofence) {
+      return NextResponse.json(
+        { error: 'This session requires geofence verification but no geofence is configured. Contact faculty.' },
+        { status: 400 },
+      );
+    }
+
+    let geofenceValidated = false;
     let distanceFromCenter: number | null = null;
 
     if (attendanceSession.geofence) {
+      if (!attendanceSession.geofence.isActive) {
+        return NextResponse.json({ error: 'Session geofence is inactive. Contact faculty.' }, { status: 400 });
+      }
+
       if (latitude == null || longitude == null) {
         return NextResponse.json({ error: 'Location is required for this session (geofence active)' }, { status: 400 });
       }
+
       const { validated, distanceFromCenter: dist } = validateGeofenceLocation(
         attendanceSession.geofence,
         latitude,
-        longitude
+        longitude,
       );
       distanceFromCenter = dist;
       geofenceValidated = validated;
 
       if (!geofenceValidated) {
         const radius = attendanceSession.geofence.radiusMtrs ?? 100;
-        const msg = attendanceSession.geofence.type === 'polygon'
-          ? `You are outside ${attendanceSession.geofence.name}`
-          : `You are ${Math.round(dist ?? 0)}m away — must be within ${radius}m of ${attendanceSession.geofence.name}`;
-        return NextResponse.json({
-          error: msg,
-          geofenceValidated: false,
-          distanceFromCenter: dist,
-          radius: attendanceSession.geofence.type === 'circle' ? radius : undefined,
-        }, { status: 403 });
+        const msg =
+          attendanceSession.geofence.type === 'polygon'
+            ? `You are outside ${attendanceSession.geofence.name}`
+            : `You are ${Math.round(dist ?? 0)}m away — must be within ${radius}m of ${attendanceSession.geofence.name}`;
+
+        await logAudit({
+          userId: session.user.id,
+          action: 'attendance.geofence_denied',
+          resource: `session:${sessionId}`,
+          details: {
+            studentId,
+            geofenceId: attendanceSession.geofence.id,
+            distanceFromCenter: dist,
+            latitude,
+            longitude,
+          },
+          ipAddress: getClientIp(request),
+        });
+
+        return NextResponse.json(
+          {
+            error: msg,
+            geofenceValidated: false,
+            distanceFromCenter: dist,
+            radius: attendanceSession.geofence.type === 'circle' ? radius : undefined,
+          },
+          { status: 403 },
+        );
       }
     }
 
-    // ── SAVE SELFIE ──
     let selfieUrl: string | null = null;
     if (selfieBase64) {
       const selfiesDir = path.join(process.cwd(), 'public', 'selfies');
@@ -110,7 +155,6 @@ export async function POST(request: Request) {
       selfieUrl = `/selfies/${filename}`;
     }
 
-    // ── FACE VERIFICATION ──
     let faceVerified = false;
     let confidence: number | null = null;
 
@@ -127,14 +171,13 @@ export async function POST(request: Request) {
       }
     }
 
-    // ── CREATE RECORD ──
     const record = await db.attendanceRecord.create({
       data: {
         sessionId,
         studentId,
         status: 'present',
         markedAt: new Date(),
-        captureMethod: captureMethod || 'self_geo_face',
+        captureMethod: method,
         gpsLat: latitude ?? null,
         gpsLng: longitude ?? null,
         selfieUrl,
@@ -145,21 +188,23 @@ export async function POST(request: Request) {
       },
     });
 
-    // ── UPDATE SESSION COUNTS ──
     const presentCount = await db.attendanceRecord.count({ where: { sessionId, status: 'present' } });
     await db.attendanceSession.update({
       where: { id: sessionId },
       data: { presentCount },
     });
 
-    return NextResponse.json({
-      success: true,
-      record,
-      geofenceValidated,
-      faceVerified,
-      distanceFromCenter,
-      confidence,
-    }, { status: 201 });
+    return NextResponse.json(
+      {
+        success: true,
+        record,
+        geofenceValidated,
+        faceVerified,
+        distanceFromCenter,
+        confidence,
+      },
+      { status: 201 },
+    );
   } catch (error) {
     console.error('Mark attendance API error:', error);
     return NextResponse.json({ error: 'Failed to mark attendance' }, { status: 500 });

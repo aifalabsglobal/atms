@@ -1,4 +1,5 @@
 import { db } from '@/lib/db';
+import { isFaceVerificationEnabled } from '@/lib/face-verification';
 import { NextResponse } from 'next/server';
 import { requireAuth, resolveStudentId, getCampusScope, buildCourseIdFilter } from '@/lib/auth-helpers';
 
@@ -46,7 +47,11 @@ export async function GET(request: Request) {
       return { ...rest, alreadyMarked, existingRecord };
     });
 
-    return NextResponse.json({ sessions: enriched, total: enriched.length });
+    return NextResponse.json({
+      sessions: enriched,
+      total: enriched.length,
+      faceVerificationConfigured: isFaceVerificationEnabled() && Boolean(process.env.FACE_VERIFICATION_API_URL?.trim()),
+    });
   } catch (error) {
     console.error('Active sessions API error:', error);
     return NextResponse.json({ error: 'Failed to load active sessions' }, { status: 500 });

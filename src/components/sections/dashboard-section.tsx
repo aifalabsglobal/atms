@@ -94,6 +94,7 @@ interface ActiveSession {
   captureMethod: string;
   expectedCount: number;
   presentCount: number;
+  timetableSlotId: string | null;
   course: { name: string; code: string };
   creator: { name: string };
   geofence: { name: string } | null;
@@ -411,6 +412,11 @@ function ActiveSessionsCard({ sessions }: { sessions: ActiveSession[] }) {
                         {session.course?.code || 'N/A'}
                       </Badge>
                       <span className="text-sm font-medium">{session.course?.name || 'Unknown Course'}</span>
+                      {session.timetableSlotId ? (
+                        <Badge className="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border-0">On schedule</Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[10px] text-muted-foreground">Ad-hoc</Badge>
+                      )}
                     </div>
                     <Badge variant="outline" className="text-[10px] gap-1">
                       <MethodIcon className="h-3 w-3" />
@@ -819,10 +825,27 @@ function RecentActivityFeed({ activities }: { activities: RecentActivity[] }) {
 
 // ─── Super Admin Knuct Operations Center ────────────────────────────────────
 
-function KnuctOpsPanel({ knuct }: { knuct: KnuctDashboardStats }) {
+function KnuctOpsPanel({ knuct }: { knuct?: KnuctDashboardStats }) {
   const { setActiveSection } = useAppStore();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const { data: pilotStatus } = useQuery({
+    queryKey: ['knuct-pilot-status'],
+    queryFn: async () => {
+      const res = await fetch('/api/knuct/pilot');
+      if (!res.ok) throw new Error('Failed to load pilot status');
+      return res.json() as Promise<{
+        pilotReady: boolean;
+        health: { adapterMode: 'mock' | 'live'; health: 'ok' | 'degraded' | 'down'; circuitBreakerOpen: boolean };
+      }>;
+    },
+  });
+
+  const adapterMode = pilotStatus?.health?.adapterMode ?? knuct?.adapterMode ?? 'mock';
+  const health = pilotStatus?.health?.health ?? knuct?.health ?? 'ok';
+  const circuitBreakerOpen = pilotStatus?.health?.circuitBreakerOpen ?? knuct?.circuitBreakerOpen ?? false;
+
   const pilotMutation = useMutation({
     mutationFn: async () => {
       const res = await fetch('/api/knuct/pilot', {
@@ -838,6 +861,9 @@ function KnuctOpsPanel({ knuct }: { knuct: KnuctDashboardStats }) {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['audit-logs'] });
+      queryClient.invalidateQueries({ queryKey: ['knuct-status'] });
+      queryClient.invalidateQueries({ queryKey: ['knuct-pilot-status'] });
       const active = data.results?.filter((r: { status: string }) => r.status === 'active').length ?? 0;
       const failed = data.results?.filter((r: { status: string }) => r.status === 'failed').length ?? 0;
       toast({
@@ -854,7 +880,7 @@ function KnuctOpsPanel({ knuct }: { knuct: KnuctDashboardStats }) {
     ok: { label: 'Healthy', className: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
     degraded: { label: 'Degraded', className: 'bg-amber-100 text-amber-800 border-amber-200' },
     down: { label: 'Down', className: 'bg-red-100 text-red-800 border-red-200' },
-  }[knuct.health];
+  }[health];
 
   return (
     <Card className="border-[#1A3C6E]/20 bg-gradient-to-br from-[#1A3C6E]/5 to-transparent">
@@ -865,8 +891,8 @@ function KnuctOpsPanel({ knuct }: { knuct: KnuctDashboardStats }) {
           </CardTitle>
           <div className="flex flex-wrap gap-2">
             <Badge variant="outline" className={healthBadge.className}>{healthBadge.label}</Badge>
-            <Badge variant="outline">{knuct.adapterMode === 'live' ? 'Live adapter' : 'Mock adapter'}</Badge>
-            {knuct.circuitBreakerOpen && (
+            <Badge variant="outline">{adapterMode === 'live' ? 'Live adapter' : 'Mock adapter'}</Badge>
+            {circuitBreakerOpen && (
               <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Circuit open</Badge>
             )}
           </div>
@@ -878,12 +904,12 @@ function KnuctOpsPanel({ knuct }: { knuct: KnuctDashboardStats }) {
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
           {[
-            { label: 'Active wallets', value: knuct.wallets.active, icon: Wallet, color: NAVY },
-            { label: 'Anchors today', value: knuct.anchors.today, icon: ShieldCheck, color: '#1B6B4A' },
-            { label: 'Failed wallets', value: knuct.wallets.failed, icon: XCircle, color: '#E74C3C' },
-            { label: 'DID coverage', value: `${knuct.didCoveragePct}%`, icon: Users, color: '#7C3AED' },
-            { label: 'Pending wallets', value: knuct.wallets.pending, icon: Timer, color: '#B45309' },
-            { label: 'Adapter', value: knuct.adapterMode, icon: Radio, color: '#0E7490' },
+            { label: 'Active wallets', value: knuct?.wallets.active ?? '—', icon: Wallet, color: NAVY },
+            { label: 'Anchors today', value: knuct?.anchors.today ?? '—', icon: ShieldCheck, color: '#1B6B4A' },
+            { label: 'Failed wallets', value: knuct?.wallets.failed ?? '—', icon: XCircle, color: '#E74C3C' },
+            { label: 'DID coverage', value: knuct ? `${knuct.didCoveragePct}%` : '—', icon: Users, color: '#7C3AED' },
+            { label: 'Pending wallets', value: knuct?.wallets.pending ?? '—', icon: Timer, color: '#B45309' },
+            { label: 'Adapter', value: adapterMode, icon: Radio, color: '#0E7490' },
           ].map((k) => (
             <div key={k.label} className="rounded-lg border bg-card p-3">
               <div className="flex items-center gap-2 mb-1">
@@ -895,16 +921,15 @@ function KnuctOpsPanel({ knuct }: { knuct: KnuctDashboardStats }) {
           ))}
         </div>
         <div className="flex flex-wrap gap-2">
-          {knuct.adapterMode === 'live' && (
-            <Button
-              size="sm"
-              style={{ backgroundColor: NAVY }}
-              disabled={pilotMutation.isPending}
-              onClick={() => pilotMutation.mutate()}
-            >
-              {pilotMutation.isPending ? 'Provisioning…' : 'Run live pilot (5 users)'}
-            </Button>
-          )}
+          <Button
+            size="sm"
+            style={{ backgroundColor: NAVY }}
+            disabled={adapterMode !== 'live' || pilotMutation.isPending}
+            title={adapterMode !== 'live' ? 'Requires live Knuct adapter (set KNUCT_ENABLED=true)' : undefined}
+            onClick={() => pilotMutation.mutate()}
+          >
+            {pilotMutation.isPending ? 'Provisioning…' : 'Run live pilot (5 users)'}
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setActiveSection('settings')}>
             Settings
           </Button>
@@ -915,10 +940,10 @@ function KnuctOpsPanel({ knuct }: { knuct: KnuctDashboardStats }) {
         <p className="text-[11px] text-muted-foreground">
           Hash-only audit anchors (Phase 3) — stored in PostgreSQL until Knuct chain publish API is available.
         </p>
-        {knuct.recentActivity.length > 0 && (
+        {(knuct?.recentActivity.length ?? 0) > 0 && (
           <div className="rounded-lg border p-3 space-y-2">
             <p className="text-xs font-medium">Recent anchors</p>
-            {knuct.recentActivity.slice(0, 5).map((a, i) => (
+            {knuct!.recentActivity.slice(0, 5).map((a, i) => (
               <div key={i} className="flex items-center justify-between text-[11px] text-muted-foreground font-mono">
                 <span>{a.module}</span>
                 <span>{a.ref}…</span>
@@ -938,16 +963,16 @@ function AdminDashboard({ data, role }: { data: DashboardData; role: Role }) {
 
   return (
     <div className="space-y-6">
-      {role === 'super_admin' && data.knuct && <KnuctOpsPanel knuct={data.knuct} />}
+      {role === 'super_admin' && <KnuctOpsPanel knuct={data.knuct} />}
       <AnalyticsInsightsPanel data={data} />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Total Students" value={stats.totalStudents} icon={Users} format="number" indicator="up" indicatorValue="12%" />
-        <StatCard label="Total Faculty" value={stats.totalFaculty} icon={GraduationCap} format="number" indicator="up" indicatorValue="5%" />
-        <StatCard label="Total Courses" value={stats.totalCourses} icon={BookOpen} format="number" indicator="up" indicatorValue="8%" />
-        <StatCard label="Active Sessions" value={stats.activeSessions} icon={ScanLine} format="number" indicator="up" indicatorValue="1" />
-        <StatCard label="Attendance Rate" value={stats.overallAttendance} icon={Activity} format="percent" indicator="down" indicatorValue="2%" />
-        <StatCard label="Pending Violations" value={stats.pendingViolations} icon={ShieldAlert} format="number" indicator="up" indicatorValue="3" color="#E74C3C" />
-        <StatCard label="Total Enrollments" value={stats.totalEnrollments} icon={UserPlus} format="number" indicator="up" indicatorValue="10%" />
+        <StatCard label="Total Students" value={stats.totalStudents} icon={Users} format="number" />
+        <StatCard label="Total Faculty" value={stats.totalFaculty} icon={GraduationCap} format="number" />
+        <StatCard label="Total Courses" value={stats.totalCourses} icon={BookOpen} format="number" />
+        <StatCard label="Active Sessions" value={stats.activeSessions} icon={ScanLine} format="number" />
+        <StatCard label="Attendance Rate" value={stats.overallAttendance} icon={Activity} format="percent" />
+        <StatCard label="Pending Violations" value={stats.pendingViolations} icon={ShieldAlert} format="number" color="#E74C3C" />
+        <StatCard label="Total Enrollments" value={stats.totalEnrollments} icon={UserPlus} format="number" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">

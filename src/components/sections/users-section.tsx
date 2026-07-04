@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Users, Search, Filter, Shield, UserCheck, UserX, ChevronLeft,
@@ -33,13 +33,15 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent,
   type ChartConfig,
 } from '@/components/ui/chart';
 import { Pie, PieChart, Cell } from 'recharts';
-import { CreateUserDialog, useUserMutations } from '@/components/users/user-management-dialogs';
+import { CreateUserDialog, EditUserDialog, useUserMutations } from '@/components/users/user-management-dialogs';
 import { useToast } from '@/hooks/use-toast';
+import { STAFF_ROLES, CAMPUS_USER_ROLES } from '@/lib/user-management';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -56,6 +58,14 @@ const ROLES = [
   { value: 'visitor', label: 'Visitor' },
   { value: 'security', label: 'Security' },
 ] as const;
+
+type UserCategoryTab = 'all' | 'staff' | 'campus';
+
+const CATEGORY_TAB_LABELS: Record<UserCategoryTab, string> = {
+  all: 'All Users',
+  staff: 'Staff',
+  campus: 'Students & Others',
+};
 
 const ROLE_BADGE_STYLES: Record<string, string> = {
   super_admin: 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-300 dark:border-red-800',
@@ -453,9 +463,10 @@ function StatsSkeleton() {
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function UsersSection() {
-  const { currentUser } = useAppStore();
+  const { currentUser, sectionContext, setSectionContext } = useAppStore();
   // Filter state
   const [search, setSearch] = useState('');
+  const [categoryTab, setCategoryTab] = useState<UserCategoryTab>('all');
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
@@ -465,8 +476,11 @@ export default function UsersSection() {
   // Dialog state
   const [selectedUser, setSelectedUser] = useState<UserItem | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editUser, setEditUser] = useState<UserItem | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [pendingUserId, setPendingUserId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
-  const { updateUser } = useUserMutations();
+  const { updateUser, deactivateUser } = useUserMutations();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -495,17 +509,42 @@ export default function UsersSection() {
     },
   });
 
+  const roleOptions = useMemo(() => {
+    if (categoryTab === 'staff') {
+      return ROLES.filter((r) => STAFF_ROLES.includes(r.value as Role));
+    }
+    if (categoryTab === 'campus') {
+      return ROLES.filter((r) => CAMPUS_USER_ROLES.includes(r.value as Role));
+    }
+    return ROLES;
+  }, [categoryTab]);
+
+  const handleCategoryChange = (value: string) => {
+    const next = value as UserCategoryTab;
+    setCategoryTab(next);
+    setPage(1);
+    if (roleFilter === 'all') return;
+    const allowed =
+      next === 'staff'
+        ? STAFF_ROLES.includes(roleFilter as Role)
+        : next === 'campus'
+          ? CAMPUS_USER_ROLES.includes(roleFilter as Role)
+          : true;
+    if (!allowed) setRoleFilter('all');
+  };
+
   // Build query params
   const queryParams = useMemo(() => {
     const params = new URLSearchParams();
     params.set('page', String(page));
     params.set('limit', String(limit));
     if (search.trim()) params.set('search', search.trim());
+    if (categoryTab !== 'all') params.set('category', categoryTab);
     if (roleFilter && roleFilter !== 'all') params.set('role', roleFilter);
     if (statusFilter && statusFilter !== 'all') params.set('status', statusFilter);
     if (departmentFilter && departmentFilter !== 'all') params.set('department', departmentFilter);
     return params.toString();
-  }, [search, roleFilter, statusFilter, departmentFilter, page]);
+  }, [search, categoryTab, roleFilter, statusFilter, departmentFilter, page]);
 
   // Fetch data
   const { data, isLoading, isError } = useQuery<UsersApiResponse>({
@@ -522,6 +561,25 @@ export default function UsersSection() {
   const roleDistribution = data?.roleDistribution ?? [];
   const departments = data?.departments ?? [];
   const totalPages = Math.ceil(total / limit);
+
+  useEffect(() => {
+    if (!sectionContext) return;
+    if (sectionContext.usersQuery) setSearch(sectionContext.usersQuery);
+    if (sectionContext.usersSelectedId) setPendingUserId(sectionContext.usersSelectedId);
+    setSectionContext(null);
+  }, [sectionContext, setSectionContext]);
+
+  useEffect(() => {
+    if (!pendingUserId) return;
+    const user = users.find((u) => u.id === pendingUserId);
+    if (user) {
+      setEditUser(user);
+      setEditOpen(true);
+      setPendingUserId(null);
+    } else if (!isLoading) {
+      setPendingUserId(null);
+    }
+  }, [pendingUserId, users, isLoading]);
 
   // Derived stats
   const activeCount = useMemo(() => users.filter(u => u.status === 'active').length, [users]);
@@ -565,7 +623,11 @@ export default function UsersSection() {
     setPage(1);
   };
 
-  const hasActiveFilters = search || roleFilter !== 'all' || statusFilter !== 'all' || departmentFilter !== 'all';
+  const hasActiveFilters =
+    search || roleFilter !== 'all' || statusFilter !== 'all' || departmentFilter !== 'all';
+
+  const categoryLabel = CATEGORY_TAB_LABELS[categoryTab];
+  const isStaffView = categoryTab === 'staff';
 
   if (!currentUser) return null;
 
@@ -579,7 +641,11 @@ export default function UsersSection() {
             Users & RBAC
           </h2>
           <p className="text-sm text-muted-foreground">
-            Manage users, roles, and permissions across the campus system
+            {isStaffView
+              ? 'Manage faculty, HODs, admins, lab assistants, and security staff'
+              : categoryTab === 'campus'
+                ? 'Manage students, parents, and visitors'
+                : 'Manage users, roles, and permissions across the campus system'}
             {canProvisionWallet && (
               <span className="block mt-1 text-xs">
                 Knuct wallets: click a user row → profile dialog, or use <strong>Settings → Knuct</strong> for your wallet & pilot controls.
@@ -591,7 +657,7 @@ export default function UsersSection() {
           {canManage && (
             <Button size="sm" className="h-8" onClick={() => setCreateOpen(true)}>
               <UserPlus className="h-4 w-4 mr-1.5" />
-              Add User
+              {isStaffView ? 'Add Staff' : 'Add User'}
             </Button>
           )}
           <Badge variant="outline" className="w-fit text-xs font-semibold" style={{ borderColor: UOH_NAVY, color: UOH_NAVY }}>
@@ -599,6 +665,23 @@ export default function UsersSection() {
           </Badge>
         </div>
       </div>
+
+      <Tabs value={categoryTab} onValueChange={handleCategoryChange}>
+        <TabsList className="grid w-full max-w-md grid-cols-3 h-9">
+          <TabsTrigger value="all" className="text-xs gap-1.5">
+            <Users className="h-3.5 w-3.5" />
+            All
+          </TabsTrigger>
+          <TabsTrigger value="staff" className="text-xs gap-1.5">
+            <UserCog className="h-3.5 w-3.5" />
+            Staff
+          </TabsTrigger>
+          <TabsTrigger value="campus" className="text-xs gap-1.5">
+            <GraduationCap className="h-3.5 w-3.5" />
+            Students & Others
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
 
       {/* Main Layout: Two columns on desktop */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
@@ -624,7 +707,7 @@ export default function UsersSection() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Roles</SelectItem>
-                    {ROLES.map(r => (
+                    {roleOptions.map(r => (
                       <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
                     ))}
                   </SelectContent>
@@ -676,7 +759,9 @@ export default function UsersSection() {
               ) : users.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-center">
                   <Users className="h-10 w-10 text-muted-foreground/40 mb-3" />
-                  <p className="text-sm font-medium text-muted-foreground">No users found</p>
+                  <p className="text-sm font-medium text-muted-foreground">
+                    No {categoryLabel.toLowerCase()} found
+                  </p>
                   <p className="text-xs text-muted-foreground mt-1">Try adjusting your filters</p>
                 </div>
               ) : (
@@ -752,12 +837,22 @@ export default function UsersSection() {
                                     <>
                                       <DropdownMenuItem onClick={(e) => {
                                         e.stopPropagation();
-                                        const next = user.status === 'active' ? 'suspended' : 'active';
-                                        updateUser.mutate({ id: user.id, status: next });
+                                        setEditUser(user);
+                                        setEditOpen(true);
                                       }}>
-                                        <UserCog className="mr-2 h-3.5 w-3.5" />
-                                        {user.status === 'active' ? 'Suspend' : 'Activate'}
+                                        <UserCog className="mr-2 h-3.5 w-3.5" /> Edit
                                       </DropdownMenuItem>
+                                      {user.status !== 'inactive' && (
+                                        <DropdownMenuItem
+                                          className="text-destructive focus:text-destructive"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            deactivateUser.mutate(user.id);
+                                          }}
+                                        >
+                                          <UserX className="mr-2 h-3.5 w-3.5" /> Deactivate
+                                        </DropdownMenuItem>
+                                      )}
                                       <DropdownMenuItem onClick={(e) => {
                                         e.stopPropagation();
                                         updateUser.mutate({ id: user.id, resetPassword: true });
@@ -786,7 +881,8 @@ export default function UsersSection() {
                   {/* Pagination */}
                   <div className="flex items-center justify-between px-4 py-3 border-t">
                     <p className="text-xs text-muted-foreground">
-                      Showing {((page - 1) * limit) + 1}–{Math.min(page * limit, total)} of {total} users
+                      Showing {((page - 1) * limit) + 1}–{Math.min(page * limit, total)} of {total}{' '}
+                      {categoryTab === 'all' ? 'users' : categoryLabel.toLowerCase()}
                     </p>
                     <div className="flex items-center gap-1">
                       <Button
@@ -842,9 +938,11 @@ export default function UsersSection() {
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
                 <Shield className="h-4 w-4" style={{ color: UOH_NAVY }} />
-                Role Distribution
+                {isStaffView ? 'Staff by Role' : 'Role Distribution'}
               </CardTitle>
-              <CardDescription className="text-[10px]">Users by role assignment</CardDescription>
+              <CardDescription className="text-[10px]">
+                {isStaffView ? 'Staff accounts by role' : 'Users by role assignment'}
+              </CardDescription>
             </CardHeader>
             <CardContent className="pb-2">
               {isLoading ? (
@@ -885,11 +983,17 @@ export default function UsersSection() {
           {/* Quick Stat Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-3 xl:grid-cols-1 gap-3">
             <StatCard
-              title="Total Users"
+              title={isStaffView ? 'Total Staff' : categoryTab === 'campus' ? 'Campus Users' : 'Total Users'}
               value={total}
-              icon={Users}
+              icon={isStaffView ? UserCog : Users}
               color={UOH_NAVY}
-              subtitle="All registered users"
+              subtitle={
+                isStaffView
+                  ? 'Faculty, admin & security'
+                  : categoryTab === 'campus'
+                    ? 'Students, parents & visitors'
+                    : 'All registered users'
+              }
             />
             <StatCard
               title="Active Users"
@@ -963,7 +1067,18 @@ export default function UsersSection() {
         onProvisionWallet={(id) => provisionWallet.mutate(id)}
         provisioning={provisionWallet.isPending}
       />
-      <CreateUserDialog open={createOpen} onOpenChange={setCreateOpen} actorRole={currentUser.role} />
+      <CreateUserDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        actorRole={currentUser.role}
+        roleScope={categoryTab}
+      />
+      <EditUserDialog
+        user={editUser}
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        actorRole={currentUser.role}
+      />
     </div>
   );
 }

@@ -49,7 +49,7 @@ export default function LoginPage() {
     });
     setLoadingEmail(null);
     if (result?.error) {
-      setError('Invalid email or password');
+      setError('Invalid email or password. If this is a fresh install, run npm run db:seed to load demo users.');
       return;
     }
     router.push('/');
@@ -130,7 +130,16 @@ export default function LoginPage() {
                     required
                   />
                 </div>
-                {error && <p className="text-sm text-destructive">{error}</p>}
+                {error && (
+                  <div className="space-y-1">
+                    <p className="text-sm text-destructive">{error}</p>
+                    {process.env.NODE_ENV === 'development' && (
+                      <p className="text-xs text-muted-foreground">
+                        Dev tip: run <code className="font-mono bg-muted px-1 rounded">npm run db:seed</code> then try again.
+                      </p>
+                    )}
+                  </div>
+                )}
                 <Button type="submit" className="w-full bg-[#1A3C6E] hover:bg-[#1A3C6E]/90" disabled={loading}>
                   {loadingEmail === email ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sign in'}
                 </Button>

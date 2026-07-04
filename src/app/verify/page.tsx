@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ShieldCheck, Search, ArrowLeft, CheckCircle2, XCircle } from 'lucide-react';
+import { ShieldCheck, Search, ArrowLeft, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -24,19 +25,21 @@ type VerifyResult = {
   };
 };
 
-export default function VerifyPage() {
+function VerifyPageContent() {
+  const searchParams = useSearchParams();
   const [hash, setHash] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<VerifyResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleVerify(e: React.FormEvent) {
-    e.preventDefault();
+  const runVerify = useCallback(async (hashValue: string) => {
+    const trimmed = hashValue.trim();
+    if (trimmed.length < 8) return;
     setLoading(true);
     setError(null);
     setResult(null);
     try {
-      const res = await fetch(`/api/verify/anchor?hash=${encodeURIComponent(hash.trim())}`);
+      const res = await fetch(`/api/verify/anchor?hash=${encodeURIComponent(trimmed)}`);
       const data = await res.json();
       if (!res.ok) {
         setError(data.error ?? 'Verification failed');
@@ -48,6 +51,19 @@ export default function VerifyPage() {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    const paramHash = searchParams.get('hash');
+    if (paramHash && paramHash.trim().length >= 8) {
+      setHash(paramHash.trim());
+      runVerify(paramHash);
+    }
+  }, [searchParams, runVerify]);
+
+  async function handleVerify(e: React.FormEvent) {
+    e.preventDefault();
+    await runVerify(hash);
   }
 
   return (
@@ -131,5 +147,17 @@ export default function VerifyPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+export default function VerifyPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-[#1A3C6E]" />
+      </div>
+    }>
+      <VerifyPageContent />
+    </Suspense>
   );
 }

@@ -49,10 +49,22 @@ export async function GET(request: Request) {
     }
 
     if (startDate || endDate) {
-      const dateFilter: Record<string, unknown> = {};
-      if (startDate) dateFilter.gte = startDate;
-      if (endDate) dateFilter.lte = endDate;
-      where.startDate = dateFilter;
+      if (startDate && endDate) {
+        // Include events overlapping the requested range (multi-day holidays, exam weeks, etc.)
+        where.AND = [
+          { startDate: { lte: endDate } },
+          {
+            OR: [
+              { endDate: { gte: startDate } },
+              { AND: [{ endDate: null }, { startDate: { gte: startDate } }] },
+            ],
+          },
+        ];
+      } else if (startDate) {
+        where.startDate = { gte: startDate };
+      } else if (endDate) {
+        where.startDate = { lte: endDate };
+      }
     }
 
     const userSelect = isStaff

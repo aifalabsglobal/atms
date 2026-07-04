@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useMemo, useCallback } from 'react';
+import { useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import {
@@ -13,6 +13,13 @@ import {
 
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/lib/store';
+import {
+  captureMethodRequiresGeofence,
+  suggestGeofenceForBuilding,
+  checkLocationAgainstSessionGeofence,
+  geofenceStatusLabel,
+  type GeofenceCheckResult,
+} from '@/lib/geofence-policy';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -45,7 +52,7 @@ import { useToast } from '@/hooks/use-toast';
 
 // ─── Types ──────────────────────────────────────────────────────
 interface CourseOption { id: string; name: string; code: string }
-interface GeofenceOption { id: string; name: string }
+interface GeofenceOption { id: string; name: string; building?: string | null; isActive?: boolean }
 
 interface AttendanceSession {
   id: string;
@@ -64,7 +71,7 @@ interface AttendanceSession {
   timetableSlotId: string | null;
   course: { name: string; code: string };
   creator: { name: string };
-  geofence: { name: string; centerLat?: number; centerLng?: number; radiusMtrs?: number } | null;
+  geofence: { name: string; type?: string; centerLat?: number; centerLng?: number; radiusMtrs?: number; polygonData?: string | null } | null;
   timetableSlot: { roomNumber: string | null; building: string | null; startTime: string; endTime: string } | null;
   _count: { records: number };
 }
@@ -80,7 +87,7 @@ interface ActiveSession {
   presentCount: number;
   course: { name: string; code: string };
   creator: { name: string };
-  geofence: { name: string; centerLat?: number; centerLng?: number; radiusMtrs?: number } | null;
+  geofence: { name: string; type?: string; centerLat?: number; centerLng?: number; radiusMtrs?: number; polygonData?: string | null } | null;
   timetableSlot: { roomNumber: string | null; building: string | null } | null;
   alreadyMarked: boolean;
   existingRecord?: {
@@ -136,6 +143,15 @@ function getAttendanceColor(rate: number) {
   return 'text-red-600';
 }
 
+async function fetchJson<T>(url: string): Promise<T> {
+  const res = await fetch(url);
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || `Request failed (${res.status})`);
+  }
+  return data as T;
+}
+
 // ─── Student Self-Marking Component ─────────────────────────────
 function StudentMarkAttendance() {
   const { toast } = useToast();
@@ -148,6 +164,7 @@ function StudentMarkAttendance() {
   const [selfieBase64, setSelfieBase64] = useState<string | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const [geofenceCheck, setGeofenceCheck] = useState<GeofenceCheckResult | null>(null);
   const [markingStep, setMarkingStep] = useState<'select' | 'location' | 'camera' | 'submitting' | 'done'>('select');
 
   // Fetch active sessions for student
@@ -160,6 +177,7 @@ function StudentMarkAttendance() {
   });
 
   const activeSessions: ActiveSession[] = activeData?.sessions ?? [];
+  const faceVerificationConfigured = activeData?.faceVerificationConfigured === true;
 
   // Get user location
   const requestLocation = useCallback(() => {
@@ -169,15 +187,21 @@ function StudentMarkAttendance() {
     }
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setUserLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setUserLocation(loc);
         setLocationError(null);
+        if (selectedSession?.geofence) {
+          setGeofenceCheck(checkLocationAgainstSessionGeofence(selectedSession.geofence, loc.lat, loc.lng));
+        } else {
+          setGeofenceCheck(null);
+        }
       },
       (err) => {
         setLocationError(`Location error: ${err.message}`);
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
-  }, []);
+  }, [selectedSession]);
 
   // Start camera
   const startCamera = useCallback(async () => {
@@ -230,7 +254,9 @@ function StudentMarkAttendance() {
       queryClient.invalidateQueries({ queryKey: ['attendance-sessions'] });
       toast({
         title: 'Attendance Marked Successfully!',
-        description: `Geo: ${data.geofenceValidated ? '✅ Verified' : '❌ Failed'} | Face: ${data.faceVerified ? '✅ Verified' : '⚠️ Skipped'}`,
+        description: selectedSession?.geofence
+          ? `Geo: ${data.geofenceValidated ? '✅ Verified' : '❌ Failed'} | Face: ${data.faceVerified ? '✅ Verified' : '⚠️ Skipped'}`
+          : `Marked present | Face: ${data.faceVerified ? '✅ Verified' : '⚠️ Skipped'}`,
       });
     },
     onError: (err) => {
@@ -241,13 +267,18 @@ function StudentMarkAttendance() {
 
   // Submit attendance
   const handleSubmit = () => {
-    if (!currentUser || !selectedSession || !userLocation) return;
+    if (!currentUser || !selectedSession) return;
+    if (selectedSession.geofence && !userLocation) return;
+    if (geofenceCheck?.requiresGeofence && !geofenceCheck.inside) {
+      toast({ title: 'Outside geofence', description: geofenceStatusLabel(geofenceCheck), variant: 'destructive' });
+      return;
+    }
     setMarkingStep('submitting');
     markMutation.mutate({
       sessionId: selectedSession.id,
       studentId: currentUser.id,
-      latitude: userLocation.lat,
-      longitude: userLocation.lng,
+      latitude: userLocation?.lat,
+      longitude: userLocation?.lng,
       selfieBase64,
       captureMethod: 'self_geo_face',
     });
@@ -259,6 +290,7 @@ function StudentMarkAttendance() {
     setSelfieBase64(null);
     setUserLocation(null);
     setLocationError(null);
+    setGeofenceCheck(null);
     setCameraActive(false);
     setMarkingStep('select');
   };
@@ -404,6 +436,26 @@ function StudentMarkAttendance() {
                 <Button variant="outline" size="sm" className="text-xs h-7" onClick={requestLocation}>
                   <Navigation className="h-3 w-3 mr-1" /> Refresh Location
                 </Button>
+                {selectedSession.geofence && userLocation && geofenceCheck && (
+                  <div className={cn(
+                    'flex items-center gap-2 p-2.5 rounded-lg border text-xs',
+                    geofenceCheck.inside
+                      ? 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800'
+                      : 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800',
+                  )}>
+                    {geofenceCheck.inside ? (
+                      <ShieldCheck className="h-4 w-4 text-green-600 shrink-0" />
+                    ) : (
+                      <ShieldAlert className="h-4 w-4 text-red-600 shrink-0" />
+                    )}
+                    <span className={geofenceCheck.inside ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}>
+                      {geofenceStatusLabel(geofenceCheck)}
+                    </span>
+                  </div>
+                )}
+                {selectedSession.geofence && !userLocation && (
+                  <p className="text-[10px] text-muted-foreground">Geofence: {selectedSession.geofence.name}</p>
+                )}
               </div>
 
               {/* Camera / Selfie */}
@@ -469,7 +521,10 @@ function StudentMarkAttendance() {
               <div className="flex items-center gap-3 pt-2 border-t">
                 <Button
                   className="bg-[#1A3C6E] hover:bg-[#1A3C6E]/90 text-white gap-2"
-                  disabled={!userLocation || markMutation.isPending}
+                  disabled={
+                    markMutation.isPending ||
+                    (selectedSession.geofence ? !userLocation || (geofenceCheck?.requiresGeofence && !geofenceCheck.inside) : false)
+                  }
                   onClick={handleSubmit}
                 >
                   {markMutation.isPending ? (
@@ -636,9 +691,331 @@ function StudentRecordsView() {
 }
 
 // ─── Admin Sessions View ────────────────────────────────────────
+
+interface SessionRecord {
+  id: string;
+  status: string;
+  markedAt: string | null;
+  student: { id: string; name: string; email: string; employeeId: string | null };
+}
+
+interface UnmarkedStudent {
+  id: string;
+  name: string;
+  email: string;
+  employeeId: string | null;
+}
+
+const RECORD_STATUS_STYLES: Record<string, string> = {
+  present: 'bg-green-100 text-green-800 border-green-200',
+  absent: 'bg-red-100 text-red-800 border-red-200',
+  late: 'bg-amber-100 text-amber-800 border-amber-200',
+};
+
+function SessionDetailDialog({
+  sessionId,
+  open,
+  onOpenChange,
+}: {
+  sessionId: string | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const { data, isLoading } = useQuery<{
+    session: AttendanceSession & { records: SessionRecord[] };
+    unmarkedStudents: UnmarkedStudent[];
+  }>({
+    queryKey: ['attendance-session', sessionId],
+    queryFn: () => fetch(`/api/attendance/sessions/${sessionId}`).then(async (r) => {
+      if (!r.ok) throw new Error('Failed to load session');
+      return r.json();
+    }),
+    enabled: open && !!sessionId,
+  });
+
+  const markMutation = useMutation({
+    mutationFn: ({ studentId, status }: { studentId: string; status: string }) =>
+      fetch(`/api/attendance/sessions/${sessionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'mark', studentId, status }),
+      }).then(async (r) => {
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.error || 'Failed to mark');
+        return d;
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['attendance-session', sessionId] });
+      queryClient.invalidateQueries({ queryKey: ['attendance-sessions'] });
+      toast({ title: 'Attendance updated' });
+    },
+    onError: (err: Error) => toast({ title: 'Error', description: err.message, variant: 'destructive' }),
+  });
+
+  const session = data?.session;
+  const records = session?.records ?? [];
+  const unmarked = data?.unmarkedStudents ?? [];
+  const isActive = session?.status === 'active';
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Eye className="h-5 w-5" />
+            Session Detail
+          </DialogTitle>
+          {session && (
+            <DialogDescription>
+              {session.course?.code} — {format(new Date(session.sessionDate + 'T00:00:00'), 'MMM dd, yyyy')} · {session.startTime}
+            </DialogDescription>
+          )}
+        </DialogHeader>
+
+        {isLoading ? (
+          <div className="space-y-2 py-4">
+            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+          </div>
+        ) : session ? (
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge variant="outline" className={cn('text-[10px]', STATUS_CONFIG[session.status]?.className)}>
+                {STATUS_CONFIG[session.status]?.label ?? session.status}
+              </Badge>
+              <span className="text-xs text-muted-foreground">
+                {session.presentCount} present · {session.absentCount} absent · {records.length} marked
+              </span>
+            </div>
+
+            <div>
+              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Roster</h4>
+              {records.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-2">No attendance records yet</p>
+              ) : (
+                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                  {records.map((r) => (
+                    <div key={r.id} className="flex items-center justify-between gap-2 p-2 rounded-lg bg-muted/40">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{r.student.name}</p>
+                        <p className="text-[10px] text-muted-foreground font-mono">{r.student.employeeId || r.student.email}</p>
+                      </div>
+                      <Badge variant="outline" className={cn('text-[10px] capitalize shrink-0', RECORD_STATUS_STYLES[r.status] ?? '')}>
+                        {r.status}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {unmarked.length > 0 && (
+              <div>
+                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
+                  Unmarked ({unmarked.length})
+                </h4>
+                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                  {unmarked.map((s) => (
+                    <div key={s.id} className="flex items-center justify-between gap-2 p-2 rounded-lg border border-dashed">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{s.name}</p>
+                        <p className="text-[10px] text-muted-foreground font-mono">{s.employeeId || s.email}</p>
+                      </div>
+                      {isActive && (
+                        <div className="flex gap-1 shrink-0">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-[10px] text-green-700 border-green-300"
+                            disabled={markMutation.isPending}
+                            onClick={() => markMutation.mutate({ studentId: s.id, status: 'present' })}
+                          >
+                            Present
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-[10px] text-red-700 border-red-300"
+                            disabled={markMutation.isPending}
+                            onClick={() => markMutation.mutate({ studentId: s.id, status: 'absent' })}
+                          >
+                            Absent
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground py-4 text-center">Session not found</p>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
+
+interface TimetableSlotRow {
+  id: string;
+  courseId: string;
+  course: { id: string; name: string; code: string; enrollmentCount?: number };
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  roomNumber: string | null;
+  building: string | null;
+  session: { id: string; status: string; presentCount: number; expectedCount: number } | null;
+}
+
+function ScheduleTypeBadge({ timetableSlotId }: { timetableSlotId: string | null }) {
+  if (timetableSlotId) {
+    return (
+      <Badge className="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border-0">
+        On schedule
+      </Badge>
+    );
+  }
+  return <Badge variant="outline" className="text-[10px] text-muted-foreground">Ad-hoc</Badge>;
+}
+
+function FacultyScheduleCard({
+  onStartSlot,
+  onQuickStart,
+  onOpenSession,
+  isCreating,
+}: {
+  onStartSlot: (slot: TimetableSlotRow, dateStr: string) => void;
+  onQuickStart: (slot: TimetableSlotRow, dateStr: string) => void;
+  onOpenSession: (sessionId: string) => void;
+  isCreating: boolean;
+}) {
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const dayLabel = DAY_LABELS[new Date().getDay()];
+
+  const { data, isLoading, isError, refetch } = useQuery<{ slots: TimetableSlotRow[]; total: number }>({
+    queryKey: ['timetable-today', todayStr],
+    queryFn: () => fetchJson(`/api/timetable?date=${todayStr}`),
+    staleTime: 60_000,
+  });
+
+  const slots = data?.slots ?? [];
+
+  return (
+    <Card className="border-l-4" style={{ borderLeftColor: UOH_NAVY }}>
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <CalendarIcon className="h-4 w-4" style={{ color: UOH_NAVY }} />
+              Today&apos;s classes
+            </CardTitle>
+            <CardDescription className="text-xs">
+              {format(new Date(), 'EEEE, MMM d')} ({dayLabel}) — start sessions aligned to timetable
+            </CardDescription>
+          </div>
+          {slots.length > 0 && (
+            <Badge variant="secondary" className="text-[10px]">{slots.length} slot{slots.length !== 1 ? 's' : ''}</Badge>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <div className="space-y-2">{Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-14 w-full" />)}</div>
+        ) : isError ? (
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm text-destructive">Could not load today&apos;s timetable.</p>
+            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => refetch()}>Retry</Button>
+          </div>
+        ) : slots.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No timetable slots scheduled for today in your scope.</p>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {slots.map(slot => {
+              const activeSession = slot.session?.status === 'active' ? slot.session : null;
+              const room = [slot.building, slot.roomNumber].filter(Boolean).join(' · ');
+              return (
+                <div key={slot.id} className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-xs font-mono font-semibold" style={{ color: UOH_NAVY }}>{slot.course.code}</p>
+                      <p className="text-sm font-medium leading-tight">{slot.course.name}</p>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] shrink-0">
+                      {slot.startTime}–{slot.endTime}
+                    </Badge>
+                  </div>
+                  {room && (
+                    <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                      <MapPin className="h-3 w-3" />{room}
+                    </p>
+                  )}
+                  {activeSession ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[11px] text-green-700 dark:text-green-400">
+                        Session live · {activeSession.presentCount}/{activeSession.expectedCount} present
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs ml-auto"
+                        onClick={() => onOpenSession(activeSession.id)}
+                      >
+                        <Eye className="h-3 w-3 mr-1" />Open
+                      </Button>
+                    </div>
+                  ) : slot.session?.status === 'completed' ? (
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary" className="text-[10px]">Completed</Badge>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => onStartSlot(slot, todayStr)}
+                      >
+                        Makeup session
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        className="h-7 text-xs bg-[#1A3C6E] hover:bg-[#1A3C6E]/90 text-white"
+                        disabled={isCreating}
+                        onClick={() => onQuickStart(slot, todayStr)}
+                      >
+                        {isCreating ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Plus className="h-3 w-3 mr-1" />}
+                        Start now
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => onStartSlot(slot, todayStr)}
+                      >
+                        Customize
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function AdminSessionsView() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { sectionContext, setSectionContext } = useAppStore();
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [courseFilter, setCourseFilter] = useState<string>('all');
   const [methodFilter, setMethodFilter] = useState<string>('all');
@@ -647,10 +1024,25 @@ function AdminSessionsView() {
   const [page, setPage] = useState(1);
   const limit = 20;
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
+  const [detailSessionId, setDetailSessionId] = useState<string | null>(null);
   const [newSession, setNewSession] = useState({
     courseId: '', sessionDate: '', startTime: '09:00', endTime: '10:30',
-    captureMethod: 'manual', geofenceId: '',
+    captureMethod: 'manual', geofenceId: '', timetableSlotId: '' as string,
   });
+
+  const startFromTimetableSlot = useCallback((slot: TimetableSlotRow, dateStr: string) => {
+    setNewSession({
+      courseId: slot.courseId,
+      sessionDate: dateStr,
+      startTime: slot.startTime,
+      endTime: slot.endTime,
+      captureMethod: 'manual',
+      geofenceId: '',
+      timetableSlotId: slot.id,
+    });
+    setDialogOpen(true);
+  }, []);
 
   const queryParams = new URLSearchParams();
   if (statusFilter !== 'all') queryParams.set('status', statusFilter);
@@ -675,26 +1067,73 @@ function AdminSessionsView() {
     queryFn: () => fetch('/api/geofences').then(r => r.json()),
   });
 
+  const { data: slotPickerData } = useQuery<{ slots: TimetableSlotRow[] }>({
+    queryKey: ['timetable-slot-picker', newSession.courseId, newSession.sessionDate],
+    queryFn: () =>
+      fetchJson(`/api/timetable?courseId=${newSession.courseId}&date=${newSession.sessionDate}`),
+    enabled: !!newSession.courseId && !!newSession.sessionDate,
+  });
+
+  const availableSlots = slotPickerData?.slots ?? [];
+  const slotLocked = !!newSession.timetableSlotId;
+
   const courses = coursesData?.courses ?? [];
   const geofences = geofencesData?.geofences ?? [];
+  const geofenceRequired = captureMethodRequiresGeofence(newSession.captureMethod);
   const sessions = data?.sessions ?? [];
   const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / limit));
   const hasActiveFilters = statusFilter !== 'all' || courseFilter !== 'all' || methodFilter !== 'all' || dateFilter !== undefined;
+
+  useEffect(() => {
+    if (!sectionContext?.attendanceSessionId) return;
+    setDetailSessionId(sectionContext.attendanceSessionId);
+    setDetailDialogOpen(true);
+    setSectionContext(null);
+  }, [sectionContext, setSectionContext]);
+
+  const openSessionDetail = (id: string) => {
+    setDetailSessionId(id);
+    setDetailDialogOpen(true);
+  };
 
   const createMutation = useMutation({
     mutationFn: (body: Record<string, unknown>) =>
       fetch('/api/attendance/sessions', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-      }).then(r => { if (!r.ok) throw new Error(); return r.json(); }),
+      }).then(async r => {
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || 'Failed to create session');
+        return data;
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['attendance-sessions'] });
+      queryClient.invalidateQueries({ queryKey: ['timetable-today'] });
+      queryClient.invalidateQueries({ queryKey: ['timetable-slot-picker'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       setDialogOpen(false);
+      setNewSession({
+        courseId: '', sessionDate: '', startTime: '09:00', endTime: '10:30',
+        captureMethod: 'manual', geofenceId: '', timetableSlotId: '',
+      });
       toast({ title: 'Session Created', description: 'Attendance session created successfully.' });
     },
-    onError: () => {
-      toast({ title: 'Error', description: 'Failed to create session.', variant: 'destructive' });
+    onError: (err: Error) => {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
     },
   });
+
+  const quickStartFromSlot = useCallback((slot: TimetableSlotRow, dateStr: string) => {
+    const suggested = suggestGeofenceForBuilding(geofences, slot.building);
+    createMutation.mutate({
+      courseId: slot.courseId,
+      sessionDate: dateStr,
+      startTime: slot.startTime,
+      endTime: slot.endTime,
+      captureMethod: 'self_geo_face',
+      timetableSlotId: slot.id,
+      geofenceId: suggested?.id,
+    });
+  }, [createMutation, geofences]);
 
   const completeMutation = useMutation({
     mutationFn: (sessionId: string) =>
@@ -711,6 +1150,8 @@ function AdminSessionsView() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['attendance-sessions'] });
+      queryClient.invalidateQueries({ queryKey: ['timetable-today'] });
+      queryClient.invalidateQueries({ queryKey: ['timetable-slot-picker'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       toast({ title: 'Session completed', description: 'Attendance summary anchored for audit trail.' });
     },
@@ -721,6 +1162,13 @@ function AdminSessionsView() {
 
   return (
     <div className="space-y-4">
+      <FacultyScheduleCard
+        onStartSlot={startFromTimetableSlot}
+        onQuickStart={quickStartFromSlot}
+        onOpenSession={openSessionDetail}
+        isCreating={createMutation.isPending}
+      />
+
       {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
@@ -790,16 +1238,79 @@ function AdminSessionsView() {
               <DialogContent className="sm:max-w-[500px]">
                 <DialogHeader><DialogTitle>Create Session</DialogTitle><DialogDescription>Set up attendance session</DialogDescription></DialogHeader>
                 <div className="grid gap-3 py-3">
-                  <div className="grid gap-1.5"><Label className="text-xs">Course *</Label><Select value={newSession.courseId} onValueChange={v => setNewSession(p => ({ ...p, courseId: v }))}><SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger><SelectContent>{courses.map(c => <SelectItem key={c.id} value={c.id}>{c.code} — {c.name}</SelectItem>)}</SelectContent></Select></div>
-                  <div className="grid gap-1.5"><Label className="text-xs">Date *</Label><Input type="date" value={newSession.sessionDate} onChange={e => setNewSession(p => ({ ...p, sessionDate: e.target.value }))} /></div>
+                  <div className="grid gap-1.5"><Label className="text-xs">Course *</Label><Select value={newSession.courseId} onValueChange={v => setNewSession(p => ({ ...p, courseId: v, timetableSlotId: '' }))}><SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger><SelectContent>{courses.map(c => <SelectItem key={c.id} value={c.id}>{c.code} — {c.name}</SelectItem>)}</SelectContent></Select></div>
+                  <div className="grid gap-1.5"><Label className="text-xs">Date *</Label><Input type="date" value={newSession.sessionDate} onChange={e => setNewSession(p => ({ ...p, sessionDate: e.target.value, timetableSlotId: '' }))} /></div>
+                  {newSession.courseId && newSession.sessionDate && (
+                    <div className="grid gap-1.5">
+                      <Label className="text-xs">Timetable slot</Label>
+                      <Select
+                        value={newSession.timetableSlotId || '__none__'}
+                        onValueChange={v => {
+                          if (v === '__none__') {
+                            setNewSession(p => ({ ...p, timetableSlotId: '' }));
+                            return;
+                          }
+                          const slot = availableSlots.find(s => s.id === v);
+                          if (slot) {
+                            const suggested = suggestGeofenceForBuilding(geofences, slot.building);
+                            setNewSession(p => ({
+                              ...p,
+                              timetableSlotId: slot.id,
+                              startTime: slot.startTime,
+                              endTime: slot.endTime,
+                              geofenceId: suggested?.id ?? p.geofenceId,
+                            }));
+                          }
+                        }}
+                      >
+                        <SelectTrigger><SelectValue placeholder="Ad-hoc (no slot)" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Ad-hoc (no timetable slot)</SelectItem>
+                          {availableSlots.map(s => (
+                            <SelectItem key={s.id} value={s.id}>
+                              {DAY_LABELS[s.dayOfWeek]} {s.startTime}–{s.endTime}
+                              {s.roomNumber ? ` · ${s.roomNumber}` : ''}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {availableSlots.length === 0 && (
+                        <p className="text-[10px] text-muted-foreground">No timetable slot for this course on the selected day.</p>
+                      )}
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="grid gap-1.5"><Label className="text-xs">Start</Label><Input type="time" value={newSession.startTime} onChange={e => setNewSession(p => ({ ...p, startTime: e.target.value }))} /></div>
-                    <div className="grid gap-1.5"><Label className="text-xs">End</Label><Input type="time" value={newSession.endTime} onChange={e => setNewSession(p => ({ ...p, endTime: e.target.value }))} /></div>
+                    <div className="grid gap-1.5"><Label className="text-xs">Start</Label><Input type="time" value={newSession.startTime} readOnly={slotLocked} className={slotLocked ? 'bg-muted' : ''} onChange={e => setNewSession(p => ({ ...p, startTime: e.target.value }))} /></div>
+                    <div className="grid gap-1.5"><Label className="text-xs">End</Label><Input type="time" value={newSession.endTime} readOnly={slotLocked} className={slotLocked ? 'bg-muted' : ''} onChange={e => setNewSession(p => ({ ...p, endTime: e.target.value }))} /></div>
                   </div>
+                  {slotLocked && (
+                    <p className="text-[10px] text-muted-foreground">Times are locked to the selected timetable slot.</p>
+                  )}
                   <div className="grid gap-1.5"><Label className="text-xs">Capture Method</Label><Select value={newSession.captureMethod} onValueChange={v => setNewSession(p => ({ ...p, captureMethod: v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.entries(CAPTURE_METHOD_CONFIG).map(([k, { label }]) => <SelectItem key={k} value={k}>{label}</SelectItem>)}</SelectContent></Select></div>
-                  <div className="grid gap-1.5"><Label className="text-xs">Geofence</Label><Select value={newSession.geofenceId} onValueChange={v => setNewSession(p => ({ ...p, geofenceId: v }))}><SelectTrigger><SelectValue placeholder="Optional" /></SelectTrigger><SelectContent>{geofences.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent></Select></div>
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs">
+                      Geofence {geofenceRequired ? '*' : '(optional)'}
+                    </Label>
+                    <Select
+                      value={newSession.geofenceId || '__none__'}
+                      onValueChange={v => setNewSession(p => ({ ...p, geofenceId: v === '__none__' ? '' : v }))}
+                    >
+                      <SelectTrigger><SelectValue placeholder={geofenceRequired ? 'Select geofence' : 'None'} /></SelectTrigger>
+                      <SelectContent>
+                        {!geofenceRequired && <SelectItem value="__none__">None</SelectItem>}
+                        {geofences.map(g => (
+                          <SelectItem key={g.id} value={g.id}>
+                            {g.name}{g.building ? ` · ${g.building}` : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {geofenceRequired && !newSession.geofenceId && (
+                      <p className="text-[10px] text-amber-600">GPS / Geo+Face sessions require an active geofence zone.</p>
+                    )}
+                  </div>
                 </div>
-                <DialogFooter><Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button><Button onClick={() => createMutation.mutate({ courseId: newSession.courseId, sessionDate: newSession.sessionDate, startTime: newSession.startTime, endTime: newSession.endTime, captureMethod: newSession.captureMethod, geofenceId: newSession.geofenceId || undefined })} disabled={createMutation.isPending} className="bg-[#1A3C6E] hover:bg-[#1A3C6E]/90 text-white">{createMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-1" />}Create</Button></DialogFooter>
+                <DialogFooter><Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button><Button onClick={() => createMutation.mutate({ courseId: newSession.courseId, sessionDate: newSession.sessionDate, startTime: newSession.startTime, endTime: newSession.endTime, captureMethod: newSession.captureMethod, geofenceId: newSession.geofenceId || undefined, timetableSlotId: newSession.timetableSlotId || undefined })} disabled={createMutation.isPending || !newSession.courseId || !newSession.sessionDate || (geofenceRequired && !newSession.geofenceId)} className="bg-[#1A3C6E] hover:bg-[#1A3C6E]/90 text-white">{createMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-1" />}Create</Button></DialogFooter>
               </DialogContent>
             </Dialog>
           </div>
@@ -823,6 +1334,7 @@ function AdminSessionsView() {
                   <TableHeader><TableRow>
                     <TableHead className="text-xs">Date</TableHead>
                     <TableHead className="text-xs">Course</TableHead>
+                    <TableHead className="text-xs">Schedule</TableHead>
                     <TableHead className="text-xs">Time</TableHead>
                     <TableHead className="text-xs">Method</TableHead>
                     <TableHead className="text-xs text-center">Present</TableHead>
@@ -840,6 +1352,7 @@ function AdminSessionsView() {
                         <TableRow key={s.id}>
                           <TableCell className="text-xs font-medium">{format(new Date(s.sessionDate + 'T00:00:00'), 'MMM dd')}</TableCell>
                           <TableCell><span className="text-xs font-mono" style={{ color: UOH_NAVY }}>{s.course?.code || '—'}</span></TableCell>
+                          <TableCell><ScheduleTypeBadge timetableSlotId={s.timetableSlotId} /></TableCell>
                           <TableCell className="text-xs">{s.startTime}</TableCell>
                           <TableCell><div className="flex items-center gap-1"><MethodIcon className="h-3 w-3 text-muted-foreground" /><span className="text-xs">{methodConf.label}</span></div></TableCell>
                           <TableCell className="text-center"><span className={cn('text-xs font-semibold', rate >= 75 ? 'text-green-600' : rate >= 65 ? 'text-amber-600' : 'text-red-600')}>{s.presentCount} ({rate}%)</span></TableCell>
@@ -858,17 +1371,27 @@ function AdminSessionsView() {
                             </div>
                           </TableCell>
                           <TableCell className="text-right">
-                            {s.status === 'active' && (
+                            <div className="flex items-center justify-end gap-1">
                               <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 text-[10px]"
-                                disabled={completeMutation.isPending}
-                                onClick={() => completeMutation.mutate(s.id)}
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() => openSessionDetail(s.id)}
                               >
-                                Complete
+                                <Eye className="h-3.5 w-3.5" />
                               </Button>
-                            )}
+                              {s.status === 'active' && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 text-[10px]"
+                                  disabled={completeMutation.isPending}
+                                  onClick={() => completeMutation.mutate(s.id)}
+                                >
+                                  Complete
+                                </Button>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       );
@@ -892,6 +1415,12 @@ function AdminSessionsView() {
           )}
         </CardContent>
       </Card>
+
+      <SessionDetailDialog
+        sessionId={detailSessionId}
+        open={detailDialogOpen}
+        onOpenChange={setDetailDialogOpen}
+      />
     </div>
   );
 }

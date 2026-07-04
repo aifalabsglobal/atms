@@ -12,7 +12,7 @@ import {
   CommandList,
 } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { useAppStore, type Section } from '@/lib/store';
+import { useAppStore, type Section, type SectionContext } from '@/lib/store';
 
 type SearchResult = {
   users: { id: string; name: string; email: string; role: string; department: string | null }[];
@@ -21,8 +21,8 @@ type SearchResult = {
   query: string;
 };
 
-export function GlobalSearch({ onNavigate }: { onNavigate?: (section: Section) => void }) {
-  const { setActiveSection } = useAppStore();
+export function GlobalSearch({ onNavigate }: { onNavigate?: (section: Section, ctx?: SectionContext) => void }) {
+  const { navigateToSection } = useAppStore();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
@@ -44,13 +44,13 @@ export function GlobalSearch({ onNavigate }: { onNavigate?: (section: Section) =
   });
 
   const navigate = useCallback(
-    (section: Section) => {
-      setActiveSection(section);
-      onNavigate?.(section);
+    (section: Section, ctx?: SectionContext) => {
+      navigateToSection(section, ctx);
+      onNavigate?.(section, ctx);
       setOpen(false);
       setQuery('');
     },
-    [setActiveSection, onNavigate]
+    [navigateToSection, onNavigate]
   );
 
   const hasResults =
@@ -93,7 +93,7 @@ export function GlobalSearch({ onNavigate }: { onNavigate?: (section: Section) =
                       <CommandItem
                         key={u.id}
                         value={`user-${u.id}`}
-                        onSelect={() => navigate('users')}
+                        onSelect={() => navigate('users', { usersQuery: u.email, usersSelectedId: u.id })}
                         className="flex items-center gap-2"
                       >
                         <Users className="h-3.5 w-3.5 text-muted-foreground" />
@@ -111,7 +111,7 @@ export function GlobalSearch({ onNavigate }: { onNavigate?: (section: Section) =
                       <CommandItem
                         key={c.id}
                         value={`course-${c.id}`}
-                        onSelect={() => navigate('lms')}
+                        onSelect={() => navigate('lms', { lmsTab: 'courses', lmsCourseId: c.id })}
                         className="flex items-center gap-2"
                       >
                         <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
@@ -126,7 +126,7 @@ export function GlobalSearch({ onNavigate }: { onNavigate?: (section: Section) =
                       <CommandItem
                         key={s.id}
                         value={`session-${s.id}`}
-                        onSelect={() => navigate('attendance')}
+                        onSelect={() => navigate('attendance', { attendanceSessionId: s.id })}
                         className="flex items-center gap-2"
                       >
                         <ScanLine className="h-3.5 w-3.5 text-muted-foreground" />

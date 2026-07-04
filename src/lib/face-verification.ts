@@ -81,8 +81,8 @@ export async function verifyFaceMatch(
   }
 
   return {
-    isMatch: true,
+    isMatch: false,
     confidence: null,
-    reason: 'Selfie captured; automated face matching is not configured',
+    reason: 'Demo mode — configure FACE_VERIFICATION_ENABLED and FACE_VERIFICATION_API_URL for live matching',
   };
 }

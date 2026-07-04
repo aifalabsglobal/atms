@@ -42,6 +42,7 @@ export interface KnuctDashboardStats {
     type: 'anchor' | 'credential';
     module: string;
     ref: string;
+    hash?: string;
     at: string;
   }>;
 }

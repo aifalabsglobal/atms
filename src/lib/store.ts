@@ -127,9 +127,20 @@ export const ROLE_COLORS: Record<Role, string> = {
   security: '#991B1B',
 };
 
+export type SectionContext = {
+  usersQuery?: string;
+  usersSelectedId?: string;
+  lmsTab?: string;
+  lmsCourseId?: string;
+  attendanceSessionId?: string;
+};
+
 interface AppState {
   activeSection: Section;
   setActiveSection: (section: Section) => void;
+  sectionContext: SectionContext | null;
+  setSectionContext: (ctx: SectionContext | null) => void;
+  navigateToSection: (section: Section, ctx?: SectionContext) => void;
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
   currentUser: CurrentUser | null;
@@ -146,6 +157,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (user && !ROLE_SECTIONS[user.role].includes(section)) return;
     set({ activeSection: section });
   },
+  sectionContext: null,
+  setSectionContext: (ctx) => set({ sectionContext: ctx }),
+  navigateToSection: (section, ctx) => {
+    const user = get().currentUser;
+    if (user && !ROLE_SECTIONS[user.role].includes(section)) return;
+    set({ activeSection: section, sectionContext: ctx ?? null });
+  },
   sidebarOpen: false,
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   currentUser: null,
@@ -161,7 +179,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       ...(roleChanged ? { activeSection: 'dashboard' as Section } : {}),
     });
   },
-  clearUser: () => set({ currentUser: null, activeSection: 'dashboard', roleSwitching: null }),
+  clearUser: () => set({ currentUser: null, activeSection: 'dashboard', sectionContext: null, roleSwitching: null }),
   roleSwitching: null,
   setRoleSwitching: (label) => set({ roleSwitching: label }),
 }));

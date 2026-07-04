@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { requireRoles } from '@/lib/auth-helpers';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { getClientIp } from '@/lib/audit';
-import { enrichAuditLogsWithAnchors } from '@/lib/knuct/anchor-audit';
+import { enrichAuditLogsWithAnchors, AUDIT_ANCHOR_ACTIONS } from '@/lib/knuct/anchor-audit';
 
 export async function GET(request: Request) {
   try {
@@ -20,6 +20,9 @@ export async function GET(request: Request) {
 
     const where: Record<string, unknown> = {};
     if (action) where.action = action;
+    if (searchParams.get('anchorableOnly') === 'true') {
+      where.action = { in: [...AUDIT_ANCHOR_ACTIONS] };
+    }
 
     const [logs, total] = await Promise.all([
       db.auditLog.findMany({

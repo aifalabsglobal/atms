@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -39,19 +40,30 @@ const navModules: { section: Section; name: string }[] = [
   { section: 'settings', name: 'Settings' },
 ];
 
-const systemConfig = [
-  { label: 'Face Verification', value: 'Stub locally; set FACE_VERIFICATION_ENABLED + API URL for ArcFace', icon: ScanFace, status: 'active' as const },
-  { label: 'GPS Geofencing', value: 'Haversine (circle) + point-in-polygon', icon: MapPin, status: 'active' as const },
-  { label: 'Min Attendance (Regulation)', value: '75% for eligibility', icon: Clock, status: 'active' as const },
-  { label: 'Condonation Threshold', value: '65% with HOD approval', icon: Clock, status: 'active' as const },
-  { label: 'Auth Method', value: 'next-auth JWT (credentials)', icon: Lock, status: 'active' as const },
-  { label: 'Audit Logging', value: 'Login, user CRUD, violations, geofences', icon: ScrollText, status: 'active' as const },
-  { label: 'Rate Limiting', value: 'Upstash Redis (prod) or in-memory (dev)', icon: Server, status: 'active' as const },
-  { label: 'Email', value: 'Resend or SMTP — welcome & password-reset on user CRUD', icon: Bell, status: 'active' as const },
-  { label: 'Database', value: 'PostgreSQL (Neon) + Prisma migrations', icon: Database, status: 'active' as const },
-  { label: 'Knuct Blockchain', value: 'Live pilot when KNUCT_ENABLED=true', icon: Link2, status: 'active' as const },
-  { label: 'API', value: 'Next.js App Router (/api/*)', icon: Server, status: 'active' as const },
+const systemConfig: {
+  label: string;
+  value: string;
+  icon: React.ElementType;
+  status: 'active' | 'demo' | 'planned';
+}[] = [
+  { label: 'Face Verification', value: 'Demo stub locally; set FACE_VERIFICATION_ENABLED + API URL for ArcFace', icon: ScanFace, status: 'demo' },
+  { label: 'GPS Geofencing', value: 'Haversine (circle) + point-in-polygon', icon: MapPin, status: 'active' },
+  { label: 'Min Attendance (Regulation)', value: '75% for eligibility', icon: Clock, status: 'active' },
+  { label: 'Condonation Threshold', value: '65% with HOD approval', icon: Clock, status: 'active' },
+  { label: 'Auth Method', value: 'next-auth JWT (credentials)', icon: Lock, status: 'active' },
+  { label: 'Audit Logging', value: 'Login, user CRUD, violations, geofences, calendar publish', icon: ScrollText, status: 'active' },
+  { label: 'Rate Limiting', value: 'Upstash Redis (prod) or in-memory (dev)', icon: Server, status: 'active' },
+  { label: 'Email', value: 'Welcome/reset emails when SMTP or Resend env vars are set', icon: Bell, status: 'demo' },
+  { label: 'Database', value: 'PostgreSQL (Neon) + Prisma migrations', icon: Database, status: 'active' },
+  { label: 'Knuct Blockchain', value: 'Live pilot when KNUCT_ENABLED=true in .env', icon: Link2, status: 'demo' },
+  { label: 'API', value: 'Next.js App Router (/api/*)', icon: Server, status: 'active' },
 ];
+
+const statusBadge: Record<'active' | 'demo' | 'planned', { label: string; className: string }> = {
+  active: { label: 'Active', className: 'bg-green-50 text-green-700 border-green-200' },
+  demo: { label: 'Demo / partial', className: 'bg-amber-50 text-amber-800 border-amber-200' },
+  planned: { label: 'Planned', className: 'bg-gray-50 text-gray-600 border-gray-200' },
+};
 
 export default function SettingsSection() {
   const { currentUser } = useAppStore();
@@ -60,9 +72,11 @@ export default function SettingsSection() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  const [auditAnchorOnly, setAuditAnchorOnly] = useState(false);
+
   const { data: auditData, isLoading: auditLoading } = useQuery({
-    queryKey: ['audit-logs'],
-    queryFn: () => fetch('/api/audit?limit=30').then((r) => {
+    queryKey: ['audit-logs', auditAnchorOnly],
+    queryFn: () => fetch(`/api/audit?limit=30${auditAnchorOnly ? '&anchorableOnly=true' : ''}`).then((r) => {
       if (!r.ok) throw new Error('Failed to load audit logs');
       return r.json();
     }),
@@ -76,6 +90,15 @@ export default function SettingsSection() {
       return r.json();
     }),
     enabled: isAdmin,
+  });
+
+  const { data: anchorsData, isLoading: anchorsLoading } = useQuery({
+    queryKey: ['knuct-anchors'],
+    queryFn: () => fetch('/api/knuct/anchors?limit=20').then((r) => {
+      if (!r.ok) throw new Error('Failed to load anchors');
+      return r.json();
+    }),
+    enabled: isSuperAdmin,
   });
 
   const provisionMutation = useMutation({
@@ -158,8 +181,9 @@ export default function SettingsSection() {
                       <p className="text-sm font-medium">{cfg.label}</p>
                       <p className="text-sm text-muted-foreground mt-0.5">{cfg.value}</p>
                     </div>
-                    <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 shrink-0 text-[10px]">
-                      <CheckCircle className="h-3 w-3 mr-1" /> Active
+                    <Badge variant="outline" className={`shrink-0 text-[10px] ${statusBadge[cfg.status].className}`}>
+                      {cfg.status === 'active' ? <CheckCircle className="h-3 w-3 mr-1" /> : null}
+                      {statusBadge[cfg.status].label}
                     </Badge>
                   </CardContent>
                 </Card>
@@ -308,11 +332,22 @@ export default function SettingsSection() {
                         {knuctData.stats.recentActivity.length > 0 && (
                           <div className="space-y-1.5 pt-2 border-t">
                             <p className="text-xs font-medium">Recent hash anchors</p>
-                            {knuctData.stats.recentActivity.slice(0, 5).map((a: { module: string; ref: string }, i: number) => (
-                              <p key={i} className="text-[10px] font-mono text-muted-foreground flex justify-between">
-                                <span>{a.module}</span>
-                                <span>{a.ref}…</span>
-                              </p>
+                            {knuctData.stats.recentActivity.slice(0, 5).map((a: { module: string; ref: string; hash?: string }, i: number) => (
+                              <div key={i} className="text-[10px] font-mono text-muted-foreground flex items-center justify-between gap-2">
+                                <span className="shrink-0">{a.module}</span>
+                                {a.hash ? (
+                                  <Link
+                                    href={`/verify?hash=${a.hash}`}
+                                    target="_blank"
+                                    className="truncate hover:text-[#1A3C6E] hover:underline"
+                                    title={a.hash}
+                                  >
+                                    {a.hash.slice(0, 16)}…
+                                  </Link>
+                                ) : (
+                                  <span>{a.ref}…</span>
+                                )}
+                              </div>
                             ))}
                           </div>
                         )}
@@ -348,6 +383,75 @@ export default function SettingsSection() {
                 )}
               </CardContent>
             </Card>
+
+            {isSuperAdmin && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <ScrollText className="h-4 w-4 text-[#1A3C6E]" /> Blockchain Anchors
+                  </CardTitle>
+                  <CardDescription>Recent SHA-256 audit anchors stored in PostgreSQL (latest 20)</CardDescription>
+                </CardHeader>
+                <CardContent className="p-0">
+                  {anchorsLoading ? (
+                    <div className="p-4 space-y-2">
+                      {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Resource type</TableHead>
+                            <TableHead>Resource ID</TableHead>
+                            <TableHead>Hash</TableHead>
+                            <TableHead>Created</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {(anchorsData?.anchors ?? []).map((anchor: {
+                            id: string;
+                            resourceType: string;
+                            resourceId: string;
+                            payloadHash: string;
+                            createdAt: string;
+                          }) => (
+                            <TableRow key={anchor.id}>
+                              <TableCell>
+                                <Badge variant="outline" className="text-[10px] font-mono">{anchor.resourceType}</Badge>
+                              </TableCell>
+                              <TableCell className="text-xs font-mono text-muted-foreground" title={anchor.resourceId}>
+                                {anchor.resourceId.length > 16 ? `${anchor.resourceId.slice(0, 16)}…` : anchor.resourceId}
+                              </TableCell>
+                              <TableCell className="text-xs font-mono">
+                                <Link
+                                  href={`/verify?hash=${anchor.payloadHash}`}
+                                  target="_blank"
+                                  className="text-muted-foreground hover:text-[#1A3C6E] hover:underline"
+                                  title={anchor.payloadHash}
+                                >
+                                  {anchor.payloadHash.slice(0, 12)}…
+                                </Link>
+                              </TableCell>
+                              <TableCell className="text-xs whitespace-nowrap text-muted-foreground">
+                                {new Date(anchor.createdAt).toLocaleString('en-IN')}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                          {(anchorsData?.anchors ?? []).length === 0 && (
+                            <TableRow>
+                              <TableCell colSpan={4} className="text-center text-sm text-muted-foreground py-8">
+                                No anchors yet. Complete an attendance session or review a violation to create one.
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
         )}
 
@@ -358,9 +462,29 @@ export default function SettingsSection() {
                 <CardTitle className="text-base flex items-center gap-2">
                   <ScrollText className="h-4 w-4 text-[#1A3C6E]" /> Enterprise Audit Trail
                 </CardTitle>
-                <CardDescription>Immutable log of security-sensitive actions (last 30 events)</CardDescription>
+                <CardDescription>
+                  Immutable log of security-sensitive actions. The Anchor column shows a SHA-256 hash only for
+                  session complete, violation review, geofence create, calendar publish, grade publish, and subject publish.
+                  Logins and other actions show — until you perform one of those operations.
+                </CardDescription>
               </CardHeader>
               <CardContent className="p-0">
+                <div className="flex flex-wrap gap-2 px-4 pb-3 border-b">
+                  <Button
+                    size="sm"
+                    variant={auditAnchorOnly ? 'default' : 'outline'}
+                    onClick={() => setAuditAnchorOnly(true)}
+                  >
+                    Anchor events only
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={!auditAnchorOnly ? 'default' : 'outline'}
+                    onClick={() => setAuditAnchorOnly(false)}
+                  >
+                    All events
+                  </Button>
+                </div>
                 {auditLoading ? (
                   <div className="p-4 space-y-2">
                     {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
@@ -395,14 +519,27 @@ export default function SettingsSection() {
                             </TableCell>
                             <TableCell className="text-xs text-muted-foreground font-mono">{log.resource}</TableCell>
                             <TableCell className="text-xs font-mono text-muted-foreground">
-                              {log.anchorHash ? `${log.anchorHash.slice(0, 12)}…` : '—'}
+                              {log.anchorHash ? (
+                                <Link
+                                  href={`/verify?hash=${log.anchorHash}`}
+                                  target="_blank"
+                                  className="hover:text-[#1A3C6E] hover:underline"
+                                  title={log.anchorHash}
+                                >
+                                  {log.anchorHash.slice(0, 12)}…
+                                </Link>
+                              ) : (
+                                '—'
+                              )}
                             </TableCell>
                           </TableRow>
                         ))}
                         {(auditData?.logs ?? []).length === 0 && (
                           <TableRow>
                             <TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-8">
-                              No audit events yet. Actions will appear after logins and admin operations.
+                              {auditAnchorOnly
+                                ? 'No anchor-linked events yet. Complete an attendance session (Attendance tab) or review a violation to create a hash.'
+                                : 'No audit events yet. Actions will appear after logins and admin operations.'}
                             </TableCell>
                           </TableRow>
                         )}
@@ -417,23 +554,31 @@ export default function SettingsSection() {
 
         {/* Notification Settings */}
         <TabsContent value="notifications" className="space-y-4">
+          <Card className="border-amber-200 bg-amber-50/50 dark:bg-amber-950/20">
+            <CardContent className="p-4 text-sm text-muted-foreground">
+              Only <strong>in-app notifications</strong> are fully wired today. SMS, push, and external email
+              channels below are reference designs — not configurable in this demo build.
+            </CardContent>
+          </Card>
           <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2"><Bell className="h-4 w-4 text-[#1A3C6E]" /> Notification Channels</CardTitle>
-              <CardDescription>4 channels: SMS, Email, Push, In-App</CardDescription>
+              <CardDescription>Planned multi-channel delivery (in-app is live)</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 md:grid-cols-2">
                 {[
-                  { channel: 'In-App', status: 'Active', provider: 'Built-in', events: 'All events' },
-                  { channel: 'Email', status: 'Active', provider: 'SMTP (JNTUH Mail)', events: 'Grades, Alerts, Announcements' },
-                  { channel: 'SMS', status: 'Configured', provider: 'Twilio', events: 'Critical alerts only' },
-                  { channel: 'Push', status: 'Active', provider: 'Firebase FCM', events: 'Attendance, Deadlines' },
+                  { channel: 'In-App', status: 'active' as const, provider: 'Built-in (live)', events: 'All events — see bell icon in header' },
+                  { channel: 'Email', status: 'demo' as const, provider: 'SMTP / Resend (env-dependent)', events: 'Welcome & password reset on user CRUD only' },
+                  { channel: 'SMS', status: 'planned' as const, provider: 'Twilio (not integrated)', events: 'Critical alerts — planned' },
+                  { channel: 'Push', status: 'planned' as const, provider: 'Firebase FCM (not integrated)', events: 'Attendance, deadlines — planned' },
                 ].map(ch => (
                   <div key={ch.channel} className="border rounded-lg p-4 space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="font-medium">{ch.channel}</span>
-                      <Badge variant="outline" className="bg-green-50 text-green-700 text-[10px]">{ch.status}</Badge>
+                      <Badge variant="outline" className={`text-[10px] ${statusBadge[ch.status].className}`}>
+                        {statusBadge[ch.status].label}
+                      </Badge>
                     </div>
                     <p className="text-sm text-muted-foreground">Provider: {ch.provider}</p>
                     <p className="text-sm text-muted-foreground">Events: {ch.events}</p>
@@ -445,7 +590,8 @@ export default function SettingsSection() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Notification Rules</CardTitle>
+              <CardTitle className="text-base">Notification Rules (reference)</CardTitle>
+              <CardDescription>Target routing when external channels are enabled</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
