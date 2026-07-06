@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
-import { requireCampusRead, getCampusScope } from '@/lib/auth-helpers';
+import { requireAnySection, getCampusScope } from '@/lib/auth-helpers';
 import {
   buildTimetableWhere,
   dayOfWeekFromDate,
@@ -12,7 +12,7 @@ import {
 
 export async function GET(request: Request) {
   try {
-    const { error, session } = await requireCampusRead();
+    const { error, session } = await requireAnySection(['attendance', 'masters']);
     if (error || !session) return error;
 
     const scope = await getCampusScope(session);

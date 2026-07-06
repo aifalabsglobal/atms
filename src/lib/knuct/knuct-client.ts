@@ -6,6 +6,15 @@ import {
 } from './circuit-breaker';
 import type { KnuctAdapter, KnuctPrivShare, KnuctWalletResult } from './types';
 
+const DEFAULT_REQUEST_TIMEOUT_MS = Math.max(
+  5_000,
+  parseInt(process.env.KNUCT_REQUEST_TIMEOUT_MS ?? '45000', 10) || 45_000
+);
+const PRIVSHARE_TIMEOUT_MS = Math.max(
+  DEFAULT_REQUEST_TIMEOUT_MS,
+  parseInt(process.env.KNUCT_PRIVSHARE_TIMEOUT_MS ?? '120000', 10) || 120_000
+);
+
 /** Vendor doc: GET https://webwallet.knuct.com/sapi/privshare?k=... */
 export function resolvePrivShareFetchUrl(privShareUrl: string, baseUrl: string): string {
   if (privShareUrl.startsWith('http')) return privShareUrl;
@@ -74,7 +83,7 @@ export class KnuctHttpAdapter implements KnuctAdapter {
   async fetchPrivateShare(privShareUrl: string): Promise<KnuctPrivShare> {
     const url = resolvePrivShareFetchUrl(privShareUrl, this.baseUrl);
     const started = Date.now();
-    const res = await this.fetchWithSession(url, { method: 'GET' });
+    const res = await this.fetchWithSession(url, { method: 'GET' }, PRIVSHARE_TIMEOUT_MS);
     if (!res.ok) {
       recordKnuctFailure();
       const detail = await res.text().catch(() => '');
@@ -105,13 +114,33 @@ export class KnuctHttpAdapter implements KnuctAdapter {
     return headers;
   }
 
-  private async fetchWithSession(url: string, init: RequestInit): Promise<Response> {
+  private async fetchWithSession(
+    url: string,
+    init: RequestInit,
+    timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS
+  ): Promise<Response> {
     const headers = this.buildHeaders(
       init.headers ? Object.fromEntries(new Headers(init.headers).entries()) : undefined
     );
-    const res = await fetch(url, { ...init, headers, cache: 'no-store' });
-    parseSetCookie(res.headers.get('set-cookie'), this.cookies);
-    return res;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, {
+        ...init,
+        headers,
+        cache: 'no-store',
+        signal: controller.signal,
+      });
+      parseSetCookie(res.headers.get('set-cookie'), this.cookies);
+      return res;
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new Error(`Knuct request timed out after ${timeoutMs}ms`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   private async request<T>(

@@ -8,11 +8,11 @@ import {
   Fingerprint, Radio, CalendarIcon, ChevronLeft, ChevronRight,
   MoreHorizontal, Eye, Trash2, Clock, Users, CheckCircle2,
   XCircle, AlertTriangle, Loader2, Search, Camera, Navigation,
-  ShieldCheck, ShieldAlert, UserCheck, Upload, Video,
+  ShieldCheck, ShieldAlert, UserCheck, Upload, Video, Pencil,
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
-import { useAppStore } from '@/lib/store';
+import { useAppStore, useCanManageTimetable } from '@/lib/store';
 import {
   captureMethodRequiresGeofence,
   suggestGeofenceForBuilding,
@@ -180,7 +180,8 @@ function StudentMarkAttendance() {
   const faceVerificationConfigured = activeData?.faceVerificationConfigured === true;
 
   // Get user location
-  const requestLocation = useCallback(() => {
+  const requestLocation = useCallback((sessionOverride?: ActiveSession | null) => {
+    const session = sessionOverride ?? selectedSession;
     if (!navigator.geolocation) {
       setLocationError('Geolocation is not supported by your browser');
       return;
@@ -190,8 +191,8 @@ function StudentMarkAttendance() {
         const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
         setUserLocation(loc);
         setLocationError(null);
-        if (selectedSession?.geofence) {
-          setGeofenceCheck(checkLocationAgainstSessionGeofence(selectedSession.geofence, loc.lat, loc.lng));
+        if (session?.geofence) {
+          setGeofenceCheck(checkLocationAgainstSessionGeofence(session.geofence, loc.lat, loc.lng));
         } else {
           setGeofenceCheck(null);
         }
@@ -202,6 +203,13 @@ function StudentMarkAttendance() {
       { enableHighAccuracy: true, timeout: 10000 }
     );
   }, [selectedSession]);
+
+  useEffect(() => {
+    if (!userLocation || !selectedSession?.geofence) return;
+    setGeofenceCheck(
+      checkLocationAgainstSessionGeofence(selectedSession.geofence, userLocation.lat, userLocation.lng),
+    );
+  }, [selectedSession, userLocation]);
 
   // Start camera
   const startCamera = useCallback(async () => {
@@ -265,10 +273,17 @@ function StudentMarkAttendance() {
     },
   });
 
+  const geoRequiredForSession = (session: ActiveSession) =>
+    captureMethodRequiresGeofence(session.captureMethod);
+
   // Submit attendance
   const handleSubmit = () => {
     if (!currentUser || !selectedSession) return;
-    if (selectedSession.geofence && !userLocation) return;
+    if (!userLocation) return;
+    if (geoRequiredForSession(selectedSession) && !selectedSession.geofence) {
+      toast({ title: 'Geofence required', description: 'This session requires a geofence — contact faculty.', variant: 'destructive' });
+      return;
+    }
     if (geofenceCheck?.requiresGeofence && !geofenceCheck.inside) {
       toast({ title: 'Outside geofence', description: geofenceStatusLabel(geofenceCheck), variant: 'destructive' });
       return;
@@ -342,7 +357,10 @@ function StudentMarkAttendance() {
                   onClick={() => {
                     if (!session.alreadyMarked) {
                       setSelectedSession(session);
-                      requestLocation();
+                      setUserLocation(null);
+                      setGeofenceCheck(null);
+                      setLocationError(null);
+                      requestLocation(session);
                       setMarkingStep('location');
                     }
                   }}
@@ -433,7 +451,7 @@ function StudentMarkAttendance() {
                     <p className="text-xs text-amber-700 dark:text-amber-400">Acquiring location...</p>
                   </div>
                 )}
-                <Button variant="outline" size="sm" className="text-xs h-7" onClick={requestLocation}>
+                <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => requestLocation()}>
                   <Navigation className="h-3 w-3 mr-1" /> Refresh Location
                 </Button>
                 {selectedSession.geofence && userLocation && geofenceCheck && (
@@ -523,7 +541,10 @@ function StudentMarkAttendance() {
                   className="bg-[#1A3C6E] hover:bg-[#1A3C6E]/90 text-white gap-2"
                   disabled={
                     markMutation.isPending ||
-                    (selectedSession.geofence ? !userLocation || (geofenceCheck?.requiresGeofence && !geofenceCheck.inside) : false)
+                    !userLocation ||
+                    (selectedSession.geofence
+                      ? geofenceCheck?.requiresGeofence && !geofenceCheck.inside
+                      : geoRequiredForSession(selectedSession))
                   }
                   onClick={handleSubmit}
                 >
@@ -861,6 +882,326 @@ function SessionDetailDialog({
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 
+const TIMETABLE_DAYS = [
+  { value: '1', label: 'Monday' },
+  { value: '2', label: 'Tuesday' },
+  { value: '3', label: 'Wednesday' },
+  { value: '4', label: 'Thursday' },
+  { value: '5', label: 'Friday' },
+  { value: '6', label: 'Saturday' },
+  { value: '0', label: 'Sunday' },
+] as const;
+
+const TIMETABLE_WRITE_ROLES = new Set(['super_admin', 'admin', 'hod', 'faculty', 'lab_assistant']);
+
+interface TimetableSlotRecord {
+  id: string;
+  courseId: string;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  roomNumber: string | null;
+  building: string | null;
+  academicYear: string | null;
+  isActive: boolean;
+  course?: { id: string; code: string; name: string };
+  _count?: { attendanceSessions: number };
+}
+
+function FacultyTimetableEditor() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editItem, setEditItem] = useState<TimetableSlotRecord | null>(null);
+  const [form, setForm] = useState({
+    courseId: '',
+    dayOfWeek: '1',
+    startTime: '09:00',
+    endTime: '10:00',
+    roomNumber: '',
+    building: '',
+    academicYear: '2025-2026',
+    isActive: true,
+  });
+
+  const { data: coursesData } = useQuery({
+    queryKey: ['faculty-timetable-courses'],
+    queryFn: () => fetch('/api/lms/courses?limit=200').then(r => r.json()),
+  });
+  const courses: CourseOption[] = coursesData?.courses ?? [];
+
+  const { data: slotsData, isLoading } = useQuery({
+    queryKey: ['faculty-timetable-slots'],
+    queryFn: () => fetch('/api/masters/timetable-slots?limit=200&includeInactive=true').then(r => r.json()),
+  });
+  const slots: TimetableSlotRecord[] = slotsData?.slots ?? [];
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['faculty-timetable-slots'] });
+    queryClient.invalidateQueries({ queryKey: ['timetable-today'] });
+    queryClient.invalidateQueries({ queryKey: ['timetable-slot-picker'] });
+    queryClient.invalidateQueries({ queryKey: ['masters-timetable-slots'] });
+  };
+
+  const saveMut = useMutation({
+    mutationFn: async (payload: Record<string, unknown>) => {
+      const isEdit = Boolean(payload.id);
+      const res = await fetch('/api/masters/timetable-slots', {
+        method: isEdit ? 'PUT' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to save timetable slot');
+      return data;
+    },
+    onSuccess: () => {
+      invalidate();
+      setDialogOpen(false);
+      toast({ title: 'Timetable saved', description: 'Weekly schedule updated.' });
+    },
+    onError: (err: Error) => {
+      toast({ title: 'Could not save', description: err.message, variant: 'destructive' });
+    },
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/masters/timetable-slots?id=${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete slot');
+      return data;
+    },
+    onSuccess: () => {
+      invalidate();
+      toast({ title: 'Slot removed' });
+    },
+    onError: (err: Error) => {
+      toast({ title: 'Could not delete', description: err.message, variant: 'destructive' });
+    },
+  });
+
+  const openNew = () => {
+    setEditItem(null);
+    setForm({
+      courseId: courses[0]?.id || '',
+      dayOfWeek: '1',
+      startTime: '09:00',
+      endTime: '10:00',
+      roomNumber: '',
+      building: '',
+      academicYear: '2025-2026',
+      isActive: true,
+    });
+    setDialogOpen(true);
+  };
+
+  const openEdit = (item: TimetableSlotRecord) => {
+    setEditItem(item);
+    setForm({
+      courseId: item.courseId,
+      dayOfWeek: String(item.dayOfWeek),
+      startTime: item.startTime,
+      endTime: item.endTime,
+      roomNumber: item.roomNumber || '',
+      building: item.building || '',
+      academicYear: item.academicYear || '2025-2026',
+      isActive: item.isActive ?? true,
+    });
+    setDialogOpen(true);
+  };
+
+  const handleSubmit = () => {
+    if (!form.courseId) {
+      toast({ title: 'Select a course', variant: 'destructive' });
+      return;
+    }
+    const payload = {
+      courseId: form.courseId,
+      semesterId: null,
+      dayOfWeek: parseInt(form.dayOfWeek, 10),
+      startTime: form.startTime,
+      endTime: form.endTime,
+      roomNumber: form.roomNumber || null,
+      building: form.building || null,
+      semester: null,
+      academicYear: form.academicYear || null,
+      isActive: form.isActive,
+    };
+    if (editItem) saveMut.mutate({ id: editItem.id, ...payload });
+    else saveMut.mutate(payload);
+  };
+
+  const dayLabel = (d: number) => TIMETABLE_DAYS.find(x => x.value === String(d))?.label ?? DAY_LABELS[d];
+
+  const sortedSlots = [...slots].sort((a, b) =>
+    a.dayOfWeek !== b.dayOfWeek ? a.dayOfWeek - b.dayOfWeek : a.startTime.localeCompare(b.startTime),
+  );
+
+  return (
+    <>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+          <div>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Clock className="h-5 w-5" style={{ color: UOH_NAVY }} />
+              Weekly Timetable
+            </CardTitle>
+            <CardDescription>
+              Configure when your courses meet each week — used for today&apos;s class list and attendance sessions
+            </CardDescription>
+          </div>
+          <Button
+            size="sm"
+            onClick={openNew}
+            className="gap-1.5 bg-[#1A3C6E] hover:bg-[#1A3C6E]/90 text-white"
+            disabled={courses.length === 0}
+          >
+            <Plus className="h-4 w-4" /> Add slot
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {courses.length === 0 && (
+            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md p-3 mb-4">
+              No courses are assigned to you yet. Ask an admin to assign you as instructor on an LMS course.
+            </p>
+          )}
+          {isLoading ? (
+            <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
+          ) : sortedSlots.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">
+              No timetable slots yet. Add your first weekly class slot above.
+            </p>
+          ) : (
+            <div className="rounded-md border overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Course</TableHead>
+                    <TableHead>Day</TableHead>
+                    <TableHead>Time</TableHead>
+                    <TableHead>Location</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="w-24 text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sortedSlots.map(slot => (
+                    <TableRow key={slot.id}>
+                      <TableCell>
+                        <span className="font-mono text-xs font-semibold" style={{ color: UOH_NAVY }}>{slot.course?.code}</span>
+                        <p className="text-xs text-muted-foreground truncate max-w-[180px]">{slot.course?.name}</p>
+                      </TableCell>
+                      <TableCell className="text-sm">{dayLabel(slot.dayOfWeek)}</TableCell>
+                      <TableCell className="text-sm font-mono">{slot.startTime}–{slot.endTime}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {[slot.building, slot.roomNumber].filter(Boolean).join(' · ') || '—'}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={slot.isActive ? 'default' : 'secondary'} className="text-[10px]">
+                          {slot.isActive ? 'Active' : 'Inactive'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(slot)}>
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive"
+                            disabled={deleteMut.isPending}
+                            onClick={() => {
+                              if (slot._count?.attendanceSessions) {
+                                openEdit({ ...slot, isActive: false });
+                                toast({
+                                  title: 'Has attendance history',
+                                  description: 'Set status to Inactive instead of deleting.',
+                                });
+                                return;
+                              }
+                              if (window.confirm('Remove this timetable slot?')) {
+                                deleteMut.mutate(slot.id);
+                              }
+                            }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editItem ? 'Edit timetable slot' : 'Add timetable slot'}</DialogTitle>
+            <DialogDescription>Define a recurring weekly class period for one of your courses</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3 py-2">
+            <div className="col-span-2">
+              <Label>Course *</Label>
+              <Select value={form.courseId} onValueChange={v => setForm(f => ({ ...f, courseId: v }))}>
+                <SelectTrigger><SelectValue placeholder="Select course" /></SelectTrigger>
+                <SelectContent>
+                  {courses.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.code} — {c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Day *</Label>
+              <Select value={form.dayOfWeek} onValueChange={v => setForm(f => ({ ...f, dayOfWeek: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {TIMETABLE_DAYS.map(d => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Academic year</Label>
+              <Input value={form.academicYear} onChange={e => setForm(f => ({ ...f, academicYear: e.target.value }))} placeholder="2025-2026" />
+            </div>
+            <div><Label>Start *</Label><Input type="time" value={form.startTime} onChange={e => setForm(f => ({ ...f, startTime: e.target.value }))} /></div>
+            <div><Label>End *</Label><Input type="time" value={form.endTime} onChange={e => setForm(f => ({ ...f, endTime: e.target.value }))} /></div>
+            <div><Label>Building</Label><Input value={form.building} onChange={e => setForm(f => ({ ...f, building: e.target.value }))} placeholder="CSE Block" /></div>
+            <div><Label>Room</Label><Input value={form.roomNumber} onChange={e => setForm(f => ({ ...f, roomNumber: e.target.value }))} placeholder="CSE-301" /></div>
+            <div className="col-span-2">
+              <Label>Status</Label>
+              <Select value={form.isActive ? 'active' : 'inactive'} onValueChange={v => setForm(f => ({ ...f, isActive: v === 'active' }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+            <Button
+              onClick={handleSubmit}
+              disabled={saveMut.isPending || !form.courseId}
+              className="bg-[#1A3C6E] hover:bg-[#1A3C6E]/90 text-white"
+            >
+              {saveMut.isPending && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
+              {editItem ? 'Save changes' : 'Add slot'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 interface TimetableSlotRow {
   id: string;
   courseId: string;
@@ -1062,9 +1403,14 @@ function AdminSessionsView() {
     queryFn: () => fetch('/api/lms/courses?limit=100').then(r => r.json()),
   });
 
-  const { data: geofencesData } = useQuery<{ geofences: GeofenceOption[] }>({
+  const { data: geofencesData, isError: geofencesError } = useQuery<{ geofences: GeofenceOption[] }>({
     queryKey: ['geofences-list'],
-    queryFn: () => fetch('/api/geofences').then(r => r.json()),
+    queryFn: async () => {
+      const res = await fetch('/api/geofences');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load geofences');
+      return data;
+    },
   });
 
   const { data: slotPickerData } = useQuery<{ slots: TimetableSlotRow[] }>({
@@ -1308,6 +1654,9 @@ function AdminSessionsView() {
                     {geofenceRequired && !newSession.geofenceId && (
                       <p className="text-[10px] text-amber-600">GPS / Geo+Face sessions require an active geofence zone.</p>
                     )}
+                    {geofencesError && (
+                      <p className="text-[10px] text-red-600">Could not load geofence list — refresh or contact admin.</p>
+                    )}
                   </div>
                 </div>
                 <DialogFooter><Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button><Button onClick={() => createMutation.mutate({ courseId: newSession.courseId, sessionDate: newSession.sessionDate, startTime: newSession.startTime, endTime: newSession.endTime, captureMethod: newSession.captureMethod, geofenceId: newSession.geofenceId || undefined, timetableSlotId: newSession.timetableSlotId || undefined })} disabled={createMutation.isPending || !newSession.courseId || !newSession.sessionDate || (geofenceRequired && !newSession.geofenceId)} className="bg-[#1A3C6E] hover:bg-[#1A3C6E]/90 text-white">{createMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-1" />}Create</Button></DialogFooter>
@@ -1428,6 +1777,8 @@ function AdminSessionsView() {
 // ─── Main Component ─────────────────────────────────────────────
 export default function AttendanceSection() {
   const { currentUser } = useAppStore();
+  const canManageTimetable = useCanManageTimetable();
+
   if (!currentUser) return null;
 
   const isStudent = currentUser.role === 'student';
@@ -1444,7 +1795,9 @@ export default function AttendanceSection() {
             ? 'Mark your attendance with geofence verification & selfie capture'
             : isParent
               ? "View your ward's attendance records"
-              : 'Manage attendance sessions, track participation, and verify records'}
+              : canManageTimetable
+                ? 'Manage sessions, configure your weekly timetable, and track participation'
+                : 'Manage attendance sessions, track participation, and verify records'}
         </p>
       </div>
 
@@ -1467,6 +1820,23 @@ export default function AttendanceSection() {
         </Tabs>
       ) : isParent ? (
         <StudentRecordsView />
+      ) : canManageTimetable ? (
+        <Tabs defaultValue="sessions">
+          <TabsList>
+            <TabsTrigger value="sessions" className="gap-1.5 text-xs">
+              <Users className="h-4 w-4" /> Sessions
+            </TabsTrigger>
+            <TabsTrigger value="timetable" className="gap-1.5 text-xs">
+              <Clock className="h-4 w-4" /> Weekly Timetable
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="sessions" className="mt-4">
+            <AdminSessionsView />
+          </TabsContent>
+          <TabsContent value="timetable" className="mt-4">
+            <FacultyTimetableEditor />
+          </TabsContent>
+        </Tabs>
       ) : (
         <AdminSessionsView />
       )}

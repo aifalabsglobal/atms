@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
-import { requireRoles, STAFF_ROLES, assertCourseInScope } from '@/lib/auth-helpers';
+import { requireStaffSection, assertCourseInScope } from '@/lib/auth-helpers';
 import { logAudit, getClientIp } from '@/lib/audit';
 import { enqueueAnchor } from '@/lib/knuct/anchor-service';
 
@@ -8,7 +8,7 @@ type RouteContext = { params: Promise<{ id: string }> };
 
 export async function GET(_request: Request, context: RouteContext) {
   try {
-    const { error, session } = await requireRoles(STAFF_ROLES);
+    const { error, session } = await requireStaffSection('attendance');
     if (error || !session) return error;
 
     const { id } = await context.params;
@@ -54,7 +54,7 @@ export async function GET(_request: Request, context: RouteContext) {
 
 export async function PATCH(request: Request, context: RouteContext) {
   try {
-    const { error, session } = await requireRoles(STAFF_ROLES);
+    const { error, session } = await requireStaffSection('attendance');
     if (error || !session) return error;
 
     const { id } = await context.params;

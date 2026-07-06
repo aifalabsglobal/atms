@@ -1,6 +1,8 @@
 import { createHash } from 'crypto';
 import { db } from '@/lib/db';
 import { enqueueKnuctJob } from './job-queue';
+import { enqueueChainPublish, isChainPublishEnabled } from './chain-publish';
+import { getSystemConfig } from '@/lib/system-config';
 
 export type AnchorResourceType =
   | 'attendance_session'
@@ -26,39 +28,57 @@ export function hashPayload(payload: Record<string, unknown>): string {
   return createHash('sha256').update(stableStringify(payload)).digest('hex');
 }
 
-export function isAnchorEnabled(): boolean {
-  return process.env.KNUCT_ANCHOR_ENABLED !== 'false';
+export async function isAnchorEnabled(): Promise<boolean> {
+  if (process.env.KNUCT_ANCHOR_ENABLED === 'false') return false;
+  const cfg = await getSystemConfig();
+  return cfg.policies.knuctAnchorsEnabled;
 }
 
-/** Hash-only anchor stored in PostgreSQL; Knuct chain publish deferred until vendor API exists. */
+/** Hash anchor in PostgreSQL; optional async Knuct chain publish when vendor API is configured. */
 export async function anchorResource(
   resourceType: AnchorResourceType,
   resourceId: string,
   payload: Record<string, unknown>
 ): Promise<{ id: string; payloadHash: string } | null> {
-  if (!isAnchorEnabled()) return null;
+  if (!(await isAnchorEnabled())) return null;
 
   try {
     const payloadHash = hashPayload({ resourceType, resourceId, ...payload });
+    const chainPending = isChainPublishEnabled();
 
     const existing = await db.blockchainAnchor.findFirst({
       where: { resourceType, resourceId, payloadHash },
-      select: { id: true, payloadHash: true },
+      select: { id: true, payloadHash: true, knuctTxRef: true },
     });
-    if (existing) return existing;
+    if (existing) {
+      if (chainPending && !existing.knuctTxRef) {
+        enqueueChainPublish(existing.id, { resourceType, resourceId, payloadHash });
+      }
+      return { id: existing.id, payloadHash: existing.payloadHash };
+    }
 
     const anchor = await db.blockchainAnchor.create({
       data: {
         resourceType,
         resourceId,
         payloadHash,
-        status: 'anchored',
+        status: chainPending ? 'pending' : 'anchored',
         knuctTxRef: null,
       },
       select: { id: true, payloadHash: true },
     });
 
-    console.info('[knuct] anchor recorded', { resourceType, resourceId, payloadHash: payloadHash.slice(0, 12) });
+    console.info('[knuct] anchor recorded', {
+      resourceType,
+      resourceId,
+      payloadHash: payloadHash.slice(0, 12),
+      chainPending,
+    });
+
+    if (chainPending) {
+      enqueueChainPublish(anchor.id, { resourceType, resourceId, payloadHash });
+    }
+
     return anchor;
   } catch (err) {
     console.error('[knuct] anchor failed', { resourceType, resourceId, err });

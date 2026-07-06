@@ -47,6 +47,15 @@ export async function PATCH(request: Request, context: RouteContext) {
       return NextResponse.json({ error: 'You cannot manage this user' }, { status: 403 });
     }
 
+    if (id === session.user.id) {
+      if (body.role && body.role !== target.role) {
+        return NextResponse.json({ error: 'You cannot change your own role' }, { status: 400 });
+      }
+      if (body.status && body.status !== 'active') {
+        return NextResponse.json({ error: 'You cannot deactivate your own account' }, { status: 400 });
+      }
+    }
+
     const data: Record<string, unknown> = {};
     let tempPassword: string | undefined;
 
@@ -61,12 +70,28 @@ export async function PATCH(request: Request, context: RouteContext) {
       if (!canAssignRole(actorRole, body.role as Role)) {
         return NextResponse.json({ error: 'You cannot assign this role' }, { status: 403 });
       }
+      if (target.role === 'super_admin' && body.role !== 'super_admin') {
+        const activeSuperAdmins = await db.user.count({
+          where: { role: 'super_admin', status: 'active', NOT: { id } },
+        });
+        if (activeSuperAdmins === 0) {
+          return NextResponse.json({ error: 'Cannot demote the last active super admin' }, { status: 400 });
+        }
+      }
       data.role = body.role;
     }
 
     if (body.status) {
       if (!['active', 'inactive', 'suspended'].includes(body.status)) {
         return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
+      }
+      if (target.role === 'super_admin' && body.status !== 'active') {
+        const activeSuperAdmins = await db.user.count({
+          where: { role: 'super_admin', status: 'active', NOT: { id } },
+        });
+        if (activeSuperAdmins === 0) {
+          return NextResponse.json({ error: 'Cannot deactivate the last active super admin' }, { status: 400 });
+        }
       }
       data.status = body.status;
     }

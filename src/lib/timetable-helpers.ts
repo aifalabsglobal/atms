@@ -260,6 +260,39 @@ export async function assertCourseInDepartmentForHod(
   return null;
 }
 
+/** Faculty / lab assistant may only manage timetable slots for courses they instruct. */
+export async function assertCourseInstructorForStaff(
+  session: { user: { id: string; role: string } },
+  courseId: string,
+): Promise<NextResponse | null> {
+  const role = session.user.role as Role;
+  if (role !== 'faculty' && role !== 'lab_assistant') return null;
+
+  const course = await db.course.findFirst({
+    where: { id: courseId, instructorId: session.user.id, isActive: true },
+    select: { id: true },
+  });
+  if (!course) {
+    return NextResponse.json({ error: 'You can only configure timetable for your assigned courses' }, { status: 403 });
+  }
+  return null;
+}
+
+export async function assertCourseWritableForTimetable(
+  session: { user: { id: string; role: string } },
+  courseId: string,
+): Promise<NextResponse | null> {
+  const role = session.user.role as Role;
+  if (['super_admin', 'admin'].includes(role)) return null;
+  if (role === 'faculty' || role === 'lab_assistant') {
+    return assertCourseInstructorForStaff(session, courseId);
+  }
+  if (role === 'hod') {
+    return assertCourseInDepartmentForHod(session, courseId);
+  }
+  return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+}
+
 export async function validateSessionTimetableLink(
   courseId: string,
   sessionDate: string,

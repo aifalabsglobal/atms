@@ -127,6 +127,8 @@ model User {
   studentGrades      GradeBook[]         @relation("GradeStudent")
   calendarEvents     CalendarEvent[]
   knuctWallet        KnuctWallet?
+  rbacOverride       UserRbacOverride?
+  knuctCredentials   KnuctCredential[]
 }
 
 model KnuctWallet {
@@ -149,12 +151,35 @@ model BlockchainAnchor {
   resourceId   String
   payloadHash  String
   knuctTxRef   String?
-  status       String   @default("anchored") // anchored | pending | unavailable
+  status       String   @default("anchored") // anchored | pending | unavailable | failed
+  lastError    String?
   createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now()) @updatedAt
 
   @@index([resourceType, resourceId])
   @@index([createdAt])
   @@index([status])
+}
+
+model KnuctCredential {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type          String   // attendance_certificate | grade_transcript | compliance_report
+  resourceId    String?
+  payloadHash   String
+  knuctAssetRef String?
+  verifyUrl     String?
+  status        String   @default("pending") // pending | issued | failed | unavailable
+  lastError     String?
+  metadata      String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId])
+  @@index([type])
+  @@index([status])
+  @@index([payloadHash])
 }
 
 model FaceEmbedding {
@@ -499,7 +524,30 @@ model CalendarEvent {
   academicYear AcademicYear? @relation(fields: [academicYearId], references: [id])
 }
 
-// --- System: Audit & Notifications ---
+// --- System: RBAC & Audit ---
+model RbacConfig {
+  id        String   @id @default("default")
+  matrix    Json
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
+
+model SystemConfig {
+  id        String   @id @default("default")
+  settings  Json
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
+
+model UserRbacOverride {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  grant     Json     @default("[]")
+  revoke    Json     @default("[]")
+  updatedAt DateTime @updatedAt
+  updatedBy String?
+}
+
 model AuditLog {
   id        String   @id @default(cuid())
   userId    String?

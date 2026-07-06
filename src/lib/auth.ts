@@ -79,6 +79,7 @@ export const authOptions: NextAuthOptions = {
         token.department = (user as { department?: string }).department;
         token.profileImageUrl = (user as { profileImageUrl?: string }).profileImageUrl;
         token.linkedStudentId = (user as { linkedStudentId?: string }).linkedStudentId;
+        token.active = true;
       }
 
       if (token.id) {
@@ -97,12 +98,15 @@ export const authOptions: NextAuthOptions = {
                 name: true,
               },
             });
-            if (dbUser && dbUser.status === 'active') {
+            if (dbUser?.status === 'active') {
               token.role = dbUser.role as Role;
               token.department = dbUser.department ?? undefined;
               token.profileImageUrl = dbUser.profileImageUrl ?? undefined;
               token.linkedStudentId = dbUser.linkedStudentId ?? undefined;
               token.name = dbUser.name;
+              token.active = true;
+            } else {
+              token.active = false;
             }
             token.refreshedAt = Date.now();
           } catch (err) {
@@ -114,6 +118,9 @@ export const authOptions: NextAuthOptions = {
       return token;
     },
     async session({ session, token }) {
+      if (token.active === false || !token.id) {
+        return { ...session, expires: new Date(0).toISOString() };
+      }
       if (session.user) {
         session.user.id = token.id as string;
         session.user.role = token.role as Role;

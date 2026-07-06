@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
-import { requireAuth, STAFF_ROLES, requireRoles, requireCampusRead, getCampusScope, assertCourseInScope } from '@/lib/auth-helpers';
+import { requireSection, getCampusScope, assertCourseInScope, requireStaffSection } from '@/lib/auth-helpers';
 import { rateLimitByUser } from '@/lib/api-rate-limit';
 import { assertSessionGeofenceAssignment } from '@/lib/geofence-session';
 import {
@@ -13,7 +13,7 @@ import {
 
 export async function GET(request: Request) {
   try {
-    const { error, session } = await requireCampusRead();
+    const { error, session } = await requireSection('attendance');
     if (error || !session) return error;
 
     const scope = await getCampusScope(session);
@@ -97,7 +97,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { error, session } = await requireRoles(STAFF_ROLES);
+    const { error, session } = await requireStaffSection('attendance');
     if (error || !session) return error;
 
     const limited = await rateLimitByUser(request, session.user.id, 'attendance-sessions', 20, 60_000);

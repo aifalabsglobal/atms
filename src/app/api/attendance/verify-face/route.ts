@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth-helpers';
+import { requireSection } from '@/lib/auth-helpers';
 import { db } from '@/lib/db';
 import { verifyFaceMatch } from '@/lib/face-verification';
 import { rateLimitByUser } from '@/lib/api-rate-limit';
 
 export async function POST(request: Request) {
   try {
-    const { error, session } = await requireAuth();
+    const { error, session } = await requireSection('attendance');
     if (error || !session) return error;
 
     const limited = await rateLimitByUser(request, session.user.id, 'verify-face', 15, 60_000);

@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
-import { STAFF_ROLES, requireRoles, getCampusScope, requireSection } from '@/lib/auth-helpers';
+import { getCampusScope, requireSection } from '@/lib/auth-helpers';
 import { logAudit, getClientIp } from '@/lib/audit';
 import { enqueueAnchor } from '@/lib/knuct/anchor-service';
 
@@ -59,11 +59,6 @@ export async function GET(request: Request) {
 export async function PUT(request: Request) {
   try {
     const { error, session } = await requireSection('violations');
-    if (error || !session) return error;
-    const role = session.user.role;
-    if (!STAFF_ROLES.includes(role as (typeof STAFF_ROLES)[number])) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
     if (error || !session) return error;
 
     const body = await request.json();

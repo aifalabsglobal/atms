@@ -1,22 +1,16 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
-import { requireAuth, resolveStudentId, getCampusScope, requireSection } from '@/lib/auth-helpers';
+import { resolveStudentId, getCampusScope, CAMPUS_READ_ROLES } from '@/lib/auth-helpers';
 import type { Role } from '@/lib/store';
-import { requireLmsWrite, auditLms } from '@/lib/lms-helpers';
+import { requireLmsRead, requireLmsWrite, auditLms } from '@/lib/lms-helpers';
 import { semesterCodeToNumber } from '@/lib/masters-validation';
 
 export async function GET(request: Request) {
   try {
-    const { error, session } = await requireAuth();
+    const { error, session } = await requireLmsRead();
     if (error || !session) return error;
 
     const role = session.user.role as Role;
-    if (role === 'student' || role === 'parent') {
-      // student/parent see enrolled courses only — allowed without lms nav section check
-    } else {
-      const { error: sectionError } = await requireSection('lms');
-      if (sectionError) return sectionError;
-    }
 
     const { searchParams } = new URL(request.url);
     const programId = searchParams.get('programId');

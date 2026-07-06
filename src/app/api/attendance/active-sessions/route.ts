@@ -1,11 +1,11 @@
 import { db } from '@/lib/db';
 import { isFaceVerificationEnabled } from '@/lib/face-verification';
 import { NextResponse } from 'next/server';
-import { requireAuth, resolveStudentId, getCampusScope, buildCourseIdFilter } from '@/lib/auth-helpers';
+import { requireSection, resolveStudentId, getCampusScope, buildCourseIdFilter } from '@/lib/auth-helpers';
 
 export async function GET(request: Request) {
   try {
-    const { error, session } = await requireAuth();
+    const { error, session } = await requireSection('attendance');
     if (error || !session) return error;
 
     const { searchParams } = new URL(request.url);

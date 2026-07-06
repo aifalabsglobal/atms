@@ -3,6 +3,7 @@ import { getKnuctConfig, isKnuctLiveEnabled } from './config';
 import { getKnuctCircuitState, isKnuctCircuitOpen } from './circuit-breaker';
 import { MockKnuctAdapter } from './mock-adapter';
 import { createKnuctHttpAdapter } from './knuct-client';
+import { getCredentialStats } from './credential-service';
 import type { KnuctAdapter, KnuctDashboardStats } from './types';
 
 export function getKnuctAdapter(): KnuctAdapter {
@@ -13,15 +14,16 @@ export function getKnuctAdapter(): KnuctAdapter {
   return new MockKnuctAdapter();
 }
 
-export async function getKnuctHealth(): Promise<{
+export type KnuctHealthSnapshot = {
   enabled: boolean;
   adapterMode: 'mock' | 'live';
-  health: 'ok' | 'degraded' | 'down';
+  health: 'ok' | 'degraded' | 'down' | 'unknown';
   circuitBreakerOpen: boolean;
   consecutiveFailures: number;
-}> {
+};
+
+function knuctHealthFromConfig(circuit = getKnuctCircuitState()): KnuctHealthSnapshot {
   const config = getKnuctConfig();
-  const circuit = getKnuctCircuitState();
   const adapterMode = config.enabled && !circuit.open ? 'live' : 'mock';
 
   if (circuit.open) {
@@ -42,6 +44,32 @@ export async function getKnuctHealth(): Promise<{
       circuitBreakerOpen: false,
       consecutiveFailures: 0,
     };
+  }
+
+  return {
+    enabled: true,
+    adapterMode: 'live',
+    health: 'unknown',
+    circuitBreakerOpen: false,
+    consecutiveFailures: 0,
+  };
+}
+
+/** Status reads use config-only health; pass `{ ping: true }` for live vendor reachability checks. */
+export async function getKnuctHealth(opts?: { ping?: boolean }): Promise<KnuctHealthSnapshot> {
+  const config = getKnuctConfig();
+  const circuit = getKnuctCircuitState();
+
+  if (!opts?.ping) {
+    return knuctHealthFromConfig(circuit);
+  }
+
+  if (circuit.open) {
+    return knuctHealthFromConfig(circuit);
+  }
+
+  if (!config.enabled) {
+    return knuctHealthFromConfig(circuit);
   }
 
   try {
@@ -68,7 +96,7 @@ export async function getKnuctHealth(): Promise<{
 }
 
 export async function getKnuctDashboardStats(): Promise<KnuctDashboardStats> {
-  const health = await getKnuctHealth();
+  const health = knuctHealthFromConfig();
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
 
@@ -94,6 +122,7 @@ export async function getKnuctDashboardStats(): Promise<KnuctDashboardStats> {
 
   const didCoveragePct = userCount > 0 ? Math.round((active / userCount) * 100) : 0;
   const byModule = Object.fromEntries(anchorGroups.map((g) => [g.resourceType, g._count]));
+  const credentials = await getCredentialStats();
 
   return {
     enabled: isKnuctLiveEnabled(),
@@ -102,7 +131,7 @@ export async function getKnuctDashboardStats(): Promise<KnuctDashboardStats> {
     circuitBreakerOpen: health.circuitBreakerOpen,
     wallets: { total, active, failed, pending },
     didCoveragePct,
-    credentials: { today: 0, week: 0, failed: 0, byType: {} },
+    credentials,
     anchors: { today: anchorsToday, byModule },
     recentActivity: recentAnchors.map((a) => ({
       type: 'anchor' as const,

@@ -32,7 +32,7 @@ export interface KnuctConfig {
 export interface KnuctDashboardStats {
   enabled: boolean;
   adapterMode: 'mock' | 'live';
-  health: 'ok' | 'degraded' | 'down';
+  health: 'ok' | 'degraded' | 'down' | 'unknown';
   circuitBreakerOpen: boolean;
   wallets: { total: number; active: number; failed: number; pending: number };
   didCoveragePct: number;

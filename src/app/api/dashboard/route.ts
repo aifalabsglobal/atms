@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
-import { requireSection, resolveStudentId, requireCampusRead, getCampusScope } from '@/lib/auth-helpers';
+import { requireSection, resolveStudentId, getCampusScope } from '@/lib/auth-helpers';
 import type { Role } from '@/lib/store';
 import {
   attendanceRiskStatus,
@@ -11,8 +11,9 @@ import {
   scopeLabel,
 } from '@/lib/reports-analytics';
 import { getKnuctDashboardStats } from '@/lib/knuct';
+import { getAttendanceThresholds } from '@/lib/system-config';
 
-async function buildStudentDashboard(studentId: string) {
+async function buildStudentDashboard(studentId: string, thresholds: Awaited<ReturnType<typeof getAttendanceThresholds>>) {
   const [present, absent, late, total, enrollments, records, activeSessionsList] = await Promise.all([
     db.attendanceRecord.count({ where: { studentId, status: 'present' } }),
     db.attendanceRecord.count({ where: { studentId, status: 'absent' } }),
@@ -96,7 +97,8 @@ async function buildStudentDashboard(studentId: string) {
 
   return {
     scope: 'student' as const,
-    riskStatus: attendanceRiskStatus(overallAttendance, total),
+    thresholds,
+    riskStatus: attendanceRiskStatus(overallAttendance, total, thresholds),
     weeklyRateTrend,
     stats: {
       totalStudents: 0,
@@ -130,12 +132,13 @@ export async function GET() {
     const role = session.user.role as Role;
 
     if (role === 'student' || role === 'parent') {
+      const thresholds = await getAttendanceThresholds();
       const { studentId, error: studentError } = await resolveStudentId(session, null);
       if (studentError) return studentError;
       if (!studentId) {
         return NextResponse.json({ error: 'No student scope available' }, { status: 403 });
       }
-      const studentData = await buildStudentDashboard(studentId);
+      const studentData = await buildStudentDashboard(studentId, thresholds);
       if (role === 'parent') {
         const ward = await db.user.findUnique({
           where: { id: studentId },
@@ -161,10 +164,8 @@ export async function GET() {
       });
     }
 
-    const { error: campusError } = await requireCampusRead();
-    if (campusError) return campusError;
-
     const scope = await getCampusScope(session);
+    const thresholds = await getAttendanceThresholds();
 
     let studentWhere: Record<string, unknown> = { role: 'student', status: 'active' };
     let facultyWhere: Record<string, unknown> = { role: { in: ['faculty', 'hod'] }, status: 'active' };
@@ -354,10 +355,10 @@ export async function GET() {
     }));
 
     const departmentAnalytics =
-      analyticsScope === 'campus' ? buildDepartmentAnalytics(studentReport) : [];
+      analyticsScope === 'campus' ? buildDepartmentAnalytics(studentReport, thresholds) : [];
 
     const atRiskStudents = studentReport
-      .filter((s) => s.stats.total > 0 && s.stats.percentage < 75)
+      .filter((s) => s.stats.total > 0 && s.stats.percentage < thresholds.eligibilityPct)
       .slice(0, 8);
 
     const topPerformers = [...studentReport]
@@ -378,6 +379,7 @@ export async function GET() {
 
     return NextResponse.json({
       scope: scopeKey,
+      thresholds,
       scopeLabel: scopeLabelText,
       analyticsScope,
       knuct,

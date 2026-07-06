@@ -1,41 +1,9 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
-import { requireAuth, STAFF_ROLES } from '@/lib/auth-helpers';
-import { GEOFENCE_WRITE_ROLES, type Role } from '@/lib/store';
 import { logAudit, getClientIp } from '@/lib/audit';
 import { enqueueAnchor } from '@/lib/knuct/anchor-service';
-
-const GEOFENCE_READ_ROLES: Role[] = [
-  'super_admin', 'admin', 'hod', 'faculty', 'lab_assistant', 'security',
-  'student', 'parent', 'visitor',
-];
-
-async function requireGeofenceRead() {
-  const { error, session } = await requireAuth();
-  if (error || !session) return { error, session: null };
-  const role = session.user.role as Role;
-  if (!GEOFENCE_READ_ROLES.includes(role)) {
-    return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }), session: null };
-  }
-  return { error: null, session };
-}
-
-function validateGeofenceBody(body: Record<string, unknown>): NextResponse | null {
-  const { name, type, centerLat, centerLng, radiusMtrs, polygonData } = body;
-  if (!name || typeof name !== 'string') {
-    return NextResponse.json({ error: 'name is required' }, { status: 400 });
-  }
-  const fenceType = (type as string) || 'circle';
-  if (fenceType === 'circle') {
-    if (centerLat == null || centerLng == null || radiusMtrs == null) {
-      return NextResponse.json({ error: 'Circle geofences require centerLat, centerLng, and radiusMtrs' }, { status: 400 });
-    }
-  }
-  if (fenceType === 'polygon' && !polygonData) {
-    return NextResponse.json({ error: 'Polygon geofences require polygonData' }, { status: 400 });
-  }
-  return null;
-}
+import { requireGeofenceRead, requireGeofenceWrite, validateGeofenceBody } from '@/lib/geofence-api';
+import { getSystemConfig } from '@/lib/system-config';
 
 export async function GET(request: Request) {
   try {
@@ -51,7 +19,12 @@ export async function GET(request: Request) {
       orderBy: { createdAt: 'desc' },
     });
 
-    return NextResponse.json({ geofences });
+    const config = await getSystemConfig();
+
+    return NextResponse.json({
+      geofences,
+      defaults: { radiusMeters: config.geofence.defaultRadiusMeters },
+    });
   } catch (error) {
     console.error('Geofences API error:', error);
     return NextResponse.json({ error: 'Failed to load geofences' }, { status: 500 });
@@ -60,13 +33,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { error, session } = await requireGeofenceRead();
+    const { error, session } = await requireGeofenceWrite();
     if (error || !session) return error;
-
-    const role = session.user.role as Role;
-    if (!GEOFENCE_WRITE_ROLES.includes(role) || !STAFF_ROLES.includes(role as (typeof STAFF_ROLES)[number])) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
 
     const body = await request.json();
     const validationError = validateGeofenceBody(body);

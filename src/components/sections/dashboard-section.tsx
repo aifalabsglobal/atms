@@ -2,6 +2,7 @@
 
 import { useAppStore, ROLE_LABELS, type Role } from '@/lib/store';
 import { cn } from '@/lib/utils';
+import type { GeofenceItem } from '@/lib/types';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -104,7 +105,7 @@ interface ActiveSession {
 interface KnuctDashboardStats {
   enabled: boolean;
   adapterMode: 'mock' | 'live';
-  health: 'ok' | 'degraded' | 'down';
+  health: 'ok' | 'degraded' | 'down' | 'unknown';
   circuitBreakerOpen: boolean;
   wallets: { total: number; active: number; failed: number; pending: number };
   didCoveragePct: number;
@@ -837,13 +838,13 @@ function KnuctOpsPanel({ knuct }: { knuct?: KnuctDashboardStats }) {
       if (!res.ok) throw new Error('Failed to load pilot status');
       return res.json() as Promise<{
         pilotReady: boolean;
-        health: { adapterMode: 'mock' | 'live'; health: 'ok' | 'degraded' | 'down'; circuitBreakerOpen: boolean };
+        health: { adapterMode: 'mock' | 'live'; health: 'ok' | 'degraded' | 'down' | 'unknown'; circuitBreakerOpen: boolean };
       }>;
     },
   });
 
   const adapterMode = pilotStatus?.health?.adapterMode ?? knuct?.adapterMode ?? 'mock';
-  const health = pilotStatus?.health?.health ?? knuct?.health ?? 'ok';
+  const health = pilotStatus?.health?.health ?? knuct?.health ?? 'unknown';
   const circuitBreakerOpen = pilotStatus?.health?.circuitBreakerOpen ?? knuct?.circuitBreakerOpen ?? false;
 
   const pilotMutation = useMutation({
@@ -880,7 +881,8 @@ function KnuctOpsPanel({ knuct }: { knuct?: KnuctDashboardStats }) {
     ok: { label: 'Healthy', className: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
     degraded: { label: 'Degraded', className: 'bg-amber-100 text-amber-800 border-amber-200' },
     down: { label: 'Down', className: 'bg-red-100 text-red-800 border-red-200' },
-  }[health];
+    unknown: { label: 'Not checked', className: 'bg-slate-100 text-slate-700 border-slate-200' },
+  }[health] ?? { label: 'Unknown', className: 'bg-muted text-muted-foreground border-border' };
 
   return (
     <Card className="border-[#1A3C6E]/20 bg-gradient-to-br from-[#1A3C6E]/5 to-transparent">
@@ -938,7 +940,7 @@ function KnuctOpsPanel({ knuct }: { knuct?: KnuctDashboardStats }) {
           </Button>
         </div>
         <p className="text-[11px] text-muted-foreground">
-          Hash-only audit anchors (Phase 3) — stored in PostgreSQL until Knuct chain publish API is available.
+          Hash anchors stored in PostgreSQL; enable <code className="text-xs">KNUCT_CHAIN_PUBLISH_URL</code> when the vendor publish API is available.
         </p>
         {(knuct?.recentActivity.length ?? 0) > 0 && (
           <div className="rounded-lg border p-3 space-y-2">
@@ -1152,7 +1154,7 @@ function StudentDashboard({ data }: { data: DashboardData }) {
     watch: { label: 'Watch list', className: 'bg-amber-100 text-amber-800' },
     at_risk: { label: 'At risk (<75%)', className: 'bg-red-100 text-red-800' },
     no_data: { label: 'No attendance yet', className: 'bg-muted text-muted-foreground' },
-  }[riskStatus ?? 'no_data'];
+  }[riskStatus ?? 'no_data'] ?? { label: 'Unknown', className: 'bg-muted text-muted-foreground' };
   const rateTrend = weeklyRateTrend ?? weeklyTrend.map((w) => ({ week: w.date, rate: w.rate ?? 0 }));
 
   return (
@@ -1335,6 +1337,17 @@ function ParentDashboard({ data }: { data: DashboardData }) {
 
 function VisitorDashboard({ data }: { data: DashboardData }) {
   const { stats } = data;
+  const { data: geofenceData } = useQuery({
+    queryKey: ['visitor-geofences'],
+    queryFn: async () => {
+      const res = await fetch('/api/geofences');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to load geofences');
+      return json as { geofences: GeofenceItem[] };
+    },
+    staleTime: 60_000,
+  });
+  const campusZones = (geofenceData?.geofences ?? []).filter((g) => g.isActive).slice(0, 6);
 
   return (
     <div className="space-y-6">
@@ -1357,7 +1370,7 @@ function VisitorDashboard({ data }: { data: DashboardData }) {
         <StatCard label="Campus Students" value={stats.totalStudents} icon={Users} format="number" color="#6B7280" />
         <StatCard label="Faculty Members" value={stats.totalFaculty} icon={GraduationCap} format="number" color="#6B7280" />
         <StatCard label="Active Courses" value={stats.totalCourses} icon={BookOpen} format="number" color="#6B7280" />
-        <StatCard label="Campus Zones" value={4} icon={MapPin} format="number" color="#6B7280" />
+        <StatCard label="Campus Zones" value={campusZones.length || 4} icon={MapPin} format="number" color="#6B7280" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -1365,25 +1378,28 @@ function VisitorDashboard({ data }: { data: DashboardData }) {
         <Card>
           <CardHeader className="pb-2"><CardTitle className="text-base">Campus Zones & Geofences</CardTitle></CardHeader>
           <CardContent className="space-y-3">
-            {[
-              { name: 'School of Computer Science', type: 'Academic', radius: '200m', status: 'active' },
-              { name: 'School of Mathematics', type: 'Academic', radius: '150m', status: 'active' },
-              { name: 'Central Library', type: 'Common', radius: '100m', status: 'active' },
-              { name: 'Admin Block', type: 'Administrative', radius: '120m', status: 'active' },
-            ].map(zone => (
-              <div key={zone.name} className="flex items-center justify-between rounded-lg border p-3">
-                <div className="flex items-center gap-3">
-                  <div className="h-9 w-9 rounded-lg bg-[#1A3C6E]/10 flex items-center justify-center">
-                    <MapPin className="h-4 w-4 text-[#1A3C6E]" />
+            {campusZones.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">Loading campus zones…</p>
+            ) : (
+              campusZones.map((zone) => (
+                <div key={zone.id} className="flex items-center justify-between rounded-lg border p-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-lg bg-[#1A3C6E]/10 flex items-center justify-center">
+                      <MapPin className="h-4 w-4 text-[#1A3C6E]" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">{zone.name}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {zone.type === 'polygon'
+                          ? `Polygon${zone.building ? ` • ${zone.building}` : ''}`
+                          : `${zone.building || 'Campus'} • ${zone.radiusMtrs ?? '—'}m radius`}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium">{zone.name}</p>
-                    <p className="text-[10px] text-muted-foreground">{zone.type} • Radius: {zone.radius}</p>
-                  </div>
+                  <Badge variant="outline" className="text-[10px] text-green-600 border-green-200">active</Badge>
                 </div>
-                <Badge variant="outline" className="text-[10px] text-green-600 border-green-200">{zone.status}</Badge>
-              </div>
-            ))}
+              ))
+            )}
           </CardContent>
         </Card>
 

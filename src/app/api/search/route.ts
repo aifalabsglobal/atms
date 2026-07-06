@@ -32,7 +32,7 @@ export async function GET(request: Request) {
       sessions: { id: string; sessionDate: string; course: { name: string; code: string } }[];
     } = { users: [], courses: [], sessions: [] };
 
-    if (canAccessSection(role, 'users') && ['super_admin', 'admin', 'hod'].includes(role)) {
+    if ((await canAccessSection(role, 'users', session.user.id))) {
       const userWhere: Record<string, unknown> = {
         OR: [
           { name: { contains: q } },
@@ -51,7 +51,7 @@ export async function GET(request: Request) {
       });
     }
 
-    if (canAccessSection(role, 'lms')) {
+    if (await canAccessSection(role, 'lms', session.user.id)) {
       const courseWhere: Record<string, unknown> = {
         isActive: true,
         OR: [
@@ -85,7 +85,7 @@ export async function GET(request: Request) {
       });
     }
 
-    if (canAccessSection(role, 'attendance')) {
+    if (await canAccessSection(role, 'attendance', session.user.id)) {
       const sessionWhere: Record<string, unknown> = {
         OR: [
           { sessionDate: { contains: q } },

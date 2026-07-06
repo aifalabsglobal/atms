@@ -80,9 +80,21 @@ export async function provisionWallet(userId: string): Promise<void> {
   });
 }
 
+/** Queue wallet provisioning without blocking the HTTP response (live Knuct can take 1–2 minutes). */
+export async function queueWalletProvision(userId: string): Promise<void> {
+  await db.knuctWallet.upsert({
+    where: { userId },
+    create: { userId, status: 'pending' },
+    update: { status: 'pending', lastError: null },
+  });
+  enqueueKnuctJob(() => provisionWallet(userId));
+}
+
 /** Non-blocking in-process worker for Phase 1 pilot. */
 export function enqueueWalletProvision(userId: string): void {
-  enqueueKnuctJob(() => provisionWallet(userId));
+  void queueWalletProvision(userId).catch((err) => {
+    console.error('[knuct] queue wallet provision failed', { userId, err });
+  });
 }
 
 export function maybeProvisionWalletOnCreate(userId: string): void {

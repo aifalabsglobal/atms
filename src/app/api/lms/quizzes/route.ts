@@ -1,13 +1,14 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
-import { requireAuth, resolveStudentId, getCampusScope, buildCourseIdFilter, CAMPUS_READ_ROLES } from '@/lib/auth-helpers';
+import { resolveStudentId, getCampusScope, buildCourseIdFilter, CAMPUS_READ_ROLES } from '@/lib/auth-helpers';
 import type { Role } from '@/lib/store';
 import { parseCodingMeta, sanitizeCodingMeta } from '@/lib/coding-types';
+import { requireLmsRead } from '@/lib/lms-helpers';
 
 export async function GET(request: Request) {
   try {
-    const { error, session } = await requireAuth();
-    if (error) return error;
+    const { error, session } = await requireLmsRead();
+    if (error || !session) return error;
 
     const { searchParams } = new URL(request.url);
     const courseId = searchParams.get('courseId');

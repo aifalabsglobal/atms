@@ -117,6 +117,22 @@ async function main() {
   const role = (session.json as { user?: { role?: string } })?.user?.role;
   record('1b. Session role', role === 'super_admin', `role=${role ?? 'none'}`);
 
+  const rbac = await api(cookie, '/api/settings/rbac');
+  const matrix = (rbac.json as { matrix?: Record<string, unknown> })?.matrix;
+  const effective = (rbac.json as { effectiveSections?: string[] })?.effectiveSections ?? [];
+  record(
+    '1c. RBAC matrix load',
+    rbac.res.ok && !!matrix && effective.includes('settings'),
+    `${effective.length} sections`
+  );
+
+  const rbacUsers = await api(cookie, '/api/settings/rbac/users/u10');
+  record(
+    '1d. RBAC user override API',
+    rbacUsers.res.ok || rbacUsers.res.status === 404,
+    `status ${rbacUsers.res.status}`
+  );
+
   // Dashboard + knuct
   const dash = await api(cookie, '/api/dashboard');
   record(

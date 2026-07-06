@@ -5,6 +5,7 @@ import { SessionProvider } from 'next-auth/react';
 import { ThemeProvider } from 'next-themes';
 import { useState } from 'react';
 import { SessionSync } from '@/components/session-sync';
+import { RbacSync } from '@/components/rbac-sync';
 import { Toaster } from '@/components/ui/toaster';
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -24,6 +25,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <QueryClientProvider client={queryClient}>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
           <SessionSync />
+          <RbacSync />
           {children}
           <Toaster />
         </ThemeProvider>

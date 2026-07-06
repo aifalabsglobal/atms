@@ -2,8 +2,11 @@ import { getServerSession } from 'next-auth';
 import { NextResponse } from 'next/server';
 import { authOptions } from '@/lib/auth';
 import type { Role, Section } from '@/lib/store';
-import { ROLE_SECTIONS } from '@/lib/store';
+import { canAccessSectionAsync } from '@/lib/rbac';
+import { STAFF_ROLES, CAMPUS_USER_ROLES } from '@/lib/user-management';
 import { db } from '@/lib/db';
+
+export { STAFF_ROLES, CAMPUS_USER_ROLES };
 
 export async function getAuthSession() {
   return getServerSession(authOptions);
@@ -34,13 +37,12 @@ export async function requireRoles(allowedRoles: Role[]) {
   return { error: null, session };
 }
 
-export { STAFF_ROLES, CAMPUS_USER_ROLES } from '@/lib/user-management';
 
 export const ADMIN_ROLES: Role[] = ['super_admin', 'admin'];
 export const CAMPUS_READ_ROLES: Role[] = ['super_admin', 'admin', 'hod', 'faculty', 'lab_assistant', 'security'];
 
-export function canAccessSection(role: Role, section: Section): boolean {
-  return ROLE_SECTIONS[role].includes(section);
+export async function canAccessSection(role: Role, section: Section, userId?: string): Promise<boolean> {
+  return canAccessSectionAsync(role, section, userId);
 }
 
 /** Resolve which student record the caller may access. */
@@ -79,19 +81,51 @@ export async function resolveStudentId(
   return { studentId: null, error: null };
 }
 
-export async function requireCampusRead() {
-  return requireRoles(CAMPUS_READ_ROLES);
-}
-
-export async function requireUserManagement() {
-  return requireRoles([...ADMIN_ROLES, 'hod']);
-}
-
 export async function requireSection(section: Section) {
   const { error, session } = await requireAuth();
   if (error || !session) return { error, session: null };
   const role = session.user.role as Role;
-  if (!canAccessSection(role, section)) {
+  if (!(await canAccessSection(role, section, session.user.id))) {
+    return {
+      error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+      session: null,
+    };
+  }
+  return { error: null, session };
+}
+
+/** Passes when the user has RBAC access to any of the given sections. */
+export async function requireAnySection(sections: Section[]) {
+  const { error, session } = await requireAuth();
+  if (error || !session) return { error, session: null };
+  const role = session.user.role as Role;
+  const userId = session.user.id;
+  for (const section of sections) {
+    if (await canAccessSection(role, section, userId)) {
+      return { error: null, session };
+    }
+  }
+  return {
+    error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
+    session: null,
+  };
+}
+
+/** Campus-scoped list APIs (timetable, session lists, etc.). */
+export async function requireCampusRead() {
+  return requireAnySection(['attendance', 'masters']);
+}
+
+export async function requireUserManagement() {
+  return requireSection('users');
+}
+
+/** Staff-only mutation within a section (students may have read/mark access). */
+export async function requireStaffSection(section: Section) {
+  const { error, session } = await requireSection(section);
+  if (error || !session) return { error, session: null };
+  const role = session.user.role as Role;
+  if (!STAFF_ROLES.includes(role)) {
     return {
       error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),
       session: null,

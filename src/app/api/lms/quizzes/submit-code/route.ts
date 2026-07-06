@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { requireAuth, resolveStudentId } from '@/lib/auth-helpers';
-import { auditLms } from '@/lib/lms-helpers';
+import { resolveStudentId } from '@/lib/auth-helpers';
+import { requireLmsRead, auditLms } from '@/lib/lms-helpers';
 import { judgeSubmission } from '@/lib/coding-judge';
 import { parseCodingMeta } from '@/lib/coding-types';
 import { enforceRateLimit } from '@/lib/rate-limit';
@@ -11,7 +11,7 @@ export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
   try {
-    const { error, session } = await requireAuth();
+    const { error, session } = await requireLmsRead();
     if (error || !session) return error;
 
     const limited = await enforceRateLimit(

@@ -1,7 +1,9 @@
 export { getKnuctConfig, isKnuctLiveEnabled } from './config';
 export { getKnuctAdapter, getKnuctHealth, getKnuctDashboardStats, getUserKnuctWallet } from './stats';
-export { enqueueWalletProvision, maybeProvisionWalletOnCreate, provisionWallet } from './wallet-service';
+export { enqueueWalletProvision, maybeProvisionWalletOnCreate, provisionWallet, queueWalletProvision } from './wallet-service';
 export { anchorResource, enqueueAnchor, hashPayload, isAnchorEnabled } from './anchor-service';
+export { isChainPublishEnabled, publishAnchorToChain, enqueueChainPublish } from './chain-publish';
+export { isCredentialMintConfigured, mintCredentialOnKnuct, verifyCredentialOnKnuct } from './credential-client';
 export type { AnchorResourceType } from './anchor-service';
 export { enrichAuditLogsWithAnchors } from './anchor-audit';
 export { enqueueKnuctJob, getKnuctQueueStats } from './job-queue';

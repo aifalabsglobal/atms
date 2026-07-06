@@ -20,3 +20,23 @@ export function getKnuctConfig(): KnuctConfig {
 export function isKnuctLiveEnabled(): boolean {
   return getKnuctConfig().enabled;
 }
+
+/** Safe for client responses — never includes apiKey/apiSecret. */
+export function getKnuctPublicConfig() {
+  const config = getKnuctConfig();
+  return {
+    enabled: config.enabled,
+    baseUrl: config.baseUrl,
+    walletOnUserCreate: config.walletOnUserCreate,
+    maxRetries: config.maxRetries,
+    circuitBreakerThreshold: config.circuitBreakerThreshold,
+    pilotCohortLimit: config.pilotCohortLimit,
+    hasApiKey: Boolean(config.apiKey),
+    hasApiSecret: Boolean(config.apiSecret),
+    hasTenantId: Boolean(config.tenantId),
+    chainPublishEnabled: process.env.KNUCT_CHAIN_PUBLISH_ENABLED === 'true',
+    chainPublishConfigured: Boolean(process.env.KNUCT_CHAIN_PUBLISH_URL?.trim()),
+    credentialsEnabled: process.env.KNUCT_CREDENTIALS_ENABLED === 'true',
+    credentialMintConfigured: Boolean(process.env.KNUCT_CREDENTIAL_MINT_URL?.trim()),
+  };
+}

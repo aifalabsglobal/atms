@@ -1,16 +1,14 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
-import { requireSection, STAFF_ROLES } from '@/lib/auth-helpers';
 import { logAudit, getClientIp } from '@/lib/audit';
+import { requireGeofenceWrite } from '@/lib/geofence-api';
 
 type RouteContext = { params: Promise<{ id: string }> };
+
 export async function PATCH(request: Request, context: RouteContext) {
   try {
-    const { error, session } = await requireSection('geofences');
+    const { error, session } = await requireGeofenceWrite();
     if (error || !session) return error;
-    if (!STAFF_ROLES.includes(session.user.role as (typeof STAFF_ROLES)[number])) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
 
     const { id } = await context.params;
     const body = await request.json();
@@ -27,6 +25,8 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (body.centerLng !== undefined) data.centerLng = body.centerLng;
     if (body.radiusMtrs !== undefined) data.radiusMtrs = body.radiusMtrs;
     if (body.polygonData !== undefined) data.polygonData = body.polygonData;
+    if (body.building !== undefined) data.building = body.building;
+    if (body.floor !== undefined) data.floor = body.floor;
     if (body.isActive !== undefined) data.isActive = body.isActive;
 
     const geofence = await db.geofence.update({ where: { id }, data });
@@ -39,7 +39,8 @@ export async function PATCH(request: Request, context: RouteContext) {
       ipAddress: getClientIp(request),
     });
 
-    return NextResponse.json(geofence);  } catch (error) {
+    return NextResponse.json(geofence);
+  } catch (error) {
     console.error('Update geofence error:', error);
     return NextResponse.json({ error: 'Failed to update geofence' }, { status: 500 });
   }
@@ -47,11 +48,8 @@ export async function PATCH(request: Request, context: RouteContext) {
 
 export async function DELETE(request: Request, context: RouteContext) {
   try {
-    const { error, session } = await requireSection('geofences');
+    const { error, session } = await requireGeofenceWrite();
     if (error || !session) return error;
-    if (!STAFF_ROLES.includes(session.user.role as (typeof STAFF_ROLES)[number])) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
 
     const { id } = await context.params;
     const existing = await db.geofence.findUnique({
@@ -80,7 +78,8 @@ export async function DELETE(request: Request, context: RouteContext) {
       resource: `geofence:${id}`,
       details: { name: existing.name },
       ipAddress: getClientIp(request),
-    });    return NextResponse.json({ message: 'Geofence deleted' });
+    });
+    return NextResponse.json({ message: 'Geofence deleted' });
   } catch (error) {
     console.error('Delete geofence error:', error);
     return NextResponse.json({ error: 'Failed to delete geofence' }, { status: 500 });

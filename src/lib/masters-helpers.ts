@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireSection, requireRoles, ADMIN_ROLES } from '@/lib/auth-helpers';
+import { requireSection, ADMIN_ROLES } from '@/lib/auth-helpers';
 import type { Role } from '@/lib/store';
 import { logAudit, getClientIp } from '@/lib/audit';
 import { db } from '@/lib/db';
@@ -10,7 +10,13 @@ export async function requireMastersRead() {
 
 /** Mutations: admin / super_admin only. HOD has read-only masters. */
 export async function requireMastersWrite() {
-  return requireRoles(ADMIN_ROLES);
+  const { error, session } = await requireSection('masters');
+  if (error || !session) return { error, session: null };
+  const role = session.user.role as Role;
+  if (!ADMIN_ROLES.includes(role)) {
+    return { error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }), session: null };
+  }
+  return { error: null, session };
 }
 
 /** @deprecated use requireMastersRead for GET, requireMastersWrite for mutations */

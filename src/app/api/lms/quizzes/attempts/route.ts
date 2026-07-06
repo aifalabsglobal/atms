@@ -1,11 +1,11 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
-import { requireAuth, resolveStudentId } from '@/lib/auth-helpers';
-import { auditLms } from '@/lib/lms-helpers';
+import { resolveStudentId } from '@/lib/auth-helpers';
+import { requireLmsRead, auditLms } from '@/lib/lms-helpers';
 
 export async function POST(request: Request) {
   try {
-    const { error, session } = await requireAuth();
+    const { error, session } = await requireLmsRead();
     if (error || !session) return error;
 
     const { studentId, error: studentError } = await resolveStudentId(session, null);

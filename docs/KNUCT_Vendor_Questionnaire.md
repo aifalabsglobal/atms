@@ -83,10 +83,28 @@ Should SCMS persist the passphrase encrypted alongside the privshare, or only th
 
 ## Our current integration (for reference)
 
-- **Adapter:** `src/lib/knuct/` (mock by default; live when `KNUCT_ENABLED=true`)
-- **Anchors:** SHA-256 hashes of canonical JSON payloads — no PII on chain today
-- **Privshare:** AES-256-GCM encrypted at rest in PostgreSQL; key in `KNUCT_PRIVSHARE_ENC_KEY`
+- **Adapter:** `src/lib/knuct/` (live when `KNUCT_ENABLED=true`)
+- **Wallet provisioning:** `POST /api/knuct` — async queue, circuit breaker, encrypted privshare at rest
+- **Anchors:** SHA-256 hashes in PostgreSQL; optional chain publish when vendor URL is supplied (see below)
+- **Credentials:** `POST /api/knuct/credentials` — hash + mint queue ready; live mint blocked until Q2 schemas
+- **Privshare:** AES-256-GCM encrypted at rest; key in `KNUCT_PRIVSHARE_ENC_KEY`
 - **Pilot scope:** Single college / single cohort; reversible; PostgreSQL remains system of record
+
+### SCMS is ready to enable (env-only — no code changes needed)
+
+Once you provide API URLs and auth, we will set:
+
+| Env variable | Purpose | Expected vendor contract |
+|--------------|---------|-------------------------|
+| `KNUCT_CHAIN_PUBLISH_ENABLED=true` | Turn on chain publish | — |
+| `KNUCT_CHAIN_PUBLISH_URL` | `POST` hash anchor | Body: `{ resourceType, resourceId, payloadHash, tenantId? }` → `{ txRef \| txHash }` |
+| `KNUCT_CREDENTIALS_ENABLED=true` | Turn on credential flow | — |
+| `KNUCT_CREDENTIAL_MINT_URL` | `POST` mint certificate | Body: `{ userId, did?, credentialType, payloadHash, resourceId?, metadata? }` → `{ assetRef, verifyUrl? }` |
+| `KNUCT_CREDENTIAL_VERIFY_URL` | Public verify template | URL with `{assetRef}` placeholder or path suffix |
+| `KNUCT_API_KEY` / `KNUCT_TENANT_ID` | Production auth | Sent as `Authorization: Bearer` and `X-Knuct-Tenant-Id` |
+
+**Adapter files:** `chain-publish.ts`, `credential-client.ts`, `vendor-http.ts`  
+**Public verify:** `/verify?hash=…` (hash lookup) — credential verify URL from vendor when available.
 
 Please reply to the technical contact on this integration. We can schedule a 30-minute walkthrough of our adapter and super_admin operations panel on request.
 

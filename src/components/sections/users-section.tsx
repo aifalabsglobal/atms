@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { UserItem } from '@/lib/types';
-import { useAppStore, ROLE_SECTIONS, type Role, type Section } from '@/lib/store';
+import { useAppStore, useRoleSections, type Role, type Section } from '@/lib/store';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -115,7 +115,7 @@ const CHART_CONFIG: ChartConfig = {
   security: { label: 'Security', color: '#E11D48' },
 };
 
-// Permission matrix: navigation sections × 9 roles (synced with ROLE_SECTIONS)
+// Permission matrix: navigation sections × 9 roles (synced with configurable RBAC)
 const PERMISSION_MODULES: { key: Section; label: string; icon: React.ElementType }[] = [
   { key: 'dashboard', label: 'Dashboard', icon: BarChart3 },
   { key: 'masters', label: 'Masters', icon: Database },
@@ -129,8 +129,8 @@ const PERMISSION_MODULES: { key: Section; label: string; icon: React.ElementType
   { key: 'settings', label: 'Settings', icon: Settings },
 ];
 
-function sectionAccess(role: Role, section: Section): '✓' | '✗' {
-  return ROLE_SECTIONS[role].includes(section) ? '✓' : '✗';
+function sectionAccess(matrix: Record<Role, Section[]>, role: Role, section: Section): '✓' | '✗' {
+  return matrix[role].includes(section) ? '✓' : '✗';
 }
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -366,6 +366,7 @@ function UserDetailDialog({ user, open, onOpenChange, canManage, onProvisionWall
 }
 
 function PermissionMatrixCard() {
+  const roleSections = useRoleSections();
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -401,7 +402,7 @@ function PermissionMatrixCard() {
                         {mod.label}
                       </td>
                       {ROLES.map(r => {
-                        const perm = sectionAccess(r.value as Role, mod.key);
+                        const perm = sectionAccess(roleSections, r.value as Role, mod.key);
                         return (
                           <td key={r.value} className="px-1.5 py-1.5 text-center">
                             <span className={cn(

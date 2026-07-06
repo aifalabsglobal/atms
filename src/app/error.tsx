@@ -20,6 +20,11 @@ export default function Error({
       <p className="max-w-md text-muted-foreground">
         An unexpected error occurred. You can try again or return to the dashboard.
       </p>
+      {process.env.NODE_ENV === 'development' && error?.message && (
+        <p className="max-w-lg rounded-md border border-red-200 bg-red-50 px-3 py-2 text-left text-xs font-mono text-red-800">
+          {error.message}
+        </p>
+      )}
       <div className="flex gap-3">
         <Button onClick={() => reset()}>Try again</Button>
         <Button variant="outline" onClick={() => (window.location.href = '/')}>

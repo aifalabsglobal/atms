@@ -26,6 +26,21 @@ import {
 
 const COLORS = ['#1A3C6E', '#2E7D32', '#E65100', '#6A1B9A', '#C62828', '#00838F', '#F9A825'];
 
+type ReportThresholds = { eligibilityPct: number; condonationPct: number };
+const FALLBACK_THRESHOLDS: ReportThresholds = { eligibilityPct: 75, condonationPct: 65 };
+
+function attendancePctTextClass(pct: number, t: ReportThresholds): string {
+  if (pct >= t.eligibilityPct) return 'text-emerald-600';
+  if (pct >= t.condonationPct) return 'text-amber-600';
+  return 'text-red-600';
+}
+
+function attendancePctBgClass(pct: number, t: ReportThresholds): string {
+  if (pct >= t.eligibilityPct) return 'bg-emerald-100 dark:bg-emerald-900/30';
+  if (pct >= t.condonationPct) return 'bg-amber-100 dark:bg-amber-900/30';
+  return 'bg-red-100 dark:bg-red-900/30';
+}
+
 const ROLE_COLORS: Record<string, string> = {
   super_admin: '#1A3C6E',
   admin: '#2C5F8A',
@@ -54,6 +69,7 @@ interface StudentReportData {
   };
   analyticsScope?: 'student';
   riskStatus?: 'on_track' | 'watch' | 'at_risk' | 'no_data';
+  thresholds?: ReportThresholds;
   assignments: {
     total: number; graded: number; pending: number; avgScore: number | null;
     recent: { id: string; title: string; course: { id: string; name: string; code: string }; score: number | null; maxScore: number; status: string; feedback: string | null; submittedAt: string; gradedAt: string | null }[];
@@ -72,14 +88,15 @@ interface StudentReportData {
 
 function StudentReportView({ data }: { data: StudentReportData }) {
   const { student, enrolledCourses, attendance, assignments, quizzes, grades, violations, riskStatus } = data;
+  const thresholds = data.thresholds ?? FALLBACK_THRESHOLDS;
   const isWardView = !!data.isParent;
 
   const riskBadge = {
     on_track: { label: 'On track', className: 'bg-emerald-100 text-emerald-800' },
     watch: { label: 'Watch list', className: 'bg-amber-100 text-amber-800' },
-    at_risk: { label: 'At risk (<75%)', className: 'bg-red-100 text-red-800' },
+    at_risk: { label: `At risk (<${thresholds.eligibilityPct}%)`, className: 'bg-red-100 text-red-800' },
     no_data: { label: 'No attendance yet', className: 'bg-muted text-muted-foreground' },
-  }[riskStatus ?? 'no_data'];
+  }[riskStatus ?? 'no_data'] ?? { label: 'Unknown', className: 'bg-muted text-muted-foreground' };
 
   // Grade distribution chart data
   const gradeData = Object.entries(grades.distribution).map(([grade, count]) => ({
@@ -139,23 +156,17 @@ function StudentReportView({ data }: { data: StudentReportData }) {
           <CardContent className="flex items-center gap-3 px-3">
             <div className={cn(
               'h-9 w-9 rounded-lg flex items-center justify-center shrink-0',
-              attendance.overallPercentage >= 75 ? 'bg-emerald-100 dark:bg-emerald-900/30' :
-              attendance.overallPercentage >= 65 ? 'bg-amber-100 dark:bg-amber-900/30' :
-              'bg-red-100 dark:bg-red-900/30'
+              attendancePctBgClass(attendance.overallPercentage, thresholds)
             )}>
               <TrendingUp className={cn(
                 'h-4 w-4',
-                attendance.overallPercentage >= 75 ? 'text-emerald-600' :
-                attendance.overallPercentage >= 65 ? 'text-amber-600' :
-                'text-red-600'
+                attendancePctTextClass(attendance.overallPercentage, thresholds)
               )} />
             </div>
             <div>
               <p className={cn(
                 'text-lg font-bold',
-                attendance.overallPercentage >= 75 ? 'text-emerald-600' :
-                attendance.overallPercentage >= 65 ? 'text-amber-600' :
-                'text-red-600'
+                attendancePctTextClass(attendance.overallPercentage, thresholds)
               )}>{attendance.overallPercentage}%</p>
               <p className="text-[10px] text-muted-foreground">Attendance</p>
             </div>
@@ -200,7 +211,7 @@ function StudentReportView({ data }: { data: StudentReportData }) {
       </div>
 
       {/* Attendance Warning */}
-      {attendance.overallPercentage < 75 && attendance.totalSessions > 0 && (
+      {attendance.overallPercentage < thresholds.eligibilityPct && attendance.totalSessions > 0 && (
         <Card className="border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20">
           <CardContent className="flex items-start gap-3 p-4">
             <AlertTriangle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
@@ -209,19 +220,19 @@ function StudentReportView({ data }: { data: StudentReportData }) {
                 Attendance Below Minimum Requirement
               </p>
               <p className="text-xs text-red-600/80 dark:text-red-300/80 mt-0.5">
-                Your attendance is {attendance.overallPercentage}%, below the JNTUH mandated 75% minimum.
+                Your attendance is {attendance.overallPercentage}%, below the mandated {thresholds.eligibilityPct}% minimum.
                 You may be detained from appearing for examinations. Please attend classes regularly.
               </p>
               <div className="mt-2 flex items-center gap-2">
                 <Progress value={attendance.overallPercentage} className="h-2 flex-1 max-w-48" />
-                <span className="text-xs font-bold text-red-600">{attendance.overallPercentage}% / 75%</span>
+                <span className="text-xs font-bold text-red-600">{attendance.overallPercentage}% / {thresholds.eligibilityPct}%</span>
               </div>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {attendance.overallPercentage >= 75 && attendance.totalSessions > 0 && (
+      {attendance.overallPercentage >= thresholds.eligibilityPct && attendance.totalSessions > 0 && (
         <Card className="border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20">
           <CardContent className="flex items-start gap-3 p-4">
             <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
@@ -230,7 +241,7 @@ function StudentReportView({ data }: { data: StudentReportData }) {
                 Attendance Requirement Met
               </p>
               <p className="text-xs text-emerald-600/80 dark:text-emerald-300/80 mt-0.5">
-                Your attendance is {attendance.overallPercentage}%, meeting the JNTUH 75% requirement. Keep it up!
+                Your attendance is {attendance.overallPercentage}%, meeting the {thresholds.eligibilityPct}% requirement. Keep it up!
               </p>
             </div>
           </CardContent>
@@ -283,8 +294,7 @@ function StudentReportView({ data }: { data: StudentReportData }) {
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium">Overall Attendance</span>
                   <span className={cn('text-sm font-bold', 
-                    attendance.overallPercentage >= 75 ? 'text-emerald-600' : 
-                    attendance.overallPercentage >= 65 ? 'text-amber-600' : 'text-red-600'
+                    attendancePctTextClass(attendance.overallPercentage, thresholds)
                   )}>{attendance.overallPercentage}%</span>
                 </div>
                 <Progress value={attendance.overallPercentage} className="h-2" />
@@ -388,8 +398,7 @@ function StudentReportView({ data }: { data: StudentReportData }) {
                               <Progress value={ca.percentage} className="h-2 w-16" />
                               <span className={cn(
                                 'text-sm font-medium',
-                                ca.percentage >= 75 ? 'text-emerald-600' :
-                                ca.percentage >= 65 ? 'text-amber-600' : 'text-red-600'
+                                attendancePctTextClass(ca.percentage, thresholds)
                               )}>{ca.percentage}%</span>
                             </div>
                           </TableCell>
@@ -849,9 +858,11 @@ interface StaffReportData {
   coursePerfReport: { id: string; code: string; name: string; _count: { enrollments: number }; avgGrade: number | null }[];
   violationReport: { id: string; type: string; severity: string; reviewStatus: string; violator: { name: string }; record: { session: { sessionDate: string; course: { name: string } } } }[];
   gradeDistribution: Record<string, number>;
+  thresholds?: ReportThresholds;
 }
 
 function StaffAnalyticsView({ data }: { data: StaffReportData }) {
+  const thresholds = data.thresholds ?? FALLBACK_THRESHOLDS;
   const {
     kpis, weeklyAttendanceTrend, departmentAnalytics, atRiskStudents, topPerformers,
     violationAnalytics, captureMethodBreakdown, lmsEngagement, scopeLabel, analyticsScope,
@@ -929,7 +940,7 @@ function StaffAnalyticsView({ data }: { data: StaffReportData }) {
             {[
               { label: 'Students', value: kpis.totalStudents, icon: Users },
               { label: 'Avg attendance', value: `${kpis.avgAttendancePct}%`, icon: TrendingUp },
-              { label: 'At risk (<75%)', value: kpis.atRiskCount, icon: AlertTriangle },
+              { label: `At risk (<${thresholds.eligibilityPct}%)`, value: kpis.atRiskCount, icon: AlertTriangle },
               { label: 'Avg grade', value: `${kpis.avgGradePct}%`, icon: Award },
               { label: 'Quiz attempts', value: kpis.quizAttempts, icon: HelpCircle },
             ].map((k) => (
@@ -1114,7 +1125,7 @@ function StaffAnalyticsView({ data }: { data: StaffReportData }) {
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
                   <div className="h-10 w-10 rounded-lg bg-red-100 flex items-center justify-center"><TrendingDown className="h-5 w-5 text-red-600" /></div>
-                  <div><p className="text-xs text-muted-foreground">Below 75%</p><p className="text-xl font-bold">{(studentAttendanceReport || []).filter((s: { stats: { percentage: number } }) => s.stats.percentage < 75).length}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Below {thresholds.eligibilityPct}%</p><p className="text-xl font-bold">{(studentAttendanceReport || []).filter((s: { stats: { percentage: number } }) => s.stats.percentage < thresholds.eligibilityPct).length}</p></div>
                 </div>
               </CardContent>
             </Card>
@@ -1154,7 +1165,7 @@ function StaffAnalyticsView({ data }: { data: StaffReportData }) {
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <Progress value={rate} className="h-2 w-16" />
-                              <span className={`text-sm font-medium ${rate >= 75 ? 'text-green-600' : rate >= 65 ? 'text-amber-600' : 'text-red-600'}`}>{rate}%</span>
+                              <span className={cn('text-sm font-medium', attendancePctTextClass(rate, thresholds))}>{rate}%</span>
                             </div>
                           </TableCell>
                         </TableRow>
@@ -1175,7 +1186,7 @@ function StaffAnalyticsView({ data }: { data: StaffReportData }) {
                 <CardTitle className="text-base flex items-center gap-2 text-amber-800">
                   <AlertTriangle className="h-4 w-4" /> At-risk students ({atRiskStudents.length})
                 </CardTitle>
-                <CardDescription>Below 75% attendance — JNTUH minimum threshold</CardDescription>
+                <CardDescription>Below {thresholds.eligibilityPct}% attendance — minimum eligibility threshold</CardDescription>
               </CardHeader>
               <CardContent className="p-0">
                 <ScrollArea className="max-h-48">
@@ -1236,7 +1247,7 @@ function StaffAnalyticsView({ data }: { data: StaffReportData }) {
                         <TableCell>
                           <div className="flex items-center gap-2">
                             <Progress value={s.stats.percentage} className="h-2 w-16" />
-                            <span className={`text-sm font-medium ${s.stats.percentage >= 75 ? 'text-green-600' : s.stats.percentage >= 65 ? 'text-amber-600' : 'text-red-600'}`}>
+                            <span className={cn('text-sm font-medium', attendancePctTextClass(s.stats.percentage, thresholds))}>
                               {s.stats.percentage}%
                             </span>
                           </div>

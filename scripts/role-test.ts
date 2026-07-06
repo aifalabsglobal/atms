@@ -2,6 +2,7 @@
  * Role-based access tests — run: npm run test:roles
  */
 import { ROLE_SECTIONS, type Role, type Section } from '../src/lib/store';
+import { DEFAULT_ROLE_SECTIONS } from '../src/lib/rbac-defaults';
 
 const BASE = process.env.BASE_URL ?? 'http://localhost:3000';
 
@@ -15,66 +16,87 @@ const DEMO_ACCOUNTS: { label: string; email: string; role: Role }[] = [
   { label: 'Security', email: 'security.murthy@jntuh.ac.in', role: 'security' },
 ];
 
-type Endpoint = { name: string; path: string; section?: Section; allowed: Role[] };
+type Endpoint = {
+  name: string;
+  path: string;
+  section?: Section;
+  expectAccess: (role: Role) => boolean;
+};
+
+function hasSection(role: Role, section: Section): boolean {
+  return (DEFAULT_ROLE_SECTIONS[role] ?? ROLE_SECTIONS[role] ?? []).includes(section);
+}
+
+function hasAnySection(role: Role, sections: Section[]): boolean {
+  return sections.some((s) => hasSection(role, s));
+}
 
 const ENDPOINTS: Endpoint[] = [
-  { name: 'dashboard', path: '/api/dashboard', section: 'dashboard', allowed: ['super_admin', 'admin', 'hod', 'faculty', 'lab_assistant', 'student', 'parent', 'visitor', 'security'] },
-  { name: 'masters', path: '/api/masters/departments?limit=5', section: 'masters', allowed: ['super_admin', 'admin', 'hod'] },
-  { name: 'users', path: '/api/users?limit=5', section: 'users', allowed: ['super_admin', 'admin', 'hod'] },
-  { name: 'lms', path: '/api/lms/courses?limit=5', section: 'lms', allowed: ['super_admin', 'admin', 'hod', 'faculty', 'student', 'parent'] },
-  { name: 'violations', path: '/api/attendance/violations?limit=1', section: 'violations', allowed: ['super_admin', 'admin', 'hod', 'faculty', 'security'] },
-  { name: 'reports', path: '/api/reports', section: 'reports', allowed: ['super_admin', 'admin', 'hod', 'faculty', 'student', 'parent'] },
-  { name: 'geofences', path: '/api/geofences', section: 'geofences', allowed: ['super_admin', 'admin', 'hod', 'lab_assistant', 'student', 'visitor', 'security'] },
-  { name: 'calendar', path: '/api/calendar?limit=5', section: 'calendar', allowed: ['super_admin', 'admin', 'hod', 'faculty', 'lab_assistant', 'student', 'parent', 'visitor', 'security'] },
-  { name: 'attendance-sessions', path: '/api/attendance/sessions?limit=5', section: 'attendance', allowed: ['super_admin', 'admin', 'hod', 'faculty', 'lab_assistant', 'security'] },
-  { name: 'timetable', path: '/api/timetable?date=2026-07-06', section: 'attendance', allowed: ['super_admin', 'admin', 'hod', 'faculty', 'lab_assistant', 'security'] },
-  { name: 'timetable-slots', path: '/api/masters/timetable-slots?limit=5', section: 'masters', allowed: ['super_admin', 'admin', 'hod'] },
-  { name: 'active-sessions', path: '/api/attendance/active-sessions', allowed: ['super_admin', 'admin', 'hod', 'faculty', 'lab_assistant', 'student', 'parent', 'security'] },
+  { name: 'dashboard', path: '/api/dashboard', section: 'dashboard', expectAccess: (r) => hasSection(r, 'dashboard') },
+  { name: 'masters', path: '/api/masters/departments?limit=5', section: 'masters', expectAccess: (r) => hasSection(r, 'masters') },
+  { name: 'users', path: '/api/users?limit=5', section: 'users', expectAccess: (r) => hasSection(r, 'users') },
+  { name: 'lms', path: '/api/lms/courses?limit=5', section: 'lms', expectAccess: (r) => hasSection(r, 'lms') },
+  { name: 'violations', path: '/api/attendance/violations?limit=1', section: 'violations', expectAccess: (r) => hasSection(r, 'violations') },
+  { name: 'reports', path: '/api/reports', section: 'reports', expectAccess: (r) => hasSection(r, 'reports') },
+  { name: 'geofences', path: '/api/geofences', section: 'geofences', expectAccess: (r) => hasSection(r, 'geofences') },
+  { name: 'calendar', path: '/api/calendar?limit=5', section: 'calendar', expectAccess: (r) => hasSection(r, 'calendar') },
+  { name: 'attendance-sessions', path: '/api/attendance/sessions?limit=5', section: 'attendance', expectAccess: (r) => hasSection(r, 'attendance') },
+  { name: 'timetable', path: '/api/timetable?date=2026-07-06', section: 'attendance', expectAccess: (r) => hasAnySection(r, ['attendance', 'masters']) },
+  { name: 'timetable-slots', path: '/api/masters/timetable-slots?limit=5', section: 'masters', expectAccess: (r) => hasAnySection(r, ['attendance', 'masters']) },
+  { name: 'active-sessions', path: '/api/attendance/active-sessions', section: 'attendance', expectAccess: (r) => hasSection(r, 'attendance') },
 ];
 
-function mergeCookies(existing: string, setCookie: string | null): string {
-  const jar = new Map<string, string>();
-  for (const part of existing.split(';').map((s) => s.trim()).filter(Boolean)) {
-    const [k, ...v] = part.split('=');
-    jar.set(k, v.join('='));
+function collectCookies(res: Response, jar: string[]): string[] {
+  const next = [...jar];
+  const raw = typeof res.headers.getSetCookie === 'function' ? res.headers.getSetCookie() : [];
+  for (const c of raw) {
+    const part = c.split(';')[0]?.trim();
+    if (part?.includes('=')) next.push(part);
   }
-  if (setCookie) {
-    for (const chunk of setCookie.split(/,(?=\s*[^;]+=[^;]+)/)) {
-      const [pair] = chunk.split(';');
-      const [k, ...v] = pair.trim().split('=');
-      jar.set(k, v.join('='));
+  if (raw.length === 0) {
+    const single = res.headers.get('set-cookie');
+    if (single) {
+      for (const chunk of single.split(/,(?=\s*[^;,]+=)/)) {
+        const part = chunk.trim().split(';')[0]?.trim();
+        if (part?.includes('=')) next.push(part);
+      }
     }
   }
-  return Array.from(jar.entries()).map(([k, v]) => `${k}=${v}`).join('; ');
+  return [...new Set(next)];
 }
 
 async function login(email: string): Promise<string> {
+  let jar: string[] = [];
   const csrfRes = await fetch(`${BASE}/api/auth/csrf`);
+  jar = collectCookies(csrfRes, jar);
   const { csrfToken } = await csrfRes.json();
-  let cookie = mergeCookies('', csrfRes.headers.get('set-cookie'));
-
-  const body = new URLSearchParams({
-    email,
-    password: 'demo123',
-    csrfToken,
-    callbackUrl: `${BASE}/`,
-    json: 'true',
-  });
 
   const loginRes = await fetch(`${BASE}/api/auth/callback/credentials`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookie },
-    body,
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Cookie: jar.join('; '),
+    },
+    body: new URLSearchParams({
+      email,
+      password: 'demo123',
+      csrfToken,
+      callbackUrl: `${BASE}/`,
+      json: 'true',
+    }),
+    redirect: 'manual',
   });
-  cookie = mergeCookies(cookie, loginRes.headers.get('set-cookie'));
-  if (loginRes.status !== 200) throw new Error(`login failed ${loginRes.status}`);
+  jar = collectCookies(loginRes, jar);
+  if (loginRes.status !== 200 && loginRes.status !== 302) {
+    throw new Error(`login failed ${loginRes.status}`);
+  }
 
-  const sessionRes = await fetch(`${BASE}/api/auth/session`, { headers: { Cookie: cookie } });
+  const sessionRes = await fetch(`${BASE}/api/auth/session`, { headers: { Cookie: jar.join('; ') } });
   const session = await sessionRes.json();
   if (!session?.user?.email) throw new Error('no session');
   if (session.user.email !== email) throw new Error(`wrong email ${session.user.email}`);
 
-  return cookie;
+  return jar.join('; ');
 }
 
 type Row = { role: string; check: string; ok: boolean; detail: string; ms: number };
@@ -94,9 +116,8 @@ async function main() {
     }
 
     for (const ep of ENDPOINTS) {
-      const uiHasSection = ep.section ? ROLE_SECTIONS[account.role].includes(ep.section) : true;
-      const apiAllowed = ep.allowed.includes(account.role);
-      const expectOk = apiAllowed;
+      const uiHasSection = ep.section ? hasSection(account.role, ep.section) : true;
+      const expectOk = ep.expectAccess(account.role);
 
       const start = Date.now();
       try {

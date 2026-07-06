@@ -19,11 +19,15 @@ export async function GET() {
   }
 
   try {
-    const knuct = await getKnuctHealth();
+    const knuct = await getKnuctHealth({ ping: true });
     const queue = getKnuctQueueStats();
     const circuit = getKnuctCircuitState();
     checks.knuct =
-      knuct.health === 'ok' ? 'ok' : knuct.health === 'degraded' ? 'degraded' : 'error';
+      knuct.health === 'ok'
+        ? 'ok'
+        : knuct.health === 'degraded' || knuct.health === 'unknown'
+          ? 'degraded'
+          : 'error';
     checks.knuctQueue = queue.pending > 10 ? 'degraded' : 'ok';
   } catch (err) {
     console.error('[health] knuct check failed:', err);

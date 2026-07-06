@@ -1,5 +1,6 @@
 import { db } from '@/lib/db';
 import type { CampusScope } from '@/lib/auth-helpers';
+import { DEFAULT_ATTENDANCE_THRESHOLDS, type AttendanceThresholds } from '@/lib/system-config-defaults';
 
 export type AnalyticsScope = 'campus' | 'department' | 'instructor';
 
@@ -84,7 +85,8 @@ export async function buildStudentAttendanceStats(studentWhere: Record<string, u
 }
 
 export function buildDepartmentAnalytics(
-  studentReport: { department: string | null; stats: { percentage: number; total: number } }[]
+  studentReport: { department: string | null; stats: { percentage: number; total: number } }[],
+  thresholds: AttendanceThresholds = DEFAULT_ATTENDANCE_THRESHOLDS,
 ) {
   const map = new Map<string, { department: string; students: number; totalPct: number; withRecords: number }>();
   for (const s of studentReport) {
@@ -103,7 +105,10 @@ export function buildDepartmentAnalytics(
       students: d.students,
       avgAttendance: d.withRecords > 0 ? Math.round(d.totalPct / d.withRecords) : 0,
       atRisk: studentReport.filter(
-        (s) => (s.department || 'Unassigned') === d.department && s.stats.percentage < 75 && s.stats.total > 0
+        (s) =>
+          (s.department || 'Unassigned') === d.department &&
+          s.stats.percentage < thresholds.eligibilityPct &&
+          s.stats.total > 0
       ).length,
     }))
     .sort((a, b) => b.students - a.students);
@@ -129,10 +134,14 @@ export function buildViolationAnalytics(
   return { byType, bySeverity, pending, confirmed, dismissed, total: violations.length };
 }
 
-export function attendanceRiskStatus(pct: number, total: number): 'on_track' | 'watch' | 'at_risk' | 'no_data' {
+export function attendanceRiskStatus(
+  pct: number,
+  total: number,
+  thresholds: AttendanceThresholds = DEFAULT_ATTENDANCE_THRESHOLDS,
+): 'on_track' | 'watch' | 'at_risk' | 'no_data' {
   if (total === 0) return 'no_data';
-  if (pct >= 75) return 'on_track';
-  if (pct >= 65) return 'watch';
+  if (pct >= thresholds.eligibilityPct) return 'on_track';
+  if (pct >= thresholds.condonationPct) return 'watch';
   return 'at_risk';
 }
 

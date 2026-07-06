@@ -1,14 +1,16 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { requireRoles } from '@/lib/auth-helpers';
+import { requireSection, requireRoles } from '@/lib/auth-helpers';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function GET(request: Request) {
   try {
-    const { error } = await requireRoles(['super_admin']);
-    if (error) return error;
+    const { error, session } = await requireSection('settings');
+    if (error || !session) return error;
+    const roleError = (await requireRoles(['super_admin'])).error;
+    if (roleError) return roleError;
 
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');

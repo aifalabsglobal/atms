@@ -1,7 +1,7 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
-import { requireAuth, resolveStudentId } from '@/lib/auth-helpers';
-import { requireLmsRead, assertInstructorOwnsCourse, auditLms } from '@/lib/lms-helpers';
+import { resolveStudentId } from '@/lib/auth-helpers';
+import { requireLmsRead, requireLmsWrite, assertInstructorOwnsCourse, auditLms } from '@/lib/lms-helpers';
 import { enqueueAnchor } from '@/lib/knuct/anchor-service';
 
 export async function GET(request: Request) {
@@ -73,7 +73,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { error, session } = await requireAuth();
+    const { error, session } = await requireLmsRead();
     if (error || !session) return error;
 
     const { studentId, error: studentError } = await resolveStudentId(session, null);
@@ -136,7 +136,7 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const { error, session } = await requireAuth();
+    const { error, session } = await requireLmsWrite();
     if (error || !session) return error;
 
     const body = await request.json();

@@ -1,6 +1,6 @@
 'use client';
 
-import { useAppStore, type Section, ROLE_LABELS, ROLE_SECTIONS, ROLE_COLORS, type Role } from '@/lib/store';
+import { useAppStore, ROLE_LABELS, ROLE_COLORS, useEffectiveSections, type Role, type Section } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, ScanLine, BookOpen, Users, ShieldAlert,
@@ -53,8 +53,6 @@ const allNavItems: { id: Section; label: string; icon: React.ElementType }[] = [
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
-const VIOLATION_ROLES: Role[] = ['super_admin', 'admin', 'hod', 'faculty', 'security'];
-
 function LoadingScreen({ message }: { message?: string }) {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-background">
@@ -70,6 +68,7 @@ function AppContent() {
   const { status } = useSession();
   const { activeSection, setActiveSection, sidebarOpen, setSidebarOpen, currentUser, roleSwitching } = useAppStore();
   const { theme, setTheme } = useTheme();
+  const allowedSections = useEffectiveSections();
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -88,7 +87,7 @@ function AppContent() {
     refetchInterval: 2 * 60 * 1000,
   });
 
-  const showViolationsBadge = !!currentUser && VIOLATION_ROLES.includes(currentUser.role);
+  const showViolationsBadge = allowedSections.includes('violations');
   const { data: violationsData } = useQuery({
     queryKey: ['violations-pending-count', currentUser?.id],
     queryFn: () => fetch('/api/attendance/violations?reviewStatus=pending&limit=1').then((r) => {
@@ -109,7 +108,7 @@ function AppContent() {
   }
 
   const role = currentUser.role;
-  const canAccessSettings = ROLE_SECTIONS[role].includes('settings');
+  const canAccessSettings = allowedSections.includes('settings');
   const isDemoUser = DEMO_ACCOUNTS.some((a) => a.email === currentUser.email);
 
   async function markNotificationsRead(ids?: string[]) {
@@ -122,9 +121,9 @@ function AppContent() {
       queryClient.invalidateQueries({ queryKey: ['notifications', currentUser?.id] });
     }
   }
-  const allowedSections = ROLE_SECTIONS[role];
-  const navItems = allNavItems.filter((item) => allowedSections.includes(item.id));
-  const safeSection = allowedSections.includes(activeSection) ? activeSection : 'dashboard';
+  const allowedSectionsNav = allowedSections;
+  const navItems = allNavItems.filter((item) => allowedSectionsNav.includes(item.id));
+  const safeSection = allowedSectionsNav.includes(activeSection) ? activeSection : 'dashboard';
 
   const unreadCount = notifData?.unreadCount ?? 0;
   const pendingViolations = violationsData?.total ?? 0;

@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
-import { requireAuth, resolveStudentId, requireCampusRead, getCampusScope, buildCourseIdFilter, requireSection } from '@/lib/auth-helpers';
+import { resolveStudentId, getCampusScope, buildCourseIdFilter, requireSection } from '@/lib/auth-helpers';
 import {
   attendanceRiskStatus,
   buildDepartmentAnalytics,
@@ -10,14 +10,17 @@ import {
   getDepartmentName,
   scopeLabel,
 } from '@/lib/reports-analytics';
+import { getAttendanceThresholds } from '@/lib/system-config';
 
 export async function GET(request: Request) {
   try {
-    const { error, session } = await requireAuth();
-    if (error) return error;
+    const { error, session } = await requireSection('reports');
+    if (error || !session) return error;
+
+    const thresholds = await getAttendanceThresholds();
 
     const { searchParams } = new URL(request.url);
-    const { studentId, error: studentError } = await resolveStudentId(session!, searchParams.get('studentId'));
+    const { studentId, error: studentError } = await resolveStudentId(session, searchParams.get('studentId'));
     if (studentError) return studentError;
     const isStudent = !!studentId;
 
@@ -200,7 +203,8 @@ export async function GET(request: Request) {
         isStudent: true,
         isParent: session!.user.role === 'parent',
         analyticsScope: 'student' as const,
-        riskStatus: attendanceRiskStatus(overallPercentage, totalSessions),
+        thresholds,
+        riskStatus: attendanceRiskStatus(overallPercentage, totalSessions, thresholds),
         student: {
           id: student.id,
           name: student.name,
@@ -252,13 +256,7 @@ export async function GET(request: Request) {
       });
     }
 
-    const { error: sectionError } = await requireSection('reports');
-    if (sectionError) return sectionError;
-
-    const { error: campusError } = await requireCampusRead();
-    if (campusError) return campusError;
-
-    const scope = await getCampusScope(session!);
+    const scope = await getCampusScope(session);
     const courseFilter = buildCourseIdFilter(scope);
     const sessionWhere = courseFilter ? { courseId: courseFilter } : {};
     const courseWhere = courseFilter ? { isActive: true, id: courseFilter } : { isActive: true };
@@ -385,10 +383,10 @@ export async function GET(request: Request) {
 
     const weeklyAttendanceTrend = buildWeeklyTrend(attendanceSummary);
     const departmentAnalytics =
-      analyticsScope === 'campus' ? buildDepartmentAnalytics(studentAttendanceReport) : [];
+      analyticsScope === 'campus' ? buildDepartmentAnalytics(studentAttendanceReport, thresholds) : [];
 
     const atRiskStudents = studentAttendanceReport
-      .filter((s) => s.stats.total > 0 && s.stats.percentage < 75)
+      .filter((s) => s.stats.total > 0 && s.stats.percentage < thresholds.eligibilityPct)
       .slice(0, 20);
 
     const topPerformers = [...studentAttendanceReport]
@@ -417,6 +415,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       isStudent: false,
       analyticsScope,
+      thresholds,
       scopeLabel: scopeLabelText,
       role: session!.user.role,
       kpis: {

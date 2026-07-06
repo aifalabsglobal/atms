@@ -2,17 +2,18 @@ import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
-import { requireAuth, resolveStudentId, SELF_MARK_METHODS } from '@/lib/auth-helpers';
+import { requireSection, resolveStudentId, SELF_MARK_METHODS } from '@/lib/auth-helpers';
 import type { Role } from '@/lib/store';
 import { verifyFaceMatch } from '@/lib/face-verification';
 import { validateGeofenceLocation } from '@/lib/geofence';
 import { captureMethodRequiresGeofence } from '@/lib/geofence-policy';
 import { rateLimitByUser } from '@/lib/api-rate-limit';
 import { logAudit, getClientIp } from '@/lib/audit';
+import { getSystemConfig } from '@/lib/system-config';
 
 export async function POST(request: Request) {
   try {
-    const { error, session } = await requireAuth();
+    const { error, session } = await requireSection('attendance');
     if (error || !session) return error;
 
     const limited = await rateLimitByUser(request, session.user.id, 'attendance-mark', 20, 60_000);
@@ -84,7 +85,11 @@ export async function POST(request: Request) {
       captureMethodRequiresGeofence(attendanceSession.captureMethod) ||
       captureMethodRequiresGeofence(method);
 
-    if (sessionNeedsGeo && !attendanceSession.geofence) {
+    const systemConfig = await getSystemConfig();
+    const enforceGeofence =
+      systemConfig.policies.geofenceSelfMarkRequired && sessionNeedsGeo;
+
+    if (enforceGeofence && !attendanceSession.geofence) {
       return NextResponse.json(
         { error: 'This session requires geofence verification but no geofence is configured. Contact faculty.' },
         { status: 400 },
@@ -94,7 +99,7 @@ export async function POST(request: Request) {
     let geofenceValidated = false;
     let distanceFromCenter: number | null = null;
 
-    if (attendanceSession.geofence) {
+    if (attendanceSession.geofence && enforceGeofence) {
       if (!attendanceSession.geofence.isActive) {
         return NextResponse.json({ error: 'Session geofence is inactive. Contact faculty.' }, { status: 400 });
       }
@@ -168,6 +173,17 @@ export async function POST(request: Request) {
         }
       } catch (faceErr) {
         console.error('Face verification error (non-blocking):', faceErr);
+      }
+
+      if (systemConfig.policies.faceVerificationEnforced && !faceVerified) {
+        return NextResponse.json(
+          {
+            error: 'Face verification failed — attendance not recorded. Ensure your profile photo is clear and try again.',
+            faceVerified: false,
+            confidence,
+          },
+          { status: 403 },
+        );
       }
     }
 

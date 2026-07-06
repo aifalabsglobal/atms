@@ -22,7 +22,7 @@ import {
   Pencil, Trash2,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useAppStore, GEOFENCE_WRITE_ROLES } from '@/lib/store';
+import { useAppStore, GEOFENCE_WRITE_ROLES, useEffectiveSections } from '@/lib/store';
 import { parsePolygonData } from '@/lib/geofence';
 import {
   captureMethodRequiresGeofence,
@@ -32,6 +32,14 @@ import {
 } from '@/lib/geofence-policy';
 import { cn } from '@/lib/utils';
 import type { GeofenceItem } from '@/lib/types';
+
+async function fetchGeofences(includeInactive: boolean): Promise<{ geofences: GeofenceItem[]; defaults?: { radiusMeters: number } }> {
+  const qs = includeInactive ? '?includeInactive=true' : '';
+  const res = await fetch(`/api/geofences${qs}`);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Failed to load geofences');
+  return data;
+}
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 const NAVY = '#1A3C6E';
@@ -85,14 +93,14 @@ function MapView({
   userLocation,
   onGeofenceClick,
   selectedSession,
-  onMapClick,
+  mapVisible,
 }: {
   geofences: GeofenceItem[];
   activeSessions: ActiveSession[];
   userLocation: { lat: number; lng: number } | null;
   onGeofenceClick: (geofence: GeofenceItem) => void;
   selectedSession: ActiveSession | null;
-  onMapClick?: (lat: number, lng: number) => void;
+  mapVisible: boolean;
 }) {
   const mapRef = useRef<HTMLDivElement>(null);
   const [mapReady, setMapReady] = useState(false);
@@ -160,8 +168,8 @@ function MapView({
 
     const map = leafletMapRef.current;
 
-    // Draw geofence shapes
-    geofences.forEach(g => {
+    // Draw geofence shapes (active zones only on map)
+    geofences.filter((g) => g.isActive).forEach(g => {
       const isActive = activeSessions.some(s => s.geofence?.name === g.name);
 
       if (g.type === 'polygon' && g.polygonData) {
@@ -192,7 +200,7 @@ function MapView({
         return;
       }
 
-      if (g.centerLat && g.centerLng && g.radiusMtrs) {
+      if (g.centerLat != null && g.centerLng != null && g.radiusMtrs) {
         const circle = L.circle([g.centerLat, g.centerLng], {
           radius: g.radiusMtrs,
           color: isActive ? '#16a34a' : NAVY,
@@ -252,6 +260,36 @@ function MapView({
 
   }, [mapReady, geofences, activeSessions, userLocation, onGeofenceClick]);
 
+  // Leaflet renders at zero size inside hidden tabs — refresh when tab becomes visible
+  useEffect(() => {
+    if (!leafletMapRef.current || !mapReady || !mapVisible) return;
+    const map = leafletMapRef.current;
+    const timer = setTimeout(() => {
+      map.invalidateSize();
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [mapReady, mapVisible]);
+
+  // Fit map to all active geofences on load
+  useEffect(() => {
+    if (!leafletMapRef.current || !mapReady || !mapVisible || selectedSession?.geofence) return;
+    const L = require('leaflet');
+    const active = geofences.filter((g) => g.isActive);
+    if (active.length === 0) return;
+
+    const bounds = L.latLngBounds([]);
+    active.forEach((g) => {
+      if (g.type === 'polygon' && g.polygonData) {
+        parsePolygonData(g.polygonData)?.forEach((p) => bounds.extend([p.lat, p.lng]));
+      } else if (g.centerLat != null && g.centerLng != null) {
+        bounds.extend([g.centerLat, g.centerLng]);
+      }
+    });
+    if (bounds.isValid()) {
+      leafletMapRef.current.fitBounds(bounds, { padding: [32, 32], maxZoom: 17 });
+    }
+  }, [mapReady, mapVisible, geofences, selectedSession]);
+
   // Fit bounds to selected session's geofence
   useEffect(() => {
     if (!leafletMapRef.current || !mapReady || !selectedSession?.geofence) return;
@@ -304,7 +342,8 @@ function StudentMarkPanel() {
     refetchInterval: 15000,
   });
 
-  const requestLocation = useCallback(() => {
+  const requestLocation = useCallback((sessionOverride?: ActiveSession | null) => {
+    const session = sessionOverride ?? selectedSession;
     if (!navigator.geolocation) {
       setLocationError('Geolocation not supported');
       return;
@@ -315,8 +354,8 @@ function StudentMarkPanel() {
         setUserLocation(loc);
         setLocationError(null);
 
-        if (selectedSession?.geofence) {
-          setGeofenceStatus(checkLocationAgainstSessionGeofence(selectedSession.geofence, loc.lat, loc.lng));
+        if (session?.geofence) {
+          setGeofenceStatus(checkLocationAgainstSessionGeofence(session.geofence, loc.lat, loc.lng));
         } else {
           setGeofenceStatus(null);
         }
@@ -325,6 +364,13 @@ function StudentMarkPanel() {
       { enableHighAccuracy: true, timeout: 10000 }
     );
   }, [selectedSession]);
+
+  useEffect(() => {
+    if (!userLocation || !selectedSession?.geofence) return;
+    setGeofenceStatus(
+      checkLocationAgainstSessionGeofence(selectedSession.geofence, userLocation.lat, userLocation.lng),
+    );
+  }, [selectedSession, userLocation]);
 
   // Mark attendance mutation
   const markMutation = useMutation({
@@ -404,7 +450,7 @@ function StudentMarkPanel() {
                       setUserLocation(null);
                       setGeofenceStatus(null);
                       setLocationError(null);
-                      requestLocation();
+                      requestLocation(session);
                     }}
                     className={cn(
                       'w-full text-left p-3 rounded-lg border transition-all hover:shadow-sm',
@@ -488,7 +534,7 @@ function StudentMarkPanel() {
                   <ShieldAlert className="h-4 w-4 text-red-600" />
                   <p className="text-xs text-red-700 dark:text-red-400">{locationError}</p>
                 </div>
-                <Button variant="outline" size="sm" className="mt-2 text-xs h-7" onClick={requestLocation}>
+                <Button variant="outline" size="sm" className="mt-2 text-xs h-7" onClick={() => requestLocation()}>
                   Retry Location
                 </Button>
               </div>
@@ -501,7 +547,7 @@ function StudentMarkPanel() {
               </div>
             )}
 
-            <Button variant="outline" size="sm" className="text-xs h-7" onClick={requestLocation}>
+            <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => requestLocation()}>
               <Crosshair className="h-3 w-3 mr-1" /> Refresh Location
             </Button>
 
@@ -558,13 +604,18 @@ export default function GeofencesSection() {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [activeTab, setActiveTab] = useState('map');
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['geofences'],
-    queryFn: () => fetch('/api/geofences?includeInactive=true').then(r => r.json()) as Promise<{ geofences: GeofenceItem[] }>,
-  });
-
+  const effectiveSections = useEffectiveSections();
   const isStudent = currentUser?.role === 'student';
-  const canManageGeofences = currentUser ? GEOFENCE_WRITE_ROLES.includes(currentUser.role) : false;
+  const canManageGeofences = currentUser
+    ? effectiveSections.includes('geofences') && GEOFENCE_WRITE_ROLES.includes(currentUser.role)
+    : false;
+
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ['geofences', canManageGeofences],
+    queryFn: () => fetchGeofences(canManageGeofences),
+    enabled: !!currentUser,
+  });
+  const defaultRadius = String(data?.defaults?.radiusMeters ?? 100);
   const activeSessionsQuery = isStudent && currentUser ? `?studentId=${currentUser.id}` : '';
 
   const { data: activeSessionsData } = useQuery({
@@ -590,7 +641,7 @@ export default function GeofencesSection() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['geofences'] });
       setShowCreate(false);
-      setNewFence({ name: '', type: 'circle', centerLat: '17.4563', centerLng: '78.6698', radiusMtrs: '200', building: '', floor: '' });
+      setNewFence({ name: '', type: 'circle', centerLat: '17.4563', centerLng: '78.6698', radiusMtrs: defaultRadius, building: '', floor: '' });
       toast({ title: 'Geofence Created', description: 'New geofence boundary has been added.' });
     },
     onError: (err) => {
@@ -713,6 +764,15 @@ export default function GeofencesSection() {
         )}
       </div>
 
+      {isError && (
+        <Card className="border-red-200 bg-red-50 dark:bg-red-950/20">
+          <CardContent className="p-4 flex items-center gap-2 text-sm text-red-700 dark:text-red-400">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            Failed to load geofences: {(error as Error)?.message || 'Unknown error'}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Stats */}
       <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
         <Card className="py-3">
@@ -764,6 +824,7 @@ export default function GeofencesSection() {
                   userLocation={userLocation}
                   onGeofenceClick={handleGeofenceClick}
                   selectedSession={null}
+                  mapVisible={activeTab === 'map'}
                 />
               </CardContent>
             </Card>
@@ -808,11 +869,17 @@ export default function GeofencesSection() {
                                 )}
                               </div>
                               <div className="mt-1.5 text-xs text-muted-foreground space-y-0.5">
-                                {g.centerLat && g.centerLng && (
-                                  <p>{g.centerLat.toFixed(4)}, {g.centerLng.toFixed(4)}</p>
+                                {g.type === 'polygon' ? (
+                                  <p>Polygon boundary{g.building ? ` • ${g.building}` : ''}</p>
+                                ) : (
+                                  <>
+                                    {g.centerLat != null && g.centerLng != null && (
+                                      <p>{g.centerLat.toFixed(4)}, {g.centerLng.toFixed(4)}</p>
+                                    )}
+                                    {g.radiusMtrs && <p>Radius: {g.radiusMtrs}m</p>}
+                                    {g.building && <p>Building: {g.building}</p>}
+                                  </>
                                 )}
-                                {g.radiusMtrs && <p>Radius: {g.radiusMtrs}m</p>}
-                                {g.building && <p>Building: {g.building}</p>}
                               </div>
                               {hasActive && (
                                 <div className="mt-2 pt-2 border-t border-green-200 dark:border-green-800">
@@ -884,7 +951,11 @@ export default function GeofencesSection() {
                             </Badge>
                           </TableCell>
                           <TableCell className="text-xs font-mono text-muted-foreground">
-                            {g.centerLat ? `${g.centerLat.toFixed(4)}, ${g.centerLng?.toFixed(4)}` : '-'}
+                            {g.type === 'polygon'
+                              ? `${parsePolygonData(g.polygonData)?.length ?? 0} vertices`
+                              : g.centerLat != null
+                                ? `${g.centerLat.toFixed(4)}, ${g.centerLng?.toFixed(4)}`
+                                : '-'}
                           </TableCell>
                           <TableCell className="text-sm">{g.building || '-'}</TableCell>
                           <TableCell className="text-sm">{g.radiusMtrs ? `${g.radiusMtrs}m` : '-'}</TableCell>

@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
-import { requireRoles } from '@/lib/auth-helpers';
+import { requireSection } from '@/lib/auth-helpers';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { getClientIp } from '@/lib/audit';
 import { enrichAuditLogsWithAnchors, AUDIT_ANCHOR_ACTIONS } from '@/lib/knuct/anchor-audit';
@@ -10,7 +10,7 @@ export async function GET(request: Request) {
     const limited = await enforceRateLimit(`audit:${getClientIp(request) ?? 'anon'}`, 30, 60_000);
     if (limited) return limited;
 
-    const { error, session } = await requireRoles(['super_admin', 'admin']);
+    const { error, session } = await requireSection('settings');
     if (error || !session) return error;
 
     const { searchParams } = new URL(request.url);

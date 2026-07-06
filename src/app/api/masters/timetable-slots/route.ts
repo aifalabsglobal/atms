@@ -1,13 +1,10 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
-import {
-  requireMastersRead,
-  auditMasterMutation,
-} from '@/lib/masters-helpers';
-import { getCampusScope } from '@/lib/auth-helpers';
+import { requireAnySection, getCampusScope } from '@/lib/auth-helpers';
 import { rateLimitByUser } from '@/lib/api-rate-limit';
 import {
-  assertCourseInDepartmentForHod,
+  assertCourseWritableForTimetable,
+  assertTimetableSlotInScope,
   buildTimetableWhere,
   findOverlappingSlot,
   parseOptionalDayParam,
@@ -15,10 +12,13 @@ import {
   validateTimetableSlotInput,
 } from '@/lib/timetable-helpers';
 import type { Role } from '@/lib/store';
+import { auditMasterMutation } from '@/lib/masters-helpers';
+
+const TIMETABLE_WRITE_ROLES: Role[] = ['super_admin', 'admin', 'hod', 'faculty', 'lab_assistant'];
 
 async function requireTimetableWrite(session: { user: { id: string; role: string } }) {
   const role = session.user.role as Role;
-  if (!['super_admin', 'admin', 'hod'].includes(role)) {
+  if (!TIMETABLE_WRITE_ROLES.includes(role)) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
   return null;
@@ -26,7 +26,7 @@ async function requireTimetableWrite(session: { user: { id: string; role: string
 
 export async function GET(request: Request) {
   try {
-    const { error, session } = await requireMastersRead();
+    const { error, session } = await requireAnySection(['attendance', 'masters']);
     if (error || !session) return error;
 
     const scope = await getCampusScope(session);
@@ -72,7 +72,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { error, session } = await requireMastersRead();
+    const { error, session } = await requireAnySection(['attendance', 'masters']);
     if (error || !session) return error;
 
     const writeError = await requireTimetableWrite(session);
@@ -85,8 +85,8 @@ export async function POST(request: Request) {
     const validated = validateTimetableSlotInput(body);
     if ('status' in validated) return toValidationResponse(validated);
 
-    const deptError = await assertCourseInDepartmentForHod(session, validated.courseId);
-    if (deptError) return deptError;
+    const scopeError = await assertCourseWritableForTimetable(session, validated.courseId);
+    if (scopeError) return scopeError;
 
     const course = await db.course.findUnique({ where: { id: validated.courseId }, select: { id: true } });
     if (!course) {
@@ -130,7 +130,7 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const { error, session } = await requireMastersRead();
+    const { error, session } = await requireAnySection(['attendance', 'masters']);
     if (error || !session) return error;
 
     const writeError = await requireTimetableWrite(session);
@@ -146,7 +146,8 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 });
     }
 
-    const existing = await db.timetableSlot.findUnique({ where: { id } });
+    const { error: slotScopeError, slot: existing } = await assertTimetableSlotInScope(session, id);
+    if (slotScopeError) return slotScopeError;
     if (!existing) {
       return NextResponse.json({ error: 'Timetable slot not found' }, { status: 404 });
     }
@@ -167,8 +168,8 @@ export async function PUT(request: Request) {
     const validated = validateTimetableSlotInput(merged);
     if ('status' in validated) return toValidationResponse(validated);
 
-    const deptError = await assertCourseInDepartmentForHod(session, validated.courseId);
-    if (deptError) return deptError;
+    const scopeError = await assertCourseWritableForTimetable(session, validated.courseId);
+    if (scopeError) return scopeError;
 
     if (validated.semesterId) {
       const semester = await db.semester.findUnique({ where: { id: validated.semesterId }, select: { id: true } });
@@ -206,7 +207,7 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const { error, session } = await requireMastersRead();
+    const { error, session } = await requireAnySection(['attendance', 'masters']);
     if (error || !session) return error;
 
     const writeError = await requireTimetableWrite(session);
@@ -221,22 +222,28 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'id is required' }, { status: 400 });
     }
 
-    const existing = await db.timetableSlot.findUnique({
-      where: { id },
-      include: { _count: { select: { attendanceSessions: true } } },
-    });
+    const { error: slotScopeError, slot: existing } = await assertTimetableSlotInScope(session, id);
+    if (slotScopeError) return slotScopeError;
     if (!existing) {
       return NextResponse.json({ error: 'Timetable slot not found' }, { status: 404 });
     }
 
-    const deptError = await assertCourseInDepartmentForHod(session, existing.courseId);
-    if (deptError) return deptError;
+    const existingWithCount = await db.timetableSlot.findUnique({
+      where: { id },
+      include: { _count: { select: { attendanceSessions: true } } },
+    });
+    if (!existingWithCount) {
+      return NextResponse.json({ error: 'Timetable slot not found' }, { status: 404 });
+    }
 
-    if (existing._count.attendanceSessions > 0) {
+    const scopeError = await assertCourseWritableForTimetable(session, existingWithCount.courseId);
+    if (scopeError) return scopeError;
+
+    if (existingWithCount._count.attendanceSessions > 0) {
       return NextResponse.json(
         {
           error: 'Cannot delete slot with attendance history. Set isActive to false instead.',
-          sessionCount: existing._count.attendanceSessions,
+          sessionCount: existingWithCount._count.attendanceSessions,
         },
         { status: 409 },
       );

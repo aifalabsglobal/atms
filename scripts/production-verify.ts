@@ -43,6 +43,7 @@ const steps: Step[] = [
       return ok;
     },
   },
+  { name: 'Geofence integration verify', run: () => runNpm('verify:geofences') },
   { name: 'Timetable integration verify', run: () => runNpm('verify:timetable') },
   { name: 'Production build', run: () => runNpm('build') },
 ];

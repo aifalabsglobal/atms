@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
-import { requireAuth, STAFF_ROLES, requireRoles } from '@/lib/auth-helpers';
+import { requireSection, requireStaffSection } from '@/lib/auth-helpers';
 import { logAudit, getClientIp } from '@/lib/audit';
 import { enqueueAnchor } from '@/lib/knuct/anchor-service';
 import type { Role } from '@/lib/store';
@@ -9,7 +9,7 @@ const PUBLIC_EVENT_TYPES = ['academic', 'exam', 'holiday', 'event', 'deadline', 
 
 export async function GET(request: Request) {
   try {
-    const { error, session } = await requireAuth();
+    const { error, session } = await requireSection('calendar');
     if (error || !session) return error;
 
     const role = session.user.role as Role;
@@ -94,7 +94,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { error, session } = await requireRoles(STAFF_ROLES);
+    const { error, session } = await requireStaffSection('calendar');
     if (error || !session) return error;
 
     const body = await request.json();
@@ -176,7 +176,7 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const { error } = await requireRoles(STAFF_ROLES);
+    const { error } = await requireStaffSection('calendar');
     if (error) return error;
 
     const body = await request.json();
@@ -225,7 +225,7 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   try {
-    const { error } = await requireRoles(STAFF_ROLES);
+    const { error } = await requireStaffSection('calendar');
     if (error) return error;
 
     const { searchParams } = new URL(request.url);

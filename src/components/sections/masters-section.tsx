@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useAppStore } from '@/lib/store';
+import { useAppStore, useIsMastersReadOnly, useCanManageTimetable } from '@/lib/store';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -891,7 +891,7 @@ function TimetableTab({ semesters, readOnly }: { semesters: any[]; readOnly?: bo
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
           <div>
             <CardTitle className="text-lg">Timetable Slots</CardTitle>
-            <CardDescription>Weekly class schedule linked to courses — used when starting attendance sessions</CardDescription>
+            <CardDescription>Weekly class schedule linked to courses — faculty configure theirs under Attendance → Weekly Timetable</CardDescription>
             {!slotsLoading && slotsData?.total != null && (
               <p className="text-xs text-muted-foreground mt-1">{slotsData.total} slot{slotsData.total !== 1 ? 's' : ''} total</p>
             )}
@@ -1038,10 +1038,10 @@ export default function MastersSection() {
 
   const isLoading = dL || ayL || semL || subjL || progL;
 
-  if (!currentUser) return null;
+  const mastersReadOnly = useIsMastersReadOnly();
+  const timetableReadOnly = !useCanManageTimetable();
 
-  const mastersReadOnly = currentUser.role === 'hod';
-  const timetableReadOnly = !['super_admin', 'admin', 'hod'].includes(currentUser.role);
+  if (!currentUser) return null;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">

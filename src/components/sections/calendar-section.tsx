@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useAppStore } from '@/lib/store';
+import { useAppStore, useCanEditCalendar } from '@/lib/store';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -59,8 +59,6 @@ const SEMESTER_RANGES: Record<Exclude<SemesterFilter, 'all'>, {
     jumpMonth: 1,
   },
 };
-
-const STAFF_ROLES: Role[] = ['super_admin', 'admin', 'hod', 'faculty', 'lab_assistant', 'security'];
 
 const EVENT_TYPE_CONFIG: Record<string, { label: string; color: string; icon: React.ElementType }> = {
   academic: { label: 'Academic', color: '#22c55e', icon: GraduationCap },
@@ -248,7 +246,7 @@ export default function CalendarSection() {
   const [form, setForm] = useState<EventFormState>(EMPTY_FORM);
   const monthInitialized = useRef(false);
 
-  const isStaff = currentUser ? STAFF_ROLES.includes(currentUser.role) : false;
+  const canEditCalendar = useCanEditCalendar();
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth();
   const todayStr = dateStr(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
@@ -483,7 +481,7 @@ export default function CalendarSection() {
           </h1>
           <p className="text-sm text-muted-foreground mt-1">{aySubtitle}</p>
         </div>
-        {isStaff && (
+        {canEditCalendar && (
           <Button onClick={() => openCreate()} className="gap-1.5 text-white" style={{ backgroundColor: NAVY }}>
             <Plus className="h-4 w-4" />
             Add Event
@@ -784,7 +782,7 @@ export default function CalendarSection() {
               ))
             )}
           </div>
-          {isStaff && dayDialogDate && (
+          {canEditCalendar && dayDialogDate && (
             <DialogFooter>
               <Button variant="outline" onClick={() => { setDayDialogDate(null); openCreate(dayDialogDate); }}>
                 <Plus className="h-4 w-4 mr-1.5" /> Add event on this day
@@ -828,7 +826,7 @@ export default function CalendarSection() {
                   <p className="text-muted-foreground leading-relaxed border-t pt-3">{detailEvent.description}</p>
                 )}
               </div>
-              {isStaff && (
+              {canEditCalendar && (
                 <DialogFooter>
                   <Button variant="outline" onClick={() => { openEdit(detailEvent); setDetailEvent(null); }}>
                     <Pencil className="h-4 w-4 mr-1.5" /> Edit

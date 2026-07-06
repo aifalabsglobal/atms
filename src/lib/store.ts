@@ -1,8 +1,9 @@
 import { create } from 'zustand';
+import { DEFAULT_ROLE_SECTIONS } from '@/lib/rbac-defaults';
+import { STAFF_ROLES } from '@/lib/user-management';
+import type { Role, Section } from '@/lib/roles';
 
-export type Section = 'dashboard' | 'attendance' | 'lms' | 'users' | 'violations' | 'reports' | 'geofences' | 'calendar' | 'masters' | 'settings';
-
-export type Role = 'super_admin' | 'admin' | 'hod' | 'faculty' | 'lab_assistant' | 'student' | 'parent' | 'visitor' | 'security';
+export type { Role, Section } from '@/lib/roles';
 
 export interface CurrentUser {
   id: string;
@@ -101,19 +102,19 @@ export const ROLE_PRESETS: Record<Role, CurrentUser> = {
   },
 };
 
-export const ROLE_SECTIONS: Record<Role, Section[]> = {
-  super_admin: ['dashboard', 'masters', 'attendance', 'lms', 'users', 'violations', 'reports', 'geofences', 'calendar', 'settings'],
-  admin: ['dashboard', 'masters', 'attendance', 'lms', 'users', 'violations', 'reports', 'geofences', 'calendar', 'settings'],
-  hod: ['dashboard', 'masters', 'attendance', 'lms', 'users', 'violations', 'reports', 'geofences', 'calendar'],
-  faculty: ['dashboard', 'attendance', 'lms', 'violations', 'reports', 'calendar'],
-  lab_assistant: ['dashboard', 'attendance', 'geofences', 'calendar'],
-  student: ['dashboard', 'attendance', 'lms', 'reports', 'geofences', 'calendar'],
-  parent: ['dashboard', 'attendance', 'lms', 'reports', 'calendar'],
-  visitor: ['dashboard', 'geofences', 'calendar'],
-  security: ['dashboard', 'attendance', 'violations', 'geofences', 'calendar'],
-};
+/** @deprecated Prefer useRoleSections() or roleSections from store — defaults only. */
+export const ROLE_SECTIONS = DEFAULT_ROLE_SECTIONS;
+export { DEFAULT_ROLE_SECTIONS };
+
+export function resolveRoleSections(matrix: Record<Role, Section[]> | null | undefined): Record<Role, Section[]> {
+  return matrix ?? DEFAULT_ROLE_SECTIONS;
+}
 
 export const GEOFENCE_WRITE_ROLES: Role[] = ['super_admin', 'admin', 'hod', 'faculty', 'lab_assistant', 'security'];
+export const TIMETABLE_WRITE_ROLES: Role[] = ['super_admin', 'admin', 'hod', 'faculty', 'lab_assistant'];
+export const LMS_WRITE_ROLES: Role[] = ['super_admin', 'admin', 'faculty', 'lab_assistant'];
+export const MASTERS_WRITE_ROLES: Role[] = ['super_admin', 'admin'];
+export { STAFF_ROLES };
 
 export const ROLE_COLORS: Record<Role, string> = {
   super_admin: '#1A3C6E',
@@ -146,22 +147,39 @@ interface AppState {
   currentUser: CurrentUser | null;
   setCurrentUser: (user: CurrentUser | null) => void;
   clearUser: () => void;
+  roleSections: Record<Role, Section[]> | null;
+  setRoleSections: (matrix: Record<Role, Section[]> | null) => void;
+  userEffectiveSections: Section[] | null;
+  setUserEffectiveSections: (sections: Section[] | null) => void;
   roleSwitching: string | null;
   setRoleSwitching: (label: string | null) => void;
+}
+
+function sectionsForUser(
+  user: CurrentUser | null,
+  roleSections: Record<Role, Section[]> | null,
+  userEffectiveSections: Section[] | null,
+): Section[] {
+  if (userEffectiveSections?.length) return userEffectiveSections;
+  if (!user) return ['dashboard'];
+  const matrix = resolveRoleSections(roleSections);
+  return matrix[user.role] ?? DEFAULT_ROLE_SECTIONS[user.role] ?? ['dashboard'];
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
   activeSection: 'dashboard',
   setActiveSection: (section) => {
     const user = get().currentUser;
-    if (user && !ROLE_SECTIONS[user.role].includes(section)) return;
+    const allowed = sectionsForUser(user, get().roleSections, get().userEffectiveSections);
+    if (user && !allowed.includes(section)) return;
     set({ activeSection: section });
   },
   sectionContext: null,
   setSectionContext: (ctx) => set({ sectionContext: ctx }),
   navigateToSection: (section, ctx) => {
     const user = get().currentUser;
-    if (user && !ROLE_SECTIONS[user.role].includes(section)) return;
+    const allowed = sectionsForUser(user, get().roleSections, get().userEffectiveSections);
+    if (user && !allowed.includes(section)) return;
     set({ activeSection: section, sectionContext: ctx ?? null });
   },
   sidebarOpen: false,
@@ -179,7 +197,85 @@ export const useAppStore = create<AppState>((set, get) => ({
       ...(roleChanged ? { activeSection: 'dashboard' as Section } : {}),
     });
   },
-  clearUser: () => set({ currentUser: null, activeSection: 'dashboard', sectionContext: null, roleSwitching: null }),
+  clearUser: () =>
+    set({
+      currentUser: null,
+      activeSection: 'dashboard',
+      sectionContext: null,
+      roleSwitching: null,
+      roleSections: null,
+      userEffectiveSections: null,
+    }),
+  roleSections: null,
+  setRoleSections: (matrix) => set({ roleSections: matrix }),
+  userEffectiveSections: null,
+  setUserEffectiveSections: (sections) => set({ userEffectiveSections: sections }),
   roleSwitching: null,
   setRoleSwitching: (label) => set({ roleSwitching: label }),
 }));
+
+export function useRoleSections(): Record<Role, Section[]> {
+  const matrix = useAppStore((s) => s.roleSections);
+  return resolveRoleSections(matrix);
+}
+
+/** Effective nav sections for the logged-in user (role matrix + user overrides). */
+export function useEffectiveSections(): Section[] {
+  const user = useAppStore((s) => s.currentUser);
+  const userEffective = useAppStore((s) => s.userEffectiveSections);
+  const roleMatrix = useRoleSections();
+  if (userEffective?.length) return userEffective;
+  if (user) return roleMatrix[user.role] ?? DEFAULT_ROLE_SECTIONS[user.role] ?? ['dashboard'];
+  return ['dashboard'];
+}
+
+export function useSectionAccess(section: Section): boolean {
+  const sections = useEffectiveSections();
+  return sections.includes(section);
+}
+
+/** Section RBAC + role capability (e.g. HOD has masters section but read-only). */
+export function useSectionWrite(section: Section, writeRoles: Role[]): boolean {
+  const user = useAppStore((s) => s.currentUser);
+  const sections = useEffectiveSections();
+  if (!user) return false;
+  return sections.includes(section) && writeRoles.includes(user.role);
+}
+
+export function useCanEditCalendar(): boolean {
+  return useSectionWrite('calendar', STAFF_ROLES);
+}
+
+export function useCanWriteMasters(): boolean {
+  return useSectionWrite('masters', MASTERS_WRITE_ROLES);
+}
+
+export function useIsMastersReadOnly(): boolean {
+  const user = useAppStore((s) => s.currentUser);
+  const sections = useEffectiveSections();
+  if (!user || !sections.includes('masters')) return true;
+  return user.role === 'hod' || !MASTERS_WRITE_ROLES.includes(user.role);
+}
+
+export function useCanManageTimetable(): boolean {
+  const user = useAppStore((s) => s.currentUser);
+  const sections = useEffectiveSections();
+  if (!user) return false;
+  const hasScope = sections.includes('attendance') || sections.includes('masters');
+  return hasScope && TIMETABLE_WRITE_ROLES.includes(user.role);
+}
+
+export function useCanWriteLms(): boolean {
+  return useSectionWrite('lms', LMS_WRITE_ROLES);
+}
+
+export function useCanViewLmsRoster(): boolean {
+  const user = useAppStore((s) => s.currentUser);
+  const sections = useEffectiveSections();
+  if (!user || !sections.includes('lms')) return false;
+  return user.role === 'hod' || LMS_WRITE_ROLES.includes(user.role);
+}
+
+export function useCanStaffAttendance(): boolean {
+  return useSectionWrite('attendance', STAFF_ROLES);
+}

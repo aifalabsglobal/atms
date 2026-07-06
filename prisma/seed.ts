@@ -1,6 +1,8 @@
 import { db } from '@/lib/db';
 import bcrypt from 'bcryptjs';
 import { CALENDAR_SEED_EVENTS } from './calendar-events-data';
+import { DEFAULT_ROLE_SECTIONS } from '../src/lib/rbac-defaults';
+import { cloneDefaultSystemConfig } from '../src/lib/system-config-defaults';
 
 function localDateStr(d: Date): string {
   const y = d.getFullYear();
@@ -66,6 +68,7 @@ async function main() {
   await db.biometricRecord.deleteMany();
   await db.faceEmbedding.deleteMany();
   await db.geofence.deleteMany();
+  await db.rbacConfig.deleteMany();
   await db.user.deleteMany();
   await db.department.deleteMany();
 
@@ -882,6 +885,13 @@ async function main() {
   const eventCount = await db.calendarEvent.count();
   const programCount = await db.program.count();
 
+  console.log('📦 Seeding RBAC configuration...');
+  await db.rbacConfig.upsert({
+    where: { id: 'default' },
+    create: { id: 'default', matrix: DEFAULT_ROLE_SECTIONS },
+    update: { matrix: DEFAULT_ROLE_SECTIONS },
+  });
+
   console.log('✅ JNTUH SCMS Seed completed successfully!');
   console.log(`   Departments: ${deptCount}`);
   console.log(`   Academic Years: 1`);
@@ -894,6 +904,13 @@ async function main() {
   console.log(`   Attendance Records: ${recordCount}`);
   console.log(`   Violations: ${violationCount}`);
   console.log(`   Calendar Events: ${eventCount}`);
+
+  await db.systemConfig.upsert({
+    where: { id: 'default' },
+    create: { id: 'default', settings: cloneDefaultSystemConfig() },
+    update: {},
+  });
+  console.log('   System config: defaults ensured');
 }
 
 main()

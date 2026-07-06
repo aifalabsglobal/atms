@@ -11,7 +11,7 @@ import {
   XCircle, Loader2, Trophy, Target, Zap, Plus, Code2, Pencil, Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useAppStore } from '@/lib/store';
+import { useAppStore, useCanWriteLms, useCanViewLmsRoster, useSectionWrite, MASTERS_WRITE_ROLES } from '@/lib/store';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -1368,17 +1368,18 @@ export default function LmsSection() {
     }
   }, [sectionContext, setSectionContext]);
 
+  const canWriteLms = useCanWriteLms();
+  const isHodLmsReadOnly = useCanViewLmsRoster() && !canWriteLms;
+  const canCreateCourse = useSectionWrite('lms', MASTERS_WRITE_ROLES);
+  const canDeleteCourse = useSectionWrite('lms', MASTERS_WRITE_ROLES);
+  const canManage = canWriteLms || isHodLmsReadOnly;
+
   if (!currentUser) return null;
   const isStudent = currentUser.role === 'student';
   const isParent = currentUser.role === 'parent';
   const isLearner = isStudent || isParent;
   const learnerQueryKey = isStudent ? currentUser.id : isParent ? (currentUser.linkedStudentId ?? 'ward') : 'all';
   const learnerStudentId = isStudent ? currentUser.id : currentUser.linkedStudentId;
-  const canManage = ['super_admin', 'admin', 'faculty', 'lab_assistant', 'hod'].includes(currentUser.role);
-  const canWriteLms = ['super_admin', 'admin', 'faculty', 'lab_assistant'].includes(currentUser.role);
-  const isHodLmsReadOnly = currentUser.role === 'hod';
-  const canCreateCourse = ['super_admin', 'admin'].includes(currentUser.role);
-  const canDeleteCourse = ['super_admin', 'admin'].includes(currentUser.role);
   const qc = useQueryClient();
   const deleteAssignmentMut = useMutation({
     mutationFn: async (id: string) => {

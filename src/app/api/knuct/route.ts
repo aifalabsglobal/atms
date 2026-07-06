@@ -1,30 +1,29 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
 import {
   getKnuctDashboardStats,
   getKnuctHealth,
   getUserKnuctWallet,
-  provisionWallet,
+  queueWalletProvision,
 } from '@/lib/knuct';
-import { getKnuctConfig } from '@/lib/knuct/config';
+import { getKnuctPublicConfig } from '@/lib/knuct/config';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { getClientIp } from '@/lib/audit';
+import { requireAuth, canAccessSection } from '@/lib/auth-helpers';
+import type { Role } from '@/lib/store';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function GET() {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const { error, session } = await requireAuth();
+    if (error || !session) return error;
 
-    const role = session.user.role;
-    const config = getKnuctConfig();
+    const role = session.user.role as Role;
+    const config = getKnuctPublicConfig();
+    const hasSettings = await canAccessSection(role, 'settings', session.user.id);
 
-    if (role === 'super_admin') {
+    if (role === 'super_admin' && hasSettings) {
       const [health, stats, ownWallet] = await Promise.all([
         getKnuctHealth(),
         getKnuctDashboardStats(),
@@ -33,7 +32,7 @@ export async function GET() {
       return NextResponse.json({ config, health, stats, wallet: ownWallet });
     }
 
-    if (role === 'admin') {
+    if (role === 'admin' && hasSettings) {
       const [health, ownWallet] = await Promise.all([
         getKnuctHealth(),
         getUserKnuctWallet(session.user.id),
@@ -55,22 +54,23 @@ export async function POST(request: Request) {
     const limited = await enforceRateLimit(`knuct-provision:${getClientIp(request) ?? 'anon'}`, 10, 60_000);
     if (limited) return limited;
 
-    const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const { error, session } = await requireAuth();
+    if (error || !session) return error;
 
-    const role = session.user.role;
+    const role = session.user.role as Role;
     const body = await request.json().catch(() => ({}));
     const targetUserId = (body.userId as string | undefined) ?? session.user.id;
 
-    if (targetUserId !== session.user.id && role !== 'super_admin' && role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    if (targetUserId !== session.user.id) {
+      const hasSettings = await canAccessSection(role, 'settings', session.user.id);
+      if (!hasSettings || (role !== 'super_admin' && role !== 'admin')) {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
     }
 
-    await provisionWallet(targetUserId);
+    await queueWalletProvision(targetUserId);
     const wallet = await getUserKnuctWallet(targetUserId);
-    return NextResponse.json({ wallet });
+    return NextResponse.json({ wallet, queued: true });
   } catch (error) {
     console.error('[knuct] provision error:', error);
     return NextResponse.json({ error: 'Wallet provisioning failed' }, { status: 500 });

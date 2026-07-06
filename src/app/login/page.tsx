@@ -3,7 +3,7 @@
 import { signIn } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { GraduationCap, Loader2, Check, Share2, User, Users, Shield, BookOpen, ChevronDown } from 'lucide-react';
+import { GraduationCap, Loader2, Check, Share2, User, Users, Shield, BookOpen, ChevronDown, Crown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,9 +17,10 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 
 const QUICK_TRY = [
-  { label: 'Student', email: 'student.ravi@jntuh.ac.in', icon: User, color: '#2563eb' },
-  { label: 'Faculty', email: 'faculty.venkat@jntuh.ac.in', icon: Users, color: '#1B6B4A' },
+  { label: 'Super Admin', email: 'vice.chancellor@jntuh.ac.in', icon: Crown, color: '#1A3C6E' },
   { label: 'Admin', email: 'registrar@jntuh.ac.in', icon: Shield, color: '#7c3aed' },
+  { label: 'Faculty', email: 'faculty.venkat@jntuh.ac.in', icon: Users, color: '#1B6B4A' },
+  { label: 'Student', email: 'student.ravi@jntuh.ac.in', icon: User, color: '#2563eb' },
 ] as const;
 
 export default function LoginPage() {
@@ -36,6 +37,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     setMounted(true);
+    setEmail('vice.chancellor@jntuh.ac.in');
     setPassword(DEMO_PASSWORD);
   }, []);
 
@@ -148,7 +150,7 @@ export default function LoginPage() {
               <div className="space-y-4">
                 <div>
                   <p className="text-xs font-medium text-muted-foreground mb-2">Try instantly — no setup needed</p>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 gap-2">
                     {QUICK_TRY.map((q) => {
                       const Icon = q.icon;
                       const isLoading = loadingEmail === q.email;
