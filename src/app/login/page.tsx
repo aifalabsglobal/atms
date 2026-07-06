@@ -1,8 +1,7 @@
 'use client';
 
-import { signIn } from 'next-auth/react';
+import { signIn, getSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { GraduationCap, Loader2, Check, Share2, User, Users, Shield, BookOpen, ChevronDown, Crown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,7 +23,6 @@ const QUICK_TRY = [
 ] as const;
 
 export default function LoginPage() {
-  const router = useRouter();
   const { toast } = useToast();
   const [mounted, setMounted] = useState(false);
   const [email, setEmail] = useState('');
@@ -44,18 +42,38 @@ export default function LoginPage() {
   const signInAs = async (targetEmail: string, targetPassword = DEMO_PASSWORD) => {
     setLoadingEmail(targetEmail);
     setError('');
-    const result = await signIn('credentials', {
-      email: targetEmail,
-      password: targetPassword,
-      redirect: false,
-    });
-    setLoadingEmail(null);
-    if (result?.error) {
-      setError('Invalid email or password. If this is a fresh install, run npm run db:seed to load demo users.');
-      return;
+    try {
+      const result = await signIn('credentials', {
+        email: targetEmail,
+        password: targetPassword,
+        redirect: false,
+      });
+      if (result?.error) {
+        const msg =
+          result.error === 'Configuration'
+            ? 'Auth is misconfigured on the server. Set NEXTAUTH_URL to your Vercel domain and a strong NEXTAUTH_SECRET.'
+            : result.error === 'TooManyRequests'
+              ? 'Too many login attempts. Wait a minute and try again.'
+              : 'Invalid email or password. On a fresh deploy, seed the database (npm run db:seed).';
+        setError(msg);
+        return;
+      }
+
+      // Cold serverless + DB can take 15–30s; wait for session cookie before navigating.
+      for (let i = 0; i < 8; i++) {
+        const session = await getSession();
+        if (session?.user?.email) {
+          window.location.assign('/');
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      window.location.assign('/');
+    } catch {
+      setError('Login failed — the server may be waking up. Please try again in a few seconds.');
+    } finally {
+      setLoadingEmail(null);
     }
-    router.push('/');
-    router.refresh();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

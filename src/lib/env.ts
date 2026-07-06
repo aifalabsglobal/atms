@@ -21,7 +21,18 @@ export type Env = z.infer<typeof envSchema>;
 
 let cached: Env | null = null;
 
+/** Vercel sets VERCEL_URL per deployment; NextAuth needs NEXTAUTH_URL for cookies/sessions. */
+export function applyPlatformDefaults(): void {
+  if (!process.env.NEXTAUTH_URL && process.env.VERCEL_URL) {
+    process.env.NEXTAUTH_URL = `https://${process.env.VERCEL_URL}`;
+  }
+  if (!process.env.NEXTAUTH_URL && process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    process.env.NEXTAUTH_URL = `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  }
+}
+
 export function validateEnv(): Env {
+  applyPlatformDefaults();
   const parsed = envSchema.safeParse(process.env);
   if (!parsed.success) {
     const details = parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; ');
@@ -60,6 +71,7 @@ export function validateEnv(): Env {
 
 export function ensureEnv(): Env {
   if (cached) return cached;
+  applyPlatformDefaults();
   if (process.env.NEXT_PHASE === 'phase-production-build') {
     return envSchema.parse({
       ...process.env,
