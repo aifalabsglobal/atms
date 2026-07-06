@@ -15,8 +15,9 @@ import { Switch } from '@/components/ui/switch';
 import {
   Settings as SettingsIcon, Shield, Bell, Database, Server,
   ScanFace, MapPin, Clock, Lock, CheckCircle, X as XIcon, ScrollText,
-  Link2, RefreshCw, Wallet, Save, RotateCcw, UserCircle, Trash2,
+  Link2, RefreshCw, Wallet, Save, RotateCcw, UserCircle, Trash2, Download,
 } from 'lucide-react';
+import { KnuctDIDAuthPanel } from '@/components/knuct/did-auth-panel';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAppStore, ROLE_LABELS, useRoleSections, useSectionAccess, type Role, type Section } from '@/lib/store';
 import { ALL_ROLES, DEFAULT_ROLE_SECTIONS } from '@/lib/rbac-defaults';
@@ -1131,6 +1132,11 @@ export default function SettingsSection() {
                       </div>
                     )}
 
+                    {/* DID Authentication — private share upload, runs entirely in browser */}
+                    <KnuctDIDAuthPanel
+                      onSuccess={() => refetchKnuct()}
+                    />
+
                     <div className="flex gap-2">
                       <Button
                         size="sm"
@@ -1142,6 +1148,14 @@ export default function SettingsSection() {
                         <RefreshCw className={`h-3.5 w-3.5 ${provisionMutation.isPending ? 'animate-spin' : ''}`} />
                         {knuctData?.wallet?.status === 'active' ? 'Re-provision wallet' : 'Provision my wallet'}
                       </Button>
+                      {knuctData?.wallet?.status === 'active' && (
+                        <Button size="sm" variant="outline" className="gap-2" asChild>
+                          <a href="/api/knuct/privshare" download>
+                            <Download className="h-3.5 w-3.5" />
+                            Download private share
+                          </a>
+                        </Button>
+                      )}
                       <Button size="sm" variant="ghost" onClick={() => refetchKnuct()}>Refresh status</Button>
                       <Button size="sm" variant="ghost" asChild>
                         <Link href="/verify" target="_blank">Public verify page</Link>

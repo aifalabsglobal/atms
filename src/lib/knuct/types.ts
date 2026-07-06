@@ -15,6 +15,16 @@ export interface KnuctAdapter {
     seedWords: [string, string, string, string]
   ): Promise<KnuctWalletResult>;
   fetchPrivateShare(privShareUrl: string): Promise<KnuctPrivShare>;
+  authChallenge(hash: string): Promise<string>;
+  authResponse(response: number[]): Promise<void>;
+  startNode(): Promise<void>;
+  walletData(): Promise<KnuctWalletData>;
+  logout(): Promise<void>;
+}
+
+export interface KnuctWalletData {
+  did: string;
+  [key: string]: unknown;
 }
 
 export interface KnuctConfig {

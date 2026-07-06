@@ -1,5 +1,5 @@
 import { randomBytes } from 'crypto';
-import type { KnuctAdapter, KnuctPrivShare, KnuctWalletResult } from './types';
+import type { KnuctAdapter, KnuctPrivShare, KnuctWalletData, KnuctWalletResult } from './types';
 
 /** Deterministic mock adapter for dev/CI when KNUCT_ENABLED=false or circuit is open. */
 export class MockKnuctAdapter implements KnuctAdapter {
@@ -22,6 +22,28 @@ export class MockKnuctAdapter implements KnuctAdapter {
       raw: Buffer.from(`mock-privshare:${privShareUrl}:${Date.now()}`, 'utf8'),
       fetchedAt: new Date(),
     };
+  }
+
+  async authChallenge(_hash: string): Promise<string> {
+    await delay(15);
+    return randomBytes(32).toString('hex');
+  }
+
+  async authResponse(_response: number[]): Promise<void> {
+    await delay(15);
+  }
+
+  async startNode(): Promise<void> {
+    await delay(20);
+  }
+
+  async walletData(): Promise<KnuctWalletData> {
+    await delay(15);
+    return { did: `QmMock${randomBytes(16).toString('hex')}` };
+  }
+
+  async logout(): Promise<void> {
+    await delay(5);
   }
 }
 

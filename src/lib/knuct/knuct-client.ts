@@ -4,7 +4,7 @@ import {
   recordKnuctFailure,
   recordKnuctSuccess,
 } from './circuit-breaker';
-import type { KnuctAdapter, KnuctPrivShare, KnuctWalletResult } from './types';
+import type { KnuctAdapter, KnuctPrivShare, KnuctWalletData, KnuctWalletResult } from './types';
 
 const DEFAULT_REQUEST_TIMEOUT_MS = Math.max(
   5_000,
@@ -78,6 +78,50 @@ export class KnuctHttpAdapter implements KnuctAdapter {
       throw new Error('Knuct createwallet response missing did or privshare URL');
     }
     return { did, privShareUrl };
+  }
+
+  /** Step 1 of DID auth: send hash derived from privshare image, get back challenge string */
+  async authChallenge(hash: string): Promise<string> {
+    const res = await this.request<{ data?: { challenge?: string }; challenge?: string }>(
+      'POST',
+      '/sapi/auth/challenge',
+      { body: { hash } }
+    );
+    const challenge = res.data?.challenge ?? (res as { challenge?: string }).challenge;
+    if (!challenge) throw new Error('Knuct authChallenge: no challenge in response');
+    return challenge;
+  }
+
+  /** Step 2 of DID auth: send NLSS-computed binary response array */
+  async authResponse(response: number[]): Promise<void> {
+    await this.request('POST', '/sapi/auth/response', {
+      body: { response },
+      expectStatus: 204,
+    });
+  }
+
+  /** Step 3 of DID auth: start IPFS + blockchain node on Knuct server */
+  async startNode(): Promise<void> {
+    await this.request('GET', '/sapi/startnode', { expectStatus: 204 });
+  }
+
+  /** Step 4 of DID auth: fetch wallet data including the user's DID */
+  async walletData(): Promise<KnuctWalletData> {
+    const res = await this.request<{ data?: KnuctWalletData } | KnuctWalletData>(
+      'GET',
+      '/sapi/walletdata'
+    );
+    const data = (res as { data?: KnuctWalletData }).data ?? (res as KnuctWalletData);
+    if (!data?.did) throw new Error('Knuct walletData: no DID in response');
+    return data;
+  }
+
+  /** Logout from Knuct session */
+  async logout(): Promise<void> {
+    await this.request('GET', '/sapi/logout', { expectStatus: 200 }).catch(() => {
+      // logout errors are non-fatal
+    });
+    this.cookies.clear();
   }
 
   async fetchPrivateShare(privShareUrl: string): Promise<KnuctPrivShare> {
