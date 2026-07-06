@@ -34,7 +34,7 @@ export async function GET() {
     const decrypted = decryptBuffer(Buffer.from(wallet.privShareEnc));
     const didSlug = wallet.did ? wallet.did.slice(0, 12).replace(/[^a-zA-Z0-9]/g, '') : 'wallet';
 
-    return new NextResponse(decrypted, {
+    return new NextResponse(new Uint8Array(decrypted), {
       status: 200,
       headers: {
         'Content-Type': 'image/png',
