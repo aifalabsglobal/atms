@@ -16,7 +16,7 @@ function isEmailConfigured(): boolean {
 
 async function sendViaResend(params: SendEmailParams): Promise<EmailResult> {
   const apiKey = process.env.RESEND_API_KEY?.trim();
-  const from = process.env.EMAIL_FROM?.trim() || 'JNTUH SCMS <onboarding@resend.dev>';
+  const from = process.env.EMAIL_FROM?.trim() || 'AIMSCS <onboarding@resend.dev>';
   if (!apiKey) return { sent: false, error: 'RESEND_API_KEY not set' };
 
   const res = await fetch('https://api.resend.com/emails', {
@@ -89,7 +89,7 @@ export async function sendEmail(params: SendEmailParams): Promise<EmailResult> {
 export async function sendWelcomeEmail(email: string, name: string, tempPassword: string) {
   return sendEmail({
     to: email,
-    subject: 'Your JNTUH SCMS account',
+    subject: 'Your AIMSCS account',
     html: `
       <p>Hello ${name},</p>
       <p>Your campus account has been created.</p>
@@ -97,14 +97,14 @@ export async function sendWelcomeEmail(email: string, name: string, tempPassword
       <strong>Temporary password:</strong> ${tempPassword}</p>
       <p>Sign in at ${process.env.NEXTAUTH_URL || 'http://localhost:3000'} and change your password after first login.</p>
     `,
-    text: `Hello ${name}. Your JNTUH SCMS account: ${email} / temp password: ${tempPassword}`,
+    text: `Hello ${name}. Your AIMSCS account: ${email} / temp password: ${tempPassword}`,
   });
 }
 
 export async function sendPasswordResetEmail(email: string, name: string, tempPassword: string) {
   return sendEmail({
     to: email,
-    subject: 'JNTUH SCMS password reset',
+    subject: 'AIMSCS password reset',
     html: `
       <p>Hello ${name},</p>
       <p>Your password has been reset by an administrator.</p>

@@ -1,9 +1,9 @@
-/** JNTUH R22 B.Tech CSE subject catalog — bundled for bulk import. */
+/** AIMSCS R22 B.Tech CSE subject catalog — bundled for bulk import. */
 export const JNTU_R22_CSE_CATALOG = {
   regulation: 'R22',
   programCode: 'BTECH-CSE',
   departmentCode: 'CSE',
-  name: 'JNTUH R22 B.Tech Computer Science & Engineering',
+  name: 'AIMSCS R22 B.Tech Computer Science & Engineering',
   subjects: [
     { code: 'MA101BS', name: 'Mathematics-I', semesterCode: 'I-I', credits: 3, lectureHours: 3, tutorialHours: 1, labHours: 0, type: 'core', category: 'BS', syllabus: 'Matrices, Eigen values, Eigen vectors, Partial differentiation, Multiple integrals, Special functions' },
     { code: 'AP101BS', name: 'Applied Physics', semesterCode: 'I-I', credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'BS', syllabus: 'Wave Optics, Lasers, Fiber Optics, Quantum Mechanics, Solid State Physics, Semiconductors' },

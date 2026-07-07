@@ -4,7 +4,7 @@ import { buildDemoWalkthroughText } from '@/lib/demo-walkthrough';
 export function buildDemoShareText(baseUrl?: string) {
   const url = baseUrl || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
   const lines = [
-    'JNTUH SCMS — Smart Campus Management System',
+    'AIMSCS — Smart Campus Management System',
     `Try it: ${url}/login`,
     '',
     `Password for all demo accounts: ${DEMO_PASSWORD}`,

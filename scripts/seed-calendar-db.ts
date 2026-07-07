@@ -43,7 +43,7 @@ async function main() {
     data: CALENDAR_SEED_EVENTS.map((e) => toDbRow(e, superAdmin.id, academicYear.id)),
   });
 
-  console.log(`Seeded ${result.count} JNTUH academic calendar events for ${academicYear.name} (${academicYear.regulation})`);
+  console.log(`Seeded ${result.count} AIMSCS academic calendar events for ${academicYear.name} (${academicYear.regulation})`);
 }
 
 main()

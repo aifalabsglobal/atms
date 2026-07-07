@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const DEV_SECRET = 'jntuh-scms-dev-secret-change-in-production';
+const DEV_SECRET = 'aimscs-dev-secret-change-in-production';
 
 const envSchema = z.object({
   DATABASE_URL: z

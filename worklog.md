@@ -1,7 +1,7 @@
 ---
 Task ID: 1
 Agent: Main Agent
-Task: Fix student assignments, quizzes, and all UI issues in JNTUH SCMS
+Task: Fix student assignments, quizzes, and all UI issues in AIMSCS
 
 Work Log:
 - Updated `/api/lms/assignments/route.ts` to support `studentId` parameter - filters by enrolled courses, includes student's submission data, and computes `myStatus` (not_started/submitted/graded/overdue)
@@ -57,6 +57,6 @@ Work Log:
 Stage Summary:
 - Reports API now supports student-specific filtering via studentId query parameter
 - Reports section renders completely different views based on user role
-- Student view includes attendance warning when below 75% (JNTUH requirement)
+- Student view includes attendance warning when below 75% (AIMSCS requirement)
 - All data in student view is filtered to only show the logged-in student's records
 - Admin view remains unchanged with campus-wide analytics

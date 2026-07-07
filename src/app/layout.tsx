@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Providers from "@/components/providers";
+import { BRAND } from "@/lib/branding";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "JNTUH SCMS - Smart Campus Management System",
-  description: "JNTUH Engineering College Smart Campus Management System - Attendance & Learning Management",
+  title: `${BRAND.name} - ${BRAND.tagline}`,
+  description: `${BRAND.fullTitle} - Attendance & Learning Management`,
   icons: {
     icon: "/logo.svg",
   },

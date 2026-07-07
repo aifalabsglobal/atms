@@ -11,11 +11,11 @@ export type PilotProvisionResult = {
 };
 
 const DEFAULT_PILOT_EMAILS = [
-  'registrar@jntuh.ac.in',
-  'hod.cse@jntuh.ac.in',
-  'faculty.venkat@jntuh.ac.in',
-  'student.ravi@jntuh.ac.in',
-  'student.priya@jntuh.ac.in',
+  'registrar@aimscs.ac.in',
+  'hod.cse@aimscs.ac.in',
+  'faculty.venkat@aimscs.ac.in',
+  'student.ravi@aimscs.ac.in',
+  'student.priya@aimscs.ac.in',
 ];
 
 export async function resolvePilotUserIds(opts: {

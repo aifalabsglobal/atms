@@ -6,7 +6,7 @@
 
 #### Task 1: Comprehensive Seed Data (JNTU R22 B.Tech)
 - **File**: `/home/z/my-project/prisma/seed.ts`
-- Complete rewrite from UoH seed to JNTUH R22 Regulation seed data
+- Complete rewrite from UoH seed to AIMSCS R22 Regulation seed data
 - **Departments**: 10 departments (CSE, CSE-AIML, CSE-DS, CSE-NT, ECE, EEE, MECH, CIVIL, IT, CSAM)
 - **Academic Year**: 2025-2026 (active, R22 regulation)
 - **Semesters**: 8 semesters (I-I through IV-II) for 4-year B.Tech

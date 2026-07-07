@@ -1,13 +1,13 @@
-Subject: JNTUH SCMS — Knuct integration diligence (Phase 0 questionnaire)
+Subject: AIMSCS — Knuct integration diligence (Phase 0 questionnaire)
 
 To: [Knuct vendor contact]
-Cc: [JNTUH IT / project lead]
+Cc: [AIMSCS IT / project lead]
 
 ---
 
 Dear Knuct Team,
 
-JNTUH SCMS (Smart Campus Management System) is evaluating Knuct as an optional decentralized identity and audit-anchoring layer for our campus platform. We have completed a Phase 1 wallet/DID adapter (mock mode) and Phase 3 hash-only audit anchoring in PostgreSQL, and we are preparing a bounded pilot cohort.
+AIMSCS (Smart Campus Management System) is evaluating Knuct as an optional decentralized identity and audit-anchoring layer for our campus platform. We have completed a Phase 1 wallet/DID adapter (mock mode) and Phase 3 hash-only audit anchoring in PostgreSQL, and we are preparing a bounded pilot cohort.
 
 Before enabling live traffic (`KNUCT_ENABLED=true`) or scoping verifiable credentials (Phase 2), we need written answers to **10 technical and compliance questions** attached in our questionnaire:
 
@@ -46,7 +46,7 @@ Could you please:
 Thank you for your support. We look forward to a structured pilot once diligence is complete.
 
 Best regards,  
-[JNTUH SCMS Integration Team]  
+[AIMSCS Integration Team]  
 [Contact name]  
 [Email]  
 [Phone]

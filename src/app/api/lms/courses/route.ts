@@ -126,7 +126,7 @@ export async function POST(request: Request) {
         credits: courseCredits,
         semester: courseSemester,
         type: courseType,
-        description: description || `${courseName} (JNTUH R22)`,
+        description: description || `${courseName} (AIMSCS R22)`,
         instructorId: resolvedInstructor,
         syllabus: courseSyllabus,
         isActive: true,

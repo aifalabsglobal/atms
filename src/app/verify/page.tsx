@@ -79,7 +79,7 @@ function VerifyPageContent() {
               <ShieldCheck className="h-5 w-5" /> Audit Anchor Verification
             </CardTitle>
             <CardDescription>
-              Verify a SHA-256 audit hash recorded by JNTUH SCMS. Chain publish status shown when available.
+              Verify a SHA-256 audit hash recorded by AIMSCS. Chain publish status shown when available.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

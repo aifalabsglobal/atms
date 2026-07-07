@@ -1359,8 +1359,8 @@ function VisitorDashboard({ data }: { data: DashboardData }) {
               <GraduationCap className="h-7 w-7 text-white" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold text-[#1A3C6E]">JNTUH Engineering College</h3>
-              <p className="text-sm text-muted-foreground">Welcome to the JNTUH Smart Campus. Explore campus zones and information below.</p>
+              <h3 className="text-lg font-semibold text-[#1A3C6E]">AIMSCS</h3>
+              <p className="text-sm text-muted-foreground">Welcome to the AIMSCS Smart Campus. Explore campus zones and information below.</p>
             </div>
           </div>
         </CardContent>
@@ -1412,7 +1412,7 @@ function VisitorDashboard({ data }: { data: DashboardData }) {
               { icon: MapPin, text: 'Stay within designated visitor zones', color: '#1A3C6E' },
               { icon: Clock, text: 'Visiting hours: 9:00 AM – 5:00 PM', color: '#B45309' },
               { icon: Eye, text: 'CCTV monitoring is active on campus', color: '#6B7280' },
-              { icon: Wifi, text: 'Guest WiFi: JNTUH-Guest (no password)', color: '#7C3AED' },
+              { icon: Wifi, text: 'Guest WiFi: AIMSCS-Guest (no password)', color: '#7C3AED' },
               { icon: AlertTriangle, text: 'Report suspicious activity to Security', color: '#E74C3C' },
             ].map((item, i) => (
               <div key={i} className="flex items-center gap-3">
@@ -1545,7 +1545,7 @@ export default function DashboardSection() {
             Dashboard
           </h1>
           <p className="text-sm text-muted-foreground">
-            JNTUH Engineering College &mdash; {roleDescriptions[role]}
+            AIMSCS &mdash; {roleDescriptions[role]}
             {data.scopeLabel && (
               <Badge className="ml-2 text-[10px] text-white align-middle" style={{ backgroundColor: ROLE_COLORS[role] }}>
                 {data.scopeLabel}

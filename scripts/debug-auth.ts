@@ -35,7 +35,7 @@ async function main() {
       Cookie: jar.join('; '),
     },
     body: new URLSearchParams({
-      email: 'vice.chancellor@jntuh.ac.in',
+      email: 'vice.chancellor@aimscs.ac.in',
       password: 'demo123',
       csrfToken,
       callbackUrl: `${BASE}/`,

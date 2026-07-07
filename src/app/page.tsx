@@ -1,6 +1,7 @@
 'use client';
 
 import { useAppStore, ROLE_LABELS, ROLE_COLORS, useEffectiveSections, type Role, type Section } from '@/lib/store';
+import { BRAND } from '@/lib/branding';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, ScanLine, BookOpen, Users, ShieldAlert,
@@ -157,8 +158,8 @@ function AppContent() {
                 <GraduationCap className="h-5 w-5 text-white" />
               </div>
               <div className="hidden sm:flex flex-col">
-                <span className="text-sm font-bold leading-tight text-[#1A3C6E]">JNTUH SCMS</span>
-                <span className="text-[10px] text-muted-foreground leading-tight">Smart Campus Management</span>
+                <span className="text-sm font-bold leading-tight text-[#1A3C6E]">{BRAND.name}</span>
+                <span className="text-[10px] text-muted-foreground leading-tight">{BRAND.tagline}</span>
               </div>
             </div>
           </div>
@@ -344,9 +345,9 @@ function AppContent() {
             </div>
             <footer className="border-t shrink-0">
               <div className="px-4 md:px-6 py-3 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-muted-foreground">
-                <span>© 2026 JNTUH Engineering College — Smart Campus Management System</span>
+                <span>{BRAND.copyright}</span>
                 <div className="flex items-center gap-4">
-                  <span>Powered by <strong className="text-[#1A3C6E]">JNTUH SCMS</strong></span>
+                  <span>Powered by <strong className="text-[#1A3C6E]">{BRAND.name}</strong></span>
                   <Separator orientation="vertical" className="h-3" />
                   <span>IT Department</span>
                 </div>

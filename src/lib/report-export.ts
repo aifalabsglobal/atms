@@ -59,7 +59,7 @@ type StaffExportData = {
 
 export function exportStudentReportCsv(data: StudentExportData) {
   const rows: (string | number | null | undefined)[][] = [
-    ['JNTUH SCMS — Student Report'],
+    ['AIMSCS — Student Report'],
     ['Generated', new Date().toLocaleString('en-IN')],
     [],
     ['Student', data.student.name],
@@ -114,7 +114,7 @@ export function exportStudentReportCsv(data: StudentExportData) {
 
 export function exportStaffReportCsv(data: StaffExportData) {
   const rows: (string | number | null | undefined)[][] = [
-    ['JNTUH SCMS — Analytics Report'],
+    ['AIMSCS — Analytics Report'],
     ['Scope', data.scopeLabel],
     ['Generated', new Date().toLocaleString('en-IN')],
     [],

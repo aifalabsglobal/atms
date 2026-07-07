@@ -10,7 +10,7 @@ export const DEMO_PREP_STEPS = [
 export const DEMO_FLOW = [
   {
     role: 'Admin',
-    email: 'registrar@jntuh.ac.in',
+    email: 'registrar@aimscs.ac.in',
     minutes: 2,
     steps: [
       'Dashboard → campus overview stats',
@@ -22,7 +22,7 @@ export const DEMO_FLOW = [
   },
   {
     role: 'Faculty',
-    email: 'faculty.venkat@jntuh.ac.in',
+    email: 'faculty.venkat@aimscs.ac.in',
     minutes: 1,
     steps: [
       'LMS → Assignments → edit or delete a draft assignment',
@@ -33,7 +33,7 @@ export const DEMO_FLOW = [
   },
   {
     role: 'Student',
-    email: 'student.ravi@jntuh.ac.in',
+    email: 'student.ravi@aimscs.ac.in',
     minutes: 2,
     steps: [
       'LMS → Quizzes → Coding Practice → Two Sum',
@@ -45,7 +45,7 @@ export const DEMO_FLOW = [
   },
   {
     role: 'Parent',
-    email: 'parent.rajesh@jntuh.ac.in',
+    email: 'parent.rajesh@aimscs.ac.in',
     minutes: 0.5,
     steps: [
       'LMS → "My Ward\'s Learning" — read-only ward courses & grades',
@@ -54,7 +54,7 @@ export const DEMO_FLOW = [
   },
   {
     role: 'HOD',
-    email: 'hod.cse@jntuh.ac.in',
+    email: 'hod.cse@aimscs.ac.in',
     minutes: 0.5,
     steps: [
       'Masters → read-only badge, dept-scoped subjects view',
@@ -100,7 +100,7 @@ export const DEMO_SOLUTIONS: Record<string, string> = {
 };
 
 export const DEMO_TALKING_POINTS = [
-  'Position as a pilot / MVP — JNTUH R22 masters + attendance + LMS in one portal.',
+  'Position as a pilot / MVP — AIMSCS R22 masters + attendance + LMS in one portal.',
   'Role-based access: student sees only their data; admin sees campus-wide.',
   'Coding practice is LeetCode-style UI with auto-graded JS problems (pilot judge).',
   'Use avatar menu → Switch demo role — no logout between roles.',
@@ -115,7 +115,7 @@ export const DEMO_DO_NOT_SHOW = [
 export function buildDemoWalkthroughText(baseUrl?: string): string {
   const url = baseUrl || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
   const lines: string[] = [
-    '═══ JNTUH SCMS — 5-MIN DEMO SCRIPT ═══',
+    '═══ AIMSCS — 5-MIN DEMO SCRIPT ═══',
     '',
     'BEFORE THE DEMO (run once):',
     ...DEMO_PREP_STEPS.map((s) => `  • ${s}`),

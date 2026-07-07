@@ -58,7 +58,7 @@ async function main() {
     const res = await fetch(`${BASE}/login`);
     if (!res.ok) throw new Error(`status ${res.status}`);
     const html = await res.text();
-    if (!html.includes('JNTUH SCMS')) throw new Error('missing branding');
+    if (!html.includes('AIMSCS')) throw new Error('missing branding');
   });
 
   await check('GET /api/health', async () => {
@@ -81,7 +81,7 @@ async function main() {
     cookie = getCookieHeader(csrfRes.headers.get('set-cookie'));
 
     const body = new URLSearchParams({
-      email: 'vice.chancellor@jntuh.ac.in',
+      email: 'vice.chancellor@aimscs.ac.in',
       password: 'demo123',
       csrfToken,
       callbackUrl: `${BASE}/`,
@@ -143,7 +143,7 @@ async function main() {
     const { csrfToken } = await csrfRes.json();
     let studentCookie = getCookieHeader(csrfRes.headers.get('set-cookie'));
     const body = new URLSearchParams({
-      email: 'student.ravi@jntuh.ac.in',
+      email: 'student.ravi@aimscs.ac.in',
       password: 'demo123',
       csrfToken,
       callbackUrl: `${BASE}/`,
@@ -188,7 +188,7 @@ async function main() {
     const { csrfToken } = await csrfRes.json();
     let studentCookie = getCookieHeader(csrfRes.headers.get('set-cookie'));
     const body = new URLSearchParams({
-      email: 'student.ravi@jntuh.ac.in',
+      email: 'student.ravi@aimscs.ac.in',
       password: 'demo123',
       csrfToken,
       callbackUrl: `${BASE}/`,
@@ -223,7 +223,7 @@ async function main() {
     const { csrfToken } = await csrfRes.json();
     let studentCookie = getCookieHeader(csrfRes.headers.get('set-cookie'));
     const body = new URLSearchParams({
-      email: 'student.ravi@jntuh.ac.in',
+      email: 'student.ravi@aimscs.ac.in',
       password: 'demo123',
       csrfToken,
       callbackUrl: `${BASE}/`,
@@ -257,7 +257,7 @@ async function main() {
   const passed = results.filter((r) => r.ok).length;
   const failed = results.filter((r) => !r.ok);
 
-  console.log('\n=== JNTUH SCMS Smoke Test ===\n');
+  console.log('\n=== AIMSCS Smoke Test ===\n');
   for (const r of results) {
     const icon = r.ok ? 'PASS' : 'FAIL';
     const ms = r.ms != null ? ` (${r.ms}ms)` : '';

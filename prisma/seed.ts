@@ -42,7 +42,7 @@ async function createActiveSession(
 }
 
 async function main() {
-  console.log('🌱 Seeding JNTUH SCMS database with R22 Regulation data...');
+  console.log('🌱 Seeding AIMSCS database with R22 Regulation data...');
 
   // Clean existing data (order matters for FK constraints)
   await db.notification.deleteMany();
@@ -73,20 +73,20 @@ async function main() {
   await db.department.deleteMany();
 
   // ==========================================
-  // 1. DEPARTMENTS (JNTUH Engineering College)
+  // 1. DEPARTMENTS (AIMSCS)
   // ==========================================
   console.log('📦 Creating departments...');
   const departments = await Promise.all([
-    db.department.create({ data: { name: 'Computer Science & Engineering', code: 'CSE', building: 'CSE Block', floor: '1-3', phone: '+91-40-23158661', email: 'cse@jntuh.ac.in', isActive: true } }),
-    db.department.create({ data: { name: 'CSE (Artificial Intelligence & Machine Learning)', code: 'CSE-AIML', building: 'CSE Block', floor: '4', phone: '+91-40-23158662', email: 'aiml@jntuh.ac.in', isActive: true } }),
-    db.department.create({ data: { name: 'CSE (Data Science)', code: 'CSE-DS', building: 'CSE Block', floor: '4', phone: '+91-40-23158663', email: 'ds@jntuh.ac.in', isActive: true } }),
-    db.department.create({ data: { name: 'CSE (Networks)', code: 'CSE-NT', building: 'CSE Block', floor: '3', phone: '+91-40-23158664', email: 'nt@jntuh.ac.in', isActive: true } }),
-    db.department.create({ data: { name: 'Electronics & Communication Engineering', code: 'ECE', building: 'ECE Block', floor: '1-3', phone: '+91-40-23158665', email: 'ece@jntuh.ac.in', isActive: true } }),
-    db.department.create({ data: { name: 'Electrical & Electronics Engineering', code: 'EEE', building: 'EEE Block', floor: '1-2', phone: '+91-40-23158666', email: 'eee@jntuh.ac.in', isActive: true } }),
-    db.department.create({ data: { name: 'Mechanical Engineering', code: 'MECH', building: 'MECH Block', floor: '1-2', phone: '+91-40-23158667', email: 'mech@jntuh.ac.in', isActive: true } }),
-    db.department.create({ data: { name: 'Civil Engineering', code: 'CIVIL', building: 'CIVIL Block', floor: '1-2', phone: '+91-40-23158668', email: 'civil@jntuh.ac.in', isActive: true } }),
-    db.department.create({ data: { name: 'Information Technology', code: 'IT', building: 'IT Block', floor: '1-2', phone: '+91-40-23158669', email: 'it@jntuh.ac.in', isActive: true } }),
-    db.department.create({ data: { name: 'Computer Science & Applied Mathematics', code: 'CSAM', building: 'CSE Block', floor: '5', phone: '+91-40-23158670', email: 'csam@jntuh.ac.in', isActive: true } }),
+    db.department.create({ data: { name: 'Computer Science & Engineering', code: 'CSE', building: 'CSE Block', floor: '1-3', phone: '+91-40-23158661', email: 'cse@aimscs.ac.in', isActive: true } }),
+    db.department.create({ data: { name: 'CSE (Artificial Intelligence & Machine Learning)', code: 'CSE-AIML', building: 'CSE Block', floor: '4', phone: '+91-40-23158662', email: 'aiml@aimscs.ac.in', isActive: true } }),
+    db.department.create({ data: { name: 'CSE (Data Science)', code: 'CSE-DS', building: 'CSE Block', floor: '4', phone: '+91-40-23158663', email: 'ds@aimscs.ac.in', isActive: true } }),
+    db.department.create({ data: { name: 'CSE (Networks)', code: 'CSE-NT', building: 'CSE Block', floor: '3', phone: '+91-40-23158664', email: 'nt@aimscs.ac.in', isActive: true } }),
+    db.department.create({ data: { name: 'Electronics & Communication Engineering', code: 'ECE', building: 'ECE Block', floor: '1-3', phone: '+91-40-23158665', email: 'ece@aimscs.ac.in', isActive: true } }),
+    db.department.create({ data: { name: 'Electrical & Electronics Engineering', code: 'EEE', building: 'EEE Block', floor: '1-2', phone: '+91-40-23158666', email: 'eee@aimscs.ac.in', isActive: true } }),
+    db.department.create({ data: { name: 'Mechanical Engineering', code: 'MECH', building: 'MECH Block', floor: '1-2', phone: '+91-40-23158667', email: 'mech@aimscs.ac.in', isActive: true } }),
+    db.department.create({ data: { name: 'Civil Engineering', code: 'CIVIL', building: 'CIVIL Block', floor: '1-2', phone: '+91-40-23158668', email: 'civil@aimscs.ac.in', isActive: true } }),
+    db.department.create({ data: { name: 'Information Technology', code: 'IT', building: 'IT Block', floor: '1-2', phone: '+91-40-23158669', email: 'it@aimscs.ac.in', isActive: true } }),
+    db.department.create({ data: { name: 'Computer Science & Applied Mathematics', code: 'CSAM', building: 'CSE Block', floor: '5', phone: '+91-40-23158670', email: 'csam@aimscs.ac.in', isActive: true } }),
   ]);
 
   const [cseDept, aimlDept, dsDept, ntDept, eceDept, eeeDept, mechDept, civilDept, itDept, csamDept] = departments;
@@ -131,7 +131,7 @@ async function main() {
   const [semI1, semI2, semII1, semII2, semIII1, semIII2, semIV1, semIV2] = semesters;
 
   // ==========================================
-  // 4. SUBJECTS (JNTU R22 CSE pattern)
+  // 4. SUBJECTS (AIMSCS R22 CSE pattern)
   // ==========================================
   console.log('📦 Creating subjects...');
   const subjectsData = [
@@ -233,43 +233,43 @@ async function main() {
   const passwordHash = await bcrypt.hash('demo123', 10);
   const usersData = [
     // Super Admin
-    { id: 'u1', email: 'vice.chancellor@jntuh.ac.in', name: 'Dr. K. Sreenivasa Raju', employeeId: 'JNTUH001', departmentId: cseDept.id, department: 'Administration', role: 'super_admin' as const, status: 'active', phone: '+91-9876543201' },
+    { id: 'u1', email: 'vice.chancellor@aimscs.ac.in', name: 'Dr. K. Sreenivasa Raju', employeeId: 'AIMSCS001', departmentId: cseDept.id, department: 'Administration', role: 'super_admin' as const, status: 'active', phone: '+91-9876543201' },
     // Admin
-    { id: 'u2', email: 'registrar@jntuh.ac.in', name: 'Prof. M. Manzoor Hussain', employeeId: 'JNTUH002', departmentId: cseDept.id, department: 'Administration', role: 'admin' as const, status: 'active', phone: '+91-9876543202' },
+    { id: 'u2', email: 'registrar@aimscs.ac.in', name: 'Prof. M. Manzoor Hussain', employeeId: 'AIMSCS002', departmentId: cseDept.id, department: 'Administration', role: 'admin' as const, status: 'active', phone: '+91-9876543202' },
     // HODs (one per dept)
-    { id: 'u3', email: 'hod.cse@jntuh.ac.in', name: 'Dr. A. Vinaya Babu', employeeId: 'JNTUH003', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'hod' as const, status: 'active', phone: '+91-9876543203' },
-    { id: 'u4', email: 'hod.aiml@jntuh.ac.in', name: 'Dr. B. Rama Devi', employeeId: 'JNTUH004', departmentId: aimlDept.id, department: 'CSE (AIML)', role: 'hod' as const, status: 'active', phone: '+91-9876543204' },
-    { id: 'u4b', email: 'hod.ds@jntuh.ac.in', name: 'Dr. C. Shoba Bindu', employeeId: 'JNTUH005', departmentId: dsDept.id, department: 'CSE (Data Science)', role: 'hod' as const, status: 'active', phone: '+91-9876543205' },
-    { id: 'u4c', email: 'hod.nt@jntuh.ac.in', name: 'Dr. D. Sreenu Naik', employeeId: 'JNTUH006', departmentId: ntDept.id, department: 'CSE (Networks)', role: 'hod' as const, status: 'active', phone: '+91-9876543206' },
-    { id: 'u4d', email: 'hod.ece@jntuh.ac.in', name: 'Dr. E. Nagabhooshanam', employeeId: 'JNTUH007', departmentId: eceDept.id, department: 'Electronics & Communication Engineering', role: 'hod' as const, status: 'active', phone: '+91-9876543207' },
-    { id: 'u4e', email: 'hod.eee@jntuh.ac.in', name: 'Dr. F. Suresh Babu', employeeId: 'JNTUH008', departmentId: eeeDept.id, department: 'Electrical & Electronics Engineering', role: 'hod' as const, status: 'active', phone: '+91-9876543208' },
-    { id: 'u4f', email: 'hod.mech@jntuh.ac.in', name: 'Dr. G. Krishna Mohana Rao', employeeId: 'JNTUH009', departmentId: mechDept.id, department: 'Mechanical Engineering', role: 'hod' as const, status: 'active', phone: '+91-9876543209' },
-    { id: 'u4g', email: 'hod.civil@jntuh.ac.in', name: 'Dr. H. Ramesh Kumar', employeeId: 'JNTUH010', departmentId: civilDept.id, department: 'Civil Engineering', role: 'hod' as const, status: 'active', phone: '+91-9876543210' },
-    { id: 'u4h', email: 'hod.it@jntuh.ac.in', name: 'Dr. I. Ramesh Reddy', employeeId: 'JNTUH011', departmentId: itDept.id, department: 'Information Technology', role: 'hod' as const, status: 'active', phone: '+91-9876543211' },
-    { id: 'u4i', email: 'hod.csam@jntuh.ac.in', name: 'Dr. J. Srinivasa Rao', employeeId: 'JNTUH012', departmentId: csamDept.id, department: 'Computer Science & Applied Mathematics', role: 'hod' as const, status: 'active', phone: '+91-9876543212' },
+    { id: 'u3', email: 'hod.cse@aimscs.ac.in', name: 'Dr. A. Vinaya Babu', employeeId: 'AIMSCS003', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'hod' as const, status: 'active', phone: '+91-9876543203' },
+    { id: 'u4', email: 'hod.aiml@aimscs.ac.in', name: 'Dr. B. Rama Devi', employeeId: 'AIMSCS004', departmentId: aimlDept.id, department: 'CSE (AIML)', role: 'hod' as const, status: 'active', phone: '+91-9876543204' },
+    { id: 'u4b', email: 'hod.ds@aimscs.ac.in', name: 'Dr. C. Shoba Bindu', employeeId: 'AIMSCS005', departmentId: dsDept.id, department: 'CSE (Data Science)', role: 'hod' as const, status: 'active', phone: '+91-9876543205' },
+    { id: 'u4c', email: 'hod.nt@aimscs.ac.in', name: 'Dr. D. Sreenu Naik', employeeId: 'AIMSCS006', departmentId: ntDept.id, department: 'CSE (Networks)', role: 'hod' as const, status: 'active', phone: '+91-9876543206' },
+    { id: 'u4d', email: 'hod.ece@aimscs.ac.in', name: 'Dr. E. Nagabhooshanam', employeeId: 'AIMSCS007', departmentId: eceDept.id, department: 'Electronics & Communication Engineering', role: 'hod' as const, status: 'active', phone: '+91-9876543207' },
+    { id: 'u4e', email: 'hod.eee@aimscs.ac.in', name: 'Dr. F. Suresh Babu', employeeId: 'AIMSCS008', departmentId: eeeDept.id, department: 'Electrical & Electronics Engineering', role: 'hod' as const, status: 'active', phone: '+91-9876543208' },
+    { id: 'u4f', email: 'hod.mech@aimscs.ac.in', name: 'Dr. G. Krishna Mohana Rao', employeeId: 'AIMSCS009', departmentId: mechDept.id, department: 'Mechanical Engineering', role: 'hod' as const, status: 'active', phone: '+91-9876543209' },
+    { id: 'u4g', email: 'hod.civil@aimscs.ac.in', name: 'Dr. H. Ramesh Kumar', employeeId: 'AIMSCS010', departmentId: civilDept.id, department: 'Civil Engineering', role: 'hod' as const, status: 'active', phone: '+91-9876543210' },
+    { id: 'u4h', email: 'hod.it@aimscs.ac.in', name: 'Dr. I. Ramesh Reddy', employeeId: 'AIMSCS011', departmentId: itDept.id, department: 'Information Technology', role: 'hod' as const, status: 'active', phone: '+91-9876543211' },
+    { id: 'u4i', email: 'hod.csam@aimscs.ac.in', name: 'Dr. J. Srinivasa Rao', employeeId: 'AIMSCS012', departmentId: csamDept.id, department: 'Computer Science & Applied Mathematics', role: 'hod' as const, status: 'active', phone: '+91-9876543212' },
     // Faculty
-    { id: 'u6', email: 'faculty.venkat@jntuh.ac.in', name: 'Prof. Venkat Ramana', employeeId: 'JNTUH013', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'faculty' as const, status: 'active', phone: '+91-9876543213' },
-    { id: 'u6b', email: 'faculty.lakshmi@jntuh.ac.in', name: 'Dr. Lakshmi Devi', employeeId: 'JNTUH014', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'faculty' as const, status: 'active', phone: '+91-9876543214' },
-    { id: 'u6c', email: 'faculty.srinivas@jntuh.ac.in', name: 'Dr. Srinivas Reddy', employeeId: 'JNTUH015', departmentId: eceDept.id, department: 'Electronics & Communication Engineering', role: 'faculty' as const, status: 'active', phone: '+91-9876543215' },
-    { id: 'u6d', email: 'faculty.padma@jntuh.ac.in', name: 'Prof. Padmavathi', employeeId: 'JNTUH016', departmentId: eceDept.id, department: 'Electronics & Communication Engineering', role: 'faculty' as const, status: 'active', phone: '+91-9876543216' },
+    { id: 'u6', email: 'faculty.venkat@aimscs.ac.in', name: 'Prof. Venkat Ramana', employeeId: 'AIMSCS013', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'faculty' as const, status: 'active', phone: '+91-9876543213' },
+    { id: 'u6b', email: 'faculty.lakshmi@aimscs.ac.in', name: 'Dr. Lakshmi Devi', employeeId: 'AIMSCS014', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'faculty' as const, status: 'active', phone: '+91-9876543214' },
+    { id: 'u6c', email: 'faculty.srinivas@aimscs.ac.in', name: 'Dr. Srinivas Reddy', employeeId: 'AIMSCS015', departmentId: eceDept.id, department: 'Electronics & Communication Engineering', role: 'faculty' as const, status: 'active', phone: '+91-9876543215' },
+    { id: 'u6d', email: 'faculty.padma@aimscs.ac.in', name: 'Prof. Padmavathi', employeeId: 'AIMSCS016', departmentId: eceDept.id, department: 'Electronics & Communication Engineering', role: 'faculty' as const, status: 'active', phone: '+91-9876543216' },
     // Lab Assistant
-    { id: 'u8', email: 'lab.ravi@jntuh.ac.in', name: 'Ravi Teja K.', employeeId: 'JNTUH017', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'lab_assistant' as const, status: 'active', phone: '+91-9876543217' },
+    { id: 'u8', email: 'lab.ravi@aimscs.ac.in', name: 'Ravi Teja K.', employeeId: 'AIMSCS017', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'lab_assistant' as const, status: 'active', phone: '+91-9876543217' },
     // Students
-    { id: 'u10', email: 'student.ravi@jntuh.ac.in', name: 'Arun Kumar', employeeId: 'STU001', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'student' as const, status: 'active', phone: '+91-9876543218', profileImageUrl: '/profiles/student-male-1.png' },
-    { id: 'u10b', email: 'student.divya@jntuh.ac.in', name: 'Divya Sri', employeeId: 'STU002', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'student' as const, status: 'active', phone: '+91-9876543219', profileImageUrl: '/profiles/student-female-1.png' },
-    { id: 'u10c', email: 'student.sai@jntuh.ac.in', name: 'Sai Prasad', employeeId: 'STU003', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'student' as const, status: 'active', phone: '+91-9876543220' },
-    { id: 'u10d', email: 'student.priyanka@jntuh.ac.in', name: 'Priyanka Reddy', employeeId: 'STU004', departmentId: eceDept.id, department: 'Electronics & Communication Engineering', role: 'student' as const, status: 'active', phone: '+91-9876543221' },
-    { id: 'u10e', email: 'student.naveen@jntuh.ac.in', name: 'Naveen Kumar', employeeId: 'STU005', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'student' as const, status: 'active', phone: '+91-9876543222' },
-    { id: 'u10f', email: 'student.anusha@jntuh.ac.in', name: 'Anusha Devi', employeeId: 'STU006', departmentId: eceDept.id, department: 'Electronics & Communication Engineering', role: 'student' as const, status: 'active', phone: '+91-9876543223' },
-    { id: 'u10g', email: 'student.mahesh@jntuh.ac.in', name: 'Mahesh Babu', employeeId: 'STU007', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'student' as const, status: 'active', phone: '+91-9876543224' },
-    { id: 'u10h', email: 'student.sireesha@jntuh.ac.in', name: 'Sireesha Kumari', employeeId: 'STU008', departmentId: itDept.id, department: 'Information Technology', role: 'student' as const, status: 'active', phone: '+91-9876543225' },
-    { id: 'u10i', email: 'student.irfan@jntuh.ac.in', name: 'Irfan Khan', employeeId: 'STU009', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'student' as const, status: 'suspended', phone: '+91-9876543226' },
+    { id: 'u10', email: 'student.ravi@aimscs.ac.in', name: 'Arun Kumar', employeeId: 'STU001', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'student' as const, status: 'active', phone: '+91-9876543218', profileImageUrl: '/profiles/student-male-1.png' },
+    { id: 'u10b', email: 'student.divya@aimscs.ac.in', name: 'Divya Sri', employeeId: 'STU002', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'student' as const, status: 'active', phone: '+91-9876543219', profileImageUrl: '/profiles/student-female-1.png' },
+    { id: 'u10c', email: 'student.sai@aimscs.ac.in', name: 'Sai Prasad', employeeId: 'STU003', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'student' as const, status: 'active', phone: '+91-9876543220' },
+    { id: 'u10d', email: 'student.priyanka@aimscs.ac.in', name: 'Priyanka Reddy', employeeId: 'STU004', departmentId: eceDept.id, department: 'Electronics & Communication Engineering', role: 'student' as const, status: 'active', phone: '+91-9876543221' },
+    { id: 'u10e', email: 'student.naveen@aimscs.ac.in', name: 'Naveen Kumar', employeeId: 'STU005', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'student' as const, status: 'active', phone: '+91-9876543222' },
+    { id: 'u10f', email: 'student.anusha@aimscs.ac.in', name: 'Anusha Devi', employeeId: 'STU006', departmentId: eceDept.id, department: 'Electronics & Communication Engineering', role: 'student' as const, status: 'active', phone: '+91-9876543223' },
+    { id: 'u10g', email: 'student.mahesh@aimscs.ac.in', name: 'Mahesh Babu', employeeId: 'STU007', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'student' as const, status: 'active', phone: '+91-9876543224' },
+    { id: 'u10h', email: 'student.sireesha@aimscs.ac.in', name: 'Sireesha Kumari', employeeId: 'STU008', departmentId: itDept.id, department: 'Information Technology', role: 'student' as const, status: 'active', phone: '+91-9876543225' },
+    { id: 'u10i', email: 'student.irfan@aimscs.ac.in', name: 'Irfan Khan', employeeId: 'STU009', departmentId: cseDept.id, department: 'Computer Science & Engineering', role: 'student' as const, status: 'suspended', phone: '+91-9876543226' },
     // Parent
-    { id: 'u18', email: 'parent.rajesh@jntuh.ac.in', name: 'Mr. Rajesh Kumar', department: 'N/A', role: 'parent' as const, status: 'active', phone: '+91-9876543227', linkedStudentId: 'u10' },
+    { id: 'u18', email: 'parent.rajesh@aimscs.ac.in', name: 'Mr. Rajesh Kumar', department: 'N/A', role: 'parent' as const, status: 'active', phone: '+91-9876543227', linkedStudentId: 'u10' },
     // Visitor
-    { id: 'u19', email: 'visitor.john@jntuh.ac.in', name: 'John Smith', department: 'External', role: 'visitor' as const, status: 'active', phone: '+91-9876543228' },
+    { id: 'u19', email: 'visitor.john@aimscs.ac.in', name: 'John Smith', department: 'External', role: 'visitor' as const, status: 'active', phone: '+91-9876543228' },
     // Security
-    { id: 'u20', email: 'security.murthy@jntuh.ac.in', name: 'Murthy Garu', employeeId: 'SEC001', department: 'Security', role: 'security' as const, status: 'active', phone: '+91-9876543229' },
+    { id: 'u20', email: 'security.murthy@aimscs.ac.in', name: 'Murthy Garu', employeeId: 'SEC001', department: 'Security', role: 'security' as const, status: 'active', phone: '+91-9876543229' },
   ];
 
   const users = await Promise.all(
@@ -281,16 +281,16 @@ async function main() {
 
   // Set HOD references for all departments
   const hodDeptPairs: Array<[typeof cseDept, string]> = [
-    [cseDept, 'hod.cse@jntuh.ac.in'],
-    [aimlDept, 'hod.aiml@jntuh.ac.in'],
-    [dsDept, 'hod.ds@jntuh.ac.in'],
-    [ntDept, 'hod.nt@jntuh.ac.in'],
-    [eceDept, 'hod.ece@jntuh.ac.in'],
-    [eeeDept, 'hod.eee@jntuh.ac.in'],
-    [mechDept, 'hod.mech@jntuh.ac.in'],
-    [civilDept, 'hod.civil@jntuh.ac.in'],
-    [itDept, 'hod.it@jntuh.ac.in'],
-    [csamDept, 'hod.csam@jntuh.ac.in'],
+    [cseDept, 'hod.cse@aimscs.ac.in'],
+    [aimlDept, 'hod.aiml@aimscs.ac.in'],
+    [dsDept, 'hod.ds@aimscs.ac.in'],
+    [ntDept, 'hod.nt@aimscs.ac.in'],
+    [eceDept, 'hod.ece@aimscs.ac.in'],
+    [eeeDept, 'hod.eee@aimscs.ac.in'],
+    [mechDept, 'hod.mech@aimscs.ac.in'],
+    [civilDept, 'hod.civil@aimscs.ac.in'],
+    [itDept, 'hod.it@aimscs.ac.in'],
+    [csamDept, 'hod.csam@aimscs.ac.in'],
   ];
   for (const [dept, email] of hodDeptPairs) {
     const hod = users.find((u) => u.email === email);
@@ -345,7 +345,7 @@ async function main() {
       credits: subject.credits,
       semester: semNum,
       type: subject.type,
-      description: `${subject.name} - ${subject.category || 'PC'} course as per JNTUH R22 Regulation`,
+      description: `${subject.name} - ${subject.category || 'PC'} course as per AIMSCS R22 Regulation`,
       instructorId: subject.type === 'project' || subject.type === 'audit' ? undefined : instructorId,
       syllabus: subject.syllabus,
       isActive: true,
@@ -373,7 +373,7 @@ async function main() {
       credits: subject.credits,
       semester: semNum,
       type: subject.type,
-      description: `${subject.name} - ${subject.category || 'PC'} course as per JNTUH R22 Regulation`,
+      description: `${subject.name} - ${subject.category || 'PC'} course as per AIMSCS R22 Regulation`,
       instructorId: faculty3.id,
       syllabus: subject.syllabus,
       isActive: true,
@@ -859,9 +859,9 @@ async function main() {
   await db.auditLog.createMany({
     data: [
       { userId: superAdmin.id, action: 'CREATE', resource: 'academic_year', details: 'Created Academic Year 2025-2026 with R22 regulation', ipAddress: '192.168.1.100' },
-      { userId: adminUser.id, action: 'CREATE', resource: 'department', details: 'Created 10 departments for JNTUH Engineering College', ipAddress: '192.168.1.100' },
+      { userId: adminUser.id, action: 'CREATE', resource: 'department', details: 'Created 10 departments for AIMSCS', ipAddress: '192.168.1.100' },
       { userId: adminUser.id, action: 'CREATE', resource: 'semester', details: 'Created 8 semesters for AY 2025-2026', ipAddress: '192.168.1.100' },
-      { userId: adminUser.id, action: 'CREATE', resource: 'subject', details: 'Created subjects as per JNTU R22 Regulation CSE pattern', ipAddress: '192.168.1.100' },
+      { userId: adminUser.id, action: 'CREATE', resource: 'subject', details: 'Created subjects as per AIMSCS R22 Regulation CSE pattern', ipAddress: '192.168.1.100' },
       { userId: hodCSE.id, action: 'CREATE', resource: 'program', details: 'Created B.Tech CSE program under R22 Regulation', ipAddress: '192.168.1.102' },
       { userId: faculty1.id, action: 'CREATE', resource: 'attendance_session', details: 'Created attendance session for CS101ES', ipAddress: '192.168.1.101' },
       { userId: hodCSE.id, action: 'REVIEW', resource: 'violation', details: 'Reviewed violation: confirmed proxy attempt', ipAddress: '192.168.1.102' },
@@ -892,7 +892,7 @@ async function main() {
     update: { matrix: DEFAULT_ROLE_SECTIONS },
   });
 
-  console.log('✅ JNTUH SCMS Seed completed successfully!');
+  console.log('✅ AIMSCS Seed completed successfully!');
   console.log(`   Departments: ${deptCount}`);
   console.log(`   Academic Years: 1`);
   console.log(`   Semesters: ${semesterCount}`);

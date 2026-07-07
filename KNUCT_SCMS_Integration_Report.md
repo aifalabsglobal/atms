@@ -1,7 +1,7 @@
 # Knuct Blockchain Integration
 ## Technical Understanding & Architecture Report (v2 — Enhanced)
 
-**Project:** JNTUH SCMS (Smart Campus Management System)  
+**Project:** AIMSCS (Smart Campus Management System)  
 **Repository:** `atms`  
 **Document type:** Integration assessment (vendor API in development)  
 **Version:** 2.0 (Enhanced)  
@@ -14,7 +14,7 @@
 
 ## 1. Executive Summary
 
-This report maps the **Knuct** proprietary blockchain protocol and its documented Wallet/DID creation API to the **JNTUH SCMS** application. SCMS is an Attendance Management System (AMS) plus Learning Management System (LMS) built on Next.js, PostgreSQL (Neon), Prisma, next-auth, and role-based APIs. **There is no blockchain integration in the codebase today.**
+This report maps the **Knuct** proprietary blockchain protocol and its documented Wallet/DID creation API to the **AIMSCS** application. SCMS is an Attendance Management System (AMS) plus Learning Management System (LMS) built on Next.js, PostgreSQL (Neon), Prisma, next-auth, and role-based APIs. **There is no blockchain integration in the codebase today.**
 
 **Recommendation:** Treat Knuct as a third-party vendor dependency in active development — not a stable production core. Wrap all Knuct calls behind an internal adapter (mirroring the existing `face-verification.ts` stub pattern). Keep PostgreSQL as the system of record; use Knuct for decentralized identity (DID), optional tamper-evident anchoring, and future verifiable credentials once certificate APIs are documented.
 
@@ -98,7 +98,7 @@ Knuct's "DID" is returned as an IPFS-style CID string (e.g. `QmXksoHVjTpfX9a7...
 - Replacing next-auth login in production — Knuct challenge-response auth not documented; API unstable
 - Knuct Talk P2P chat — out of SCMS scope
 - Per-request `starttempnode` at campus scale — concurrency/cost unknown; requires vendor clarification
-- Marketing claims (1M TPS, post-quantum) in JNTUH UI — unverified
+- Marketing claims (1M TPS, post-quantum) in AIMSCS UI — unverified
 
 ---
 
@@ -111,7 +111,7 @@ The integration follows an **adapter pattern** already used for face verificatio
 ```mermaid
 flowchart TB
     subgraph client [Client]
-        UI[JNTUH_SCMS_NextJS_UI]
+        UI[AIMSCS_SCMS_NextJS_UI]
     end
 
     subgraph api [Application]
@@ -541,7 +541,7 @@ flowchart TB
 | Privshare storage security | Key compromise | Encrypt at rest; secrets-manager key custody; never expose to browser |
 | Non-standard DID format | Future interoperability cost | Internal mapping layer if external verification needed (Section 2.1) |
 | DPDP / student-data compliance | Regulatory exposure | Hash-only anchoring for PII; DPA before production (Section 8) |
-| Unverified security claims | Compliance/reputation | Do not use in JNTUH external materials without independent audit |
+| Unverified security claims | Compliance/reputation | Do not use in AIMSCS external materials without independent audit |
 | No documented vendor auth | Unclear tenant isolation | Do not point production at current sandbox; require vendor auth before pilot expands |
 
 ---
@@ -563,7 +563,7 @@ flowchart TB
 
 ## 15. Conclusion
 
-Knuct is most immediately applicable to JNTUH SCMS as a **decentralized identity layer** (wallet + DID per user) using the documented API. Higher-value campus use cases — verifiable attendance certificates, grade transcripts, and tamper-evident audit trails — align strongly with SCMS data models but require additional Knuct APIs not yet available.
+Knuct is most immediately applicable to AIMSCS as a **decentralized identity layer** (wallet + DID per user) using the documented API. Higher-value campus use cases — verifiable attendance certificates, grade transcripts, and tamper-evident audit trails — align strongly with SCMS data models but require additional Knuct APIs not yet available.
 
 The recommended approach is a **phased, adapter-based integration** that preserves PostgreSQL as the authoritative store, keeps blockchain features optional and feature-flagged until vendor APIs mature, and treats Phase 1 as a small, reversible pilot rather than a campus-wide commitment — with the vendor bearing the burden of answering Section 14 in writing before Phase 0 is considered closed.
 

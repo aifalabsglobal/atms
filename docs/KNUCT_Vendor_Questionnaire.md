@@ -1,6 +1,6 @@
 # Knuct Vendor Diligence Questionnaire (Phase 0)
 
-**From:** JNTUH SCMS Integration Team  
+**From:** AIMSCS Integration Team  
 **To:** Knuct / WebWallet vendor contact  
 **Re:** Pre-production integration for campus decentralized identity & audit anchoring  
 **Date:** June 2026
@@ -9,7 +9,7 @@
 
 ## Context
 
-JNTUH SCMS is evaluating Knuct as an optional third-party layer for:
+AIMSCS is evaluating Knuct as an optional third-party layer for:
 
 1. **Wallet + DID provisioning** per user (Phase 1 — implemented in mock mode)
 2. **Hash-only audit anchoring** for attendance, grades, violations (Phase 3 — implemented; chain publish pending your API)
@@ -61,7 +61,7 @@ Is a Data Processing Agreement available for student-data handling under India's
 
 ### 9. Dedicated staging tenant
 Is there a dedicated staging/sandbox tenant separate from the shared public dev environment?  
-Can JNTUH receive isolated credentials for integration testing?
+Can AIMSCS receive isolated credentials for integration testing?
 
 ### 10. Passphrase & privshare lifecycle
 After privshare download, is the wallet passphrase still required for future operations?  

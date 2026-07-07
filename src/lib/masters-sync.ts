@@ -21,7 +21,7 @@ export function buildCoursePayloadFromSubject(subject: SubjectWithSemester) {
     semester: semesterCodeToNumber(subject.semester?.code),
     type: subject.type,
     syllabus: subject.syllabus,
-    description: `${subject.name} — ${subject.category || 'PC'} (JNTUH R22)`,
+    description: `${subject.name} — ${subject.category || 'PC'} (AIMSCS R22)`,
     isActive: subject.isActive,
   };
 }

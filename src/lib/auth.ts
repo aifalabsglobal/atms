@@ -1,7 +1,7 @@
 import type { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
-import { db } from '@/lib/db';
+import { db, isConnectionError } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
 import { applyPlatformDefaults } from '@/lib/env';
 import { consumeKnuctLoginGrant } from '@/lib/knuct/login-grant';
@@ -83,6 +83,9 @@ export const authOptions: NextAuthOptions = {
           return buildAuthUser(user);
         } catch (err) {
           console.error('[auth] authorize failed:', err);
+          if (isConnectionError(err)) {
+            throw new Error('DatabaseConnectionError');
+          }
           return null;
         }
       },

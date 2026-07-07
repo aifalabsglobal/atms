@@ -43,7 +43,7 @@ async function fetchGeofences(includeInactive: boolean): Promise<{ geofences: Ge
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 const NAVY = '#1A3C6E';
-const DEFAULT_CENTER: [number, number] = [17.4563, 78.6698]; // JNTUH approximate location
+const DEFAULT_CENTER: [number, number] = [17.4563, 78.6698]; // AIMSCS approximate location
 const DEFAULT_ZOOM = 16;
 
 // ─── Haversine Distance ─────────────────────────────────────────────────────

@@ -32,7 +32,7 @@ export const ROLE_PRESETS: Record<Role, CurrentUser> = {
   super_admin: {
     id: 'u1',
     name: 'Dr. K. Sreenivasa Raju',
-    email: 'vice.chancellor@jntuh.ac.in',
+    email: 'vice.chancellor@aimscs.ac.in',
     role: 'super_admin',
     department: 'Administration',
     avatar: 'KS',
@@ -40,7 +40,7 @@ export const ROLE_PRESETS: Record<Role, CurrentUser> = {
   admin: {
     id: 'u2',
     name: 'Prof. M. Manzoor Hussain',
-    email: 'registrar@jntuh.ac.in',
+    email: 'registrar@aimscs.ac.in',
     role: 'admin',
     department: 'Administration',
     avatar: 'MM',
@@ -48,7 +48,7 @@ export const ROLE_PRESETS: Record<Role, CurrentUser> = {
   hod: {
     id: 'u3',
     name: 'Dr. A. Vinaya Babu',
-    email: 'hod.cse@jntuh.ac.in',
+    email: 'hod.cse@aimscs.ac.in',
     role: 'hod',
     department: 'Computer Science & Engineering',
     avatar: 'AV',
@@ -56,7 +56,7 @@ export const ROLE_PRESETS: Record<Role, CurrentUser> = {
   faculty: {
     id: 'u6',
     name: 'Prof. Venkat Ramana',
-    email: 'faculty.venkat@jntuh.ac.in',
+    email: 'faculty.venkat@aimscs.ac.in',
     role: 'faculty',
     department: 'Computer Science & Engineering',
     avatar: 'PV',
@@ -64,7 +64,7 @@ export const ROLE_PRESETS: Record<Role, CurrentUser> = {
   lab_assistant: {
     id: 'u8',
     name: 'Ravi Teja K.',
-    email: 'lab.ravi@jntuh.ac.in',
+    email: 'lab.ravi@aimscs.ac.in',
     role: 'lab_assistant',
     department: 'Computer Science & Engineering',
     avatar: 'RT',
@@ -72,7 +72,7 @@ export const ROLE_PRESETS: Record<Role, CurrentUser> = {
   student: {
     id: 'u10',
     name: 'Arun Kumar',
-    email: 'student.ravi@jntuh.ac.in',
+    email: 'student.ravi@aimscs.ac.in',
     role: 'student',
     department: 'Computer Science & Engineering',
     avatar: 'AK',
@@ -81,7 +81,7 @@ export const ROLE_PRESETS: Record<Role, CurrentUser> = {
   parent: {
     id: 'u18',
     name: 'Mr. Rajesh Kumar',
-    email: 'parent.rajesh@jntuh.ac.in',
+    email: 'parent.rajesh@aimscs.ac.in',
     role: 'parent',
     avatar: 'RK',
     linkedStudentId: 'u10',
@@ -89,14 +89,14 @@ export const ROLE_PRESETS: Record<Role, CurrentUser> = {
   visitor: {
     id: 'u19',
     name: 'John Smith',
-    email: 'visitor.john@jntuh.ac.in',
+    email: 'visitor.john@aimscs.ac.in',
     role: 'visitor',
     avatar: 'JS',
   },
   security: {
     id: 'u20',
     name: 'Murthy Garu',
-    email: 'security.murthy@jntuh.ac.in',
+    email: 'security.murthy@aimscs.ac.in',
     role: 'security',
     avatar: 'MG',
   },

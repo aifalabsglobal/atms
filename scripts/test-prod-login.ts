@@ -21,7 +21,7 @@ async function main() {
   const cookieHeader = () => [...jar.entries()].map(([k, v]) => `${k}=${v}`).join('; ');
 
   const body = new URLSearchParams({
-    email: 'vice.chancellor@jntuh.ac.in',
+    email: 'vice.chancellor@aimscs.ac.in',
     password: 'demo123',
     csrfToken,
     callbackUrl: `${BASE}/`,
@@ -58,7 +58,7 @@ async function main() {
   });
   console.log('home status:', homeRes.status, 'location:', homeRes.headers.get('location') ?? '(none)');
 
-  if (!sessionText.includes('vice.chancellor@jntuh.ac.in')) {
+  if (!sessionText.includes('vice.chancellor@aimscs.ac.in')) {
     process.exitCode = 1;
     console.error('FAIL: session not established');
   } else {

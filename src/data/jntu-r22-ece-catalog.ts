@@ -1,9 +1,9 @@
-/** JNTUH R22 B.Tech ECE subject catalog — bundled for bulk import. */
+/** AIMSCS R22 B.Tech ECE subject catalog — bundled for bulk import. */
 export const JNTU_R22_ECE_CATALOG = {
   regulation: 'R22',
   programCode: 'BTECH-ECE',
   departmentCode: 'ECE',
-  name: 'JNTUH R22 B.Tech Electronics & Communication Engineering',
+  name: 'AIMSCS R22 B.Tech Electronics & Communication Engineering',
   subjects: [
     { code: 'EC101BS', name: 'Mathematics-I (ECE)', semesterCode: 'I-I', credits: 3, lectureHours: 3, tutorialHours: 1, labHours: 0, type: 'core', category: 'BS', syllabus: 'Matrices, Eigen values, Partial differentiation, Multiple integrals' },
     { code: 'EC102ES', name: 'Network Analysis', semesterCode: 'I-I', credits: 3, lectureHours: 3, tutorialHours: 0, labHours: 0, type: 'core', category: 'ES', syllabus: 'Network Theorems, Transient Analysis, Two-Port Networks, Filters' },

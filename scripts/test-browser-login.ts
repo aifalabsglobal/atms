@@ -20,7 +20,7 @@ async function main() {
 
   // Browser signIn() does NOT send json=true
   const body = new URLSearchParams({
-    email: 'vice.chancellor@jntuh.ac.in',
+    email: 'vice.chancellor@aimscs.ac.in',
     password: 'demo123',
     csrfToken,
     callbackUrl: `${BASE}/`,

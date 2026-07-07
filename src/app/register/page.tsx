@@ -13,6 +13,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { KnuctDIDAuthPanel, type RegisterProfile } from '@/components/knuct/did-auth-panel';
+import { BRAND } from '@/lib/branding';
 
 const REGISTER_ROLES = [
   { value: 'student', label: 'Student' },
@@ -68,7 +69,7 @@ function ProfileFields({
           type="email"
           value={profile.email}
           onChange={(e) => setProfile((p) => ({ ...p, email: e.target.value }))}
-          placeholder="name@jntuh.ac.in"
+          placeholder={BRAND.emailPlaceholder}
           required
           disabled={disabled}
         />

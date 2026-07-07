@@ -28,7 +28,7 @@ export const CALENDAR_SEED_EVENTS: CalendarSeedEvent[] = [
   { title: 'II Year I Semester Begins', type: 'academic', startDate: '2025-07-01', description: 'Second year first semester classes commence', location: 'All Departments', color: CALENDAR_COLORS.academic, startTime: '09:00', endTime: '16:30' },
   { title: 'III Year I Semester Begins', type: 'academic', startDate: '2025-07-01', description: 'Third year first semester classes commence', location: 'All Departments', color: CALENDAR_COLORS.academic, startTime: '09:00', endTime: '16:30' },
   { title: 'IV Year I Semester Begins', type: 'academic', startDate: '2025-07-01', description: 'Final year first semester classes commence', location: 'All Departments', color: CALENDAR_COLORS.academic, startTime: '09:00', endTime: '16:30' },
-  { title: 'New Student Orientation', type: 'event', startDate: '2025-07-02', endDate: '2025-07-04', description: '3-day orientation program for newly admitted B.Tech students', location: 'JNTUH Auditorium', color: CALENDAR_COLORS.event, startTime: '09:00', endTime: '17:00' },
+  { title: 'New Student Orientation', type: 'event', startDate: '2025-07-02', endDate: '2025-07-04', description: '3-day orientation program for newly admitted B.Tech students', location: 'AIMSCS Auditorium', color: CALENDAR_COLORS.event, startTime: '09:00', endTime: '17:00' },
   { title: 'Course Registration Deadline — I Year', type: 'deadline', startDate: '2025-07-07', description: 'Last date for first year students to register for courses', location: 'Online Portal', color: CALENDAR_COLORS.deadline },
   { title: 'Add/Drop Period Ends', type: 'deadline', startDate: '2025-07-14', description: 'Last date to add or drop courses without penalty', color: CALENDAR_COLORS.deadline },
   { title: 'Bakrid (Eid al-Adha)', type: 'holiday', startDate: '2025-07-07', description: 'Public holiday — Bakrid', color: CALENDAR_COLORS.holiday },
@@ -56,7 +56,7 @@ export const CALENDAR_SEED_EVENTS: CalendarSeedEvent[] = [
   { title: "Teacher's Day", type: 'event', startDate: '2025-09-05', description: "Teacher's Day celebrations — Student-Faculty interaction", location: 'Auditorium', color: CALENDAR_COLORS.event, startTime: '10:00', endTime: '13:00' },
   { title: 'Milad-un-Nabi', type: 'holiday', startDate: '2025-09-16', description: "Prophet Muhammad's Birthday — Holiday", color: CALENDAR_COLORS.holiday },
   { title: 'Hindi Diwas', type: 'event', startDate: '2025-09-14', description: 'Hindi Diwas celebrations', location: 'Language Lab', color: CALENDAR_COLORS.event },
-  { title: 'Hackathon — CodeJNTUH 2025', type: 'event', startDate: '2025-09-20', endDate: '2025-09-21', description: '24-hour national hackathon organized by CSE Department', location: 'CSE Labs', color: CALENDAR_COLORS.event, startTime: '09:00', endTime: '09:00' },
+  { title: 'Hackathon — CodeAIMSCS 2025', type: 'event', startDate: '2025-09-20', endDate: '2025-09-21', description: '24-hour national hackathon organized by CSE Department', location: 'CSE Labs', color: CALENDAR_COLORS.event, startTime: '09:00', endTime: '09:00' },
   { title: 'Industry Connect Day', type: 'event', startDate: '2025-09-05', description: 'Industry visit and guest lecture series', location: 'Main Auditorium', color: CALENDAR_COLORS.event, startTime: '09:30', endTime: '16:00' },
 
   // ═══════════════════════════════════════════════════════
@@ -88,10 +88,10 @@ export const CALENDAR_SEED_EVENTS: CalendarSeedEvent[] = [
   // ═══════════════════════════════════════════════════════
   // DECEMBER 2025 — End Semester Exams
   // ═══════════════════════════════════════════════════════
-  { title: 'I Year I Sem End-Semester Examinations', type: 'exam', startDate: '2025-12-01', endDate: '2025-12-15', description: 'JNTUH End-semester examinations for I Year I Semester (R22 Regulation)', location: 'Examination Centers', color: CALENDAR_COLORS.exam, startTime: '10:00', endTime: '13:00' },
-  { title: 'II Year I Sem End-Semester Examinations', type: 'exam', startDate: '2025-12-01', endDate: '2025-12-15', description: 'JNTUH End-semester examinations for II Year I Semester', location: 'Examination Centers', color: CALENDAR_COLORS.exam, startTime: '14:00', endTime: '17:00' },
-  { title: 'III Year I Sem End-Semester Examinations', type: 'exam', startDate: '2025-12-01', endDate: '2025-12-15', description: 'JNTUH End-semester examinations for III Year I Semester', location: 'Examination Centers', color: CALENDAR_COLORS.exam, startTime: '10:00', endTime: '13:00' },
-  { title: 'IV Year I Sem End-Semester Examinations', type: 'exam', startDate: '2025-12-01', endDate: '2025-12-15', description: 'JNTUH End-semester examinations for IV Year I Semester', location: 'Examination Centers', color: CALENDAR_COLORS.exam, startTime: '14:00', endTime: '17:00' },
+  { title: 'I Year I Sem End-Semester Examinations', type: 'exam', startDate: '2025-12-01', endDate: '2025-12-15', description: 'AIMSCS End-semester examinations for I Year I Semester (R22 Regulation)', location: 'Examination Centers', color: CALENDAR_COLORS.exam, startTime: '10:00', endTime: '13:00' },
+  { title: 'II Year I Sem End-Semester Examinations', type: 'exam', startDate: '2025-12-01', endDate: '2025-12-15', description: 'AIMSCS End-semester examinations for II Year I Semester', location: 'Examination Centers', color: CALENDAR_COLORS.exam, startTime: '14:00', endTime: '17:00' },
+  { title: 'III Year I Sem End-Semester Examinations', type: 'exam', startDate: '2025-12-01', endDate: '2025-12-15', description: 'AIMSCS End-semester examinations for III Year I Semester', location: 'Examination Centers', color: CALENDAR_COLORS.exam, startTime: '10:00', endTime: '13:00' },
+  { title: 'IV Year I Sem End-Semester Examinations', type: 'exam', startDate: '2025-12-01', endDate: '2025-12-15', description: 'AIMSCS End-semester examinations for IV Year I Semester', location: 'Examination Centers', color: CALENDAR_COLORS.exam, startTime: '14:00', endTime: '17:00' },
   { title: 'IV Year Project Review — Phase I', type: 'academic', startDate: '2025-12-18', description: 'Final year B.Tech project phase-I review and presentation', location: 'Respective Departments', color: CALENDAR_COLORS.academic, startTime: '10:00', endTime: '16:00' },
   { title: 'Alumni Meet 2025', type: 'event', startDate: '2025-12-20', description: 'Annual alumni meet and networking event', location: 'Main Auditorium', color: CALENDAR_COLORS.event, startTime: '17:00', endTime: '21:00' },
   { title: 'Christmas Holidays', type: 'holiday', startDate: '2025-12-24', endDate: '2026-01-01', description: 'Christmas and New Year break', color: CALENDAR_COLORS.holiday },
@@ -144,7 +144,7 @@ export const CALENDAR_SEED_EVENTS: CalendarSeedEvent[] = [
   { title: 'IV Year II Sem Mid-II Examinations', type: 'exam', startDate: '2026-04-06', endDate: '2026-04-13', description: 'Second mid-semester examinations for IV Year II Semester', location: 'Examination Hall', color: CALENDAR_COLORS.exam, startTime: '14:00', endTime: '16:00' },
   { title: 'Ram Navami', type: 'holiday', startDate: '2026-04-09', description: 'Ram Navami — College holiday', color: CALENDAR_COLORS.holiday },
   { title: 'Ambedkar Jayanti', type: 'holiday', startDate: '2026-04-14', description: 'Dr. B.R. Ambedkar Jayanti — National holiday', color: CALENDAR_COLORS.holiday },
-  { title: 'Annual Day Celebrations', type: 'event', startDate: '2026-04-18', description: 'JNTUH College of Engineering Annual Day — Awards & Cultural program', location: 'Main Auditorium', color: CALENDAR_COLORS.event, startTime: '17:00', endTime: '21:00' },
+  { title: 'Annual Day Celebrations', type: 'event', startDate: '2026-04-18', description: 'AIMSCS College of Engineering Annual Day — Awards & Cultural program', location: 'Main Auditorium', color: CALENDAR_COLORS.event, startTime: '17:00', endTime: '21:00' },
   { title: 'Lab External Exam — IV Year', type: 'exam', startDate: '2026-04-15', endDate: '2026-04-20', description: 'External lab examinations for final year students', location: 'Respective Labs', color: CALENDAR_COLORS.exam, startTime: '10:00', endTime: '13:00' },
   { title: 'Last Working Day — II Semester', type: 'academic', startDate: '2026-04-25', description: 'Last day of classes for even semester', color: CALENDAR_COLORS.academic },
   { title: 'Lab Record Submission — II Sem', type: 'deadline', startDate: '2026-04-22', description: 'All lab record books submission deadline for II Semester', color: CALENDAR_COLORS.deadline },
@@ -153,12 +153,12 @@ export const CALENDAR_SEED_EVENTS: CalendarSeedEvent[] = [
   // ═══════════════════════════════════════════════════════
   // MAY 2026 — End Semester Exams
   // ═══════════════════════════════════════════════════════
-  { title: 'I Year II Sem End-Semester Examinations', type: 'exam', startDate: '2026-05-04', endDate: '2026-05-18', description: 'JNTUH End-semester examinations for I Year II Semester (R22 Regulation)', location: 'Examination Centers', color: CALENDAR_COLORS.exam, startTime: '10:00', endTime: '13:00' },
-  { title: 'II Year II Sem End-Semester Examinations', type: 'exam', startDate: '2026-05-04', endDate: '2026-05-18', description: 'JNTUH End-semester examinations for II Year II Semester', location: 'Examination Centers', color: CALENDAR_COLORS.exam, startTime: '14:00', endTime: '17:00' },
-  { title: 'III Year II Sem End-Semester Examinations', type: 'exam', startDate: '2026-05-04', endDate: '2026-05-18', description: 'JNTUH End-semester examinations for III Year II Semester', location: 'Examination Centers', color: CALENDAR_COLORS.exam, startTime: '10:00', endTime: '13:00' },
-  { title: 'IV Year II Sem End-Semester Examinations', type: 'exam', startDate: '2026-05-04', endDate: '2026-05-15', description: 'JNTUH End-semester examinations for IV Year II Semester — Final exams!', location: 'Examination Centers', color: CALENDAR_COLORS.exam, startTime: '14:00', endTime: '17:00' },
+  { title: 'I Year II Sem End-Semester Examinations', type: 'exam', startDate: '2026-05-04', endDate: '2026-05-18', description: 'AIMSCS End-semester examinations for I Year II Semester (R22 Regulation)', location: 'Examination Centers', color: CALENDAR_COLORS.exam, startTime: '10:00', endTime: '13:00' },
+  { title: 'II Year II Sem End-Semester Examinations', type: 'exam', startDate: '2026-05-04', endDate: '2026-05-18', description: 'AIMSCS End-semester examinations for II Year II Semester', location: 'Examination Centers', color: CALENDAR_COLORS.exam, startTime: '14:00', endTime: '17:00' },
+  { title: 'III Year II Sem End-Semester Examinations', type: 'exam', startDate: '2026-05-04', endDate: '2026-05-18', description: 'AIMSCS End-semester examinations for III Year II Semester', location: 'Examination Centers', color: CALENDAR_COLORS.exam, startTime: '10:00', endTime: '13:00' },
+  { title: 'IV Year II Sem End-Semester Examinations', type: 'exam', startDate: '2026-05-04', endDate: '2026-05-15', description: 'AIMSCS End-semester examinations for IV Year II Semester — Final exams!', location: 'Examination Centers', color: CALENDAR_COLORS.exam, startTime: '14:00', endTime: '17:00' },
   { title: 'May Day / Labour Day', type: 'holiday', startDate: '2026-05-01', description: 'International Labour Day — Holiday', color: CALENDAR_COLORS.holiday },
-  { title: 'IV Year B.Tech Results Declaration', type: 'academic', startDate: '2026-05-28', description: 'Final year B.Tech results expected to be declared by JNTUH', color: CALENDAR_COLORS.academic },
+  { title: 'IV Year B.Tech Results Declaration', type: 'academic', startDate: '2026-05-28', description: 'Final year B.Tech results expected to be declared by AIMSCS', color: CALENDAR_COLORS.academic },
   { title: 'Convocation Registration Deadline', type: 'deadline', startDate: '2026-05-30', description: 'Last date to register for the upcoming convocation ceremony', color: CALENDAR_COLORS.deadline },
 
   // ═══════════════════════════════════════════════════════
@@ -167,7 +167,7 @@ export const CALENDAR_SEED_EVENTS: CalendarSeedEvent[] = [
   { title: 'Summer Vacation Begins', type: 'holiday', startDate: '2026-06-01', endDate: '2026-06-30', description: 'Summer vacation period', color: CALENDAR_COLORS.holiday },
   { title: 'Campus Placement Drive — Final Round', type: 'event', startDate: '2026-06-05', endDate: '2026-06-08', description: 'Final round of campus placements for eligible students', location: 'Training & Placement Cell', color: CALENDAR_COLORS.event, startTime: '09:00', endTime: '17:00' },
   { title: 'Remedial Classes', type: 'class', startDate: '2026-06-10', endDate: '2026-06-25', description: 'Remedial classes for students with backlogs', location: 'Respective Departments', color: CALENDAR_COLORS.class, startTime: '09:00', endTime: '13:00' },
-  { title: 'Convocation Ceremony', type: 'event', startDate: '2026-06-15', description: 'Annual convocation for B.Tech degree award', location: 'JNTUH Auditorium', color: CALENDAR_COLORS.event, startTime: '10:00', endTime: '14:00' },
-  { title: 'I/II/III Year Results Declaration', type: 'academic', startDate: '2026-06-20', description: 'End-semester results expected to be declared by JNTUH', color: CALENDAR_COLORS.academic },
+  { title: 'Convocation Ceremony', type: 'event', startDate: '2026-06-15', description: 'Annual convocation for B.Tech degree award', location: 'AIMSCS Auditorium', color: CALENDAR_COLORS.event, startTime: '10:00', endTime: '14:00' },
+  { title: 'I/II/III Year Results Declaration', type: 'academic', startDate: '2026-06-20', description: 'End-semester results expected to be declared by AIMSCS', color: CALENDAR_COLORS.academic },
   { title: 'Academic Year 2025-2026 Ends', type: 'academic', startDate: '2026-06-30', description: 'Official end of AY 2025-2026 (R22 Regulation)', color: CALENDAR_COLORS.academic },
 ];;

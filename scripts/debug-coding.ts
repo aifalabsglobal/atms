@@ -46,7 +46,7 @@ async function login(email: string): Promise<string> {
 }
 
 async function main() {
-  const cookie = await login('student.ravi@jntuh.ac.in');
+  const cookie = await login('student.ravi@aimscs.ac.in');
   const qRes = await fetch(`${BASE}/api/lms/quizzes?limit=50`, { headers: { Cookie: cookie } });
   const qData = await qRes.json() as { questions?: { id: string; type: string; question?: string; codingMeta?: { slug?: string } }[] };
   const coding = (qData.questions ?? []).filter((q) => q.type === 'coding');

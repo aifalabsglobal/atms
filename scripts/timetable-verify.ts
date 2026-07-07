@@ -119,8 +119,8 @@ async function main() {
   let passed = 0;
 
   const cookies = {
-    faculty: await login('faculty.venkat@jntuh.ac.in'),
-    student: await login('student.ravi@jntuh.ac.in'),
+    faculty: await login('faculty.venkat@aimscs.ac.in'),
+    student: await login('student.ravi@aimscs.ac.in'),
   };
 
   for (const check of checks) {

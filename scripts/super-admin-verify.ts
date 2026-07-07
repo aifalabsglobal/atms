@@ -3,7 +3,7 @@
  * Requires dev server at BASE_URL (default http://localhost:3000)
  */
 const BASE = process.env.BASE_URL ?? 'http://localhost:3000';
-const SUPER_EMAIL = 'vice.chancellor@jntuh.ac.in';
+const SUPER_EMAIL = 'vice.chancellor@aimscs.ac.in';
 const SUPER_PASSWORD = 'demo123';
 
 type Result = { step: string; ok: boolean; detail?: string };
@@ -258,7 +258,7 @@ async function main() {
   }
 
   // Users — create + deactivate
-  const testEmail = `verify.${Date.now()}@jntuh.ac.in`;
+  const testEmail = `verify.${Date.now()}@aimscs.ac.in`;
   const userCreate = await api(cookie, '/api/users', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

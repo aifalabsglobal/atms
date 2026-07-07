@@ -114,8 +114,8 @@ const checks: Check[] = [
 async function main() {
   console.log('Geofence integration verify\n');
   const cookies = {
-    faculty: await login('faculty.venkat@jntuh.ac.in'),
-    student: await login('student.ravi@jntuh.ac.in'),
+    faculty: await login('faculty.venkat@aimscs.ac.in'),
+    student: await login('student.ravi@aimscs.ac.in'),
   };
 
   let passed = 0;

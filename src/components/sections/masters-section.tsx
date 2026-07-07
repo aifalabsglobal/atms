@@ -139,7 +139,7 @@ function DepartmentsTab({ departments, readOnly }: { departments: any[]; readOnl
     <>
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <div><CardTitle className="text-lg">Departments</CardTitle><CardDescription>JNTUH Engineering College departments</CardDescription></div>
+          <div><CardTitle className="text-lg">Departments</CardTitle><CardDescription>AIMSCS departments</CardDescription></div>
           {!readOnly && <Button size="sm" onClick={openNew} className="gap-1.5" style={{ backgroundColor: NAVY }}><Plus className="h-4 w-4" /> Add Department</Button>}
         </CardHeader>
         <CardContent>
@@ -182,7 +182,7 @@ function DepartmentsTab({ departments, readOnly }: { departments: any[]; readOnl
           <div><Label>Building</Label><Input value={form.building} onChange={e => setForm(f => ({ ...f, building: e.target.value }))} placeholder="Block-A" /></div>
           <div><Label>Floor</Label><Input value={form.floor} onChange={e => setForm(f => ({ ...f, floor: e.target.value }))} placeholder="3rd Floor" /></div>
           <div><Label>Phone</Label><Input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="+91-40-23158665" /></div>
-          <div><Label>Email</Label><Input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="cse@jntuh.ac.in" /></div>
+          <div><Label>Email</Label><Input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="cse@aimscs.ac.in" /></div>
           <div className="col-span-2"><Label>HOD</Label>
             <Select value={form.hodId || '__none__'} onValueChange={v => setForm(f => ({ ...f, hodId: v === '__none__' ? '' : v }))}>
               <SelectTrigger><SelectValue placeholder="Assign HOD" /></SelectTrigger>
@@ -635,7 +635,7 @@ function SubjectsTab({ subjects, departments, semesters, programs, readOnly }: {
     <>
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <div><CardTitle className="text-lg">Subjects (JNTU R22)</CardTitle><CardDescription>Course subjects as per JNTUH R22 B.Tech curriculum</CardDescription></div>
+          <div><CardTitle className="text-lg">Subjects (AIMSCS R22)</CardTitle><CardDescription>Course subjects as per AIMSCS R22 B.Tech curriculum</CardDescription></div>
           <div className="flex gap-2">
             {!readOnly && (
               <>
@@ -686,7 +686,7 @@ function SubjectsTab({ subjects, departments, semesters, programs, readOnly }: {
           </ScrollArea>
         </CardContent>
       </Card>
-      <FormDialog title={editItem ? 'Edit Subject' : 'Add Subject'} description={editItem ? 'Changes sync to linked LMS courses automatically' : 'Enter subject details (JNTU R22 pattern)'} open={dialogOpen} onOpenChange={setDialogOpen} onSubmit={handleSubmit} isLoading={createMut.isPending}>
+      <FormDialog title={editItem ? 'Edit Subject' : 'Add Subject'} description={editItem ? 'Changes sync to linked LMS courses automatically' : 'Enter subject details (AIMSCS R22 pattern)'} open={dialogOpen} onOpenChange={setDialogOpen} onSubmit={handleSubmit} isLoading={createMut.isPending}>
         <div className="grid grid-cols-2 gap-3">
           <div><Label>Code</Label><Input value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value }))} placeholder="CS301PC" /></div>
           <div><Label>Name</Label><Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Computer Organization" /></div>
@@ -748,7 +748,7 @@ function ProgramsTab({ programs, departments, readOnly }: { programs: any[]; dep
     <>
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <div><CardTitle className="text-lg">Programs</CardTitle><CardDescription>B.Tech programs offered by JNTUH Engineering College</CardDescription></div>
+          <div><CardTitle className="text-lg">Programs</CardTitle><CardDescription>B.Tech programs offered by AIMSCS</CardDescription></div>
           {!readOnly && <Button size="sm" onClick={openNew} className="gap-1.5" style={{ backgroundColor: NAVY }}><Plus className="h-4 w-4" /> Add Program</Button>}
         </CardHeader>
         <CardContent>
@@ -1053,8 +1053,8 @@ export default function MastersSection() {
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             {mastersReadOnly
-              ? 'View department-scoped masters data (JNTUH R22 Regulation)'
-              : 'Create and manage departments, academic years, semesters, subjects & programs (JNTUH R22 Regulation)'}
+              ? 'View department-scoped masters data (AIMSCS R22 Regulation)'
+              : 'Create and manage departments, academic years, semesters, subjects & programs (AIMSCS R22 Regulation)'}
           </p>
         </div>
       </div>

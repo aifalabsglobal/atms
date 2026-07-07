@@ -57,7 +57,7 @@ export async function GET() {
   return NextResponse.json(
     {
       status: healthy ? 'ok' : 'degraded',
-      service: 'jntuh-scms',
+      service: 'aimscs',
       version: process.env.npm_package_version ?? '0.2.0',
       checks,
       knuct: knuctMeta,

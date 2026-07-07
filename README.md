@@ -1,6 +1,6 @@
-# JNTUH SCMS — Smart Campus Management System
+# AIMSCS — Smart Campus Management System
 
-Attendance tracking and Learning Management for JNTUH Engineering College.
+Attendance tracking and Learning Management for AIMSCS.
 
 ## Stack
 
@@ -70,15 +70,15 @@ npm run dev
 
 | Role | Email |
 |------|-------|
-| Super Admin | `vice.chancellor@jntuh.ac.in` |
-| Admin | `registrar@jntuh.ac.in` |
-| HOD (CSE) | `hod.cse@jntuh.ac.in` |
-| Faculty | `faculty.venkat@jntuh.ac.in` |
-| Lab Assistant | `lab.ravi@jntuh.ac.in` |
-| Student | `student.ravi@jntuh.ac.in` |
-| Parent | `parent.rajesh@jntuh.ac.in` |
-| Visitor | `visitor.john@jntuh.ac.in` |
-| Security | `security.murthy@jntuh.ac.in` |
+| Super Admin | `vice.chancellor@aimscs.ac.in` |
+| Admin | `registrar@aimscs.ac.in` |
+| HOD (CSE) | `hod.cse@aimscs.ac.in` |
+| Faculty | `faculty.venkat@aimscs.ac.in` |
+| Lab Assistant | `lab.ravi@aimscs.ac.in` |
+| Student | `student.ravi@aimscs.ac.in` |
+| Parent | `parent.rajesh@aimscs.ac.in` |
+| Visitor | `visitor.john@aimscs.ac.in` |
+| Security | `security.murthy@aimscs.ac.in` |
 
 ## Roles & access
 
@@ -133,7 +133,7 @@ Each role sees only permitted sidebar sections. APIs enforce the same scope serv
    npx prisma migrate deploy && npm run build
    ```
 
-4. Set `NEXTAUTH_URL` to your production domain (e.g. `https://scms.jntuh.ac.in`)
+4. Set `NEXTAUTH_URL` to your production domain (e.g. `https://scms.aimscs.ac.in`)
 
 ### Deploy — Docker
 

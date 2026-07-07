@@ -45,9 +45,9 @@ async function main() {
   const cseDept = await db.department.findFirst({ where: { code: 'CSE' } });
   const eceDept = await db.department.findFirst({ where: { code: 'ECE' } });
   const itDept = await db.department.findFirst({ where: { code: 'IT' } });
-  const faculty = await db.user.findFirst({ where: { email: 'faculty.venkat@jntuh.ac.in' } });
-  const hod = await db.user.findFirst({ where: { email: 'hod.cse@jntuh.ac.in' } });
-  const admin = await db.user.findFirst({ where: { email: 'registrar@jntuh.ac.in' } });
+  const faculty = await db.user.findFirst({ where: { email: 'faculty.venkat@aimscs.ac.in' } });
+  const hod = await db.user.findFirst({ where: { email: 'hod.cse@aimscs.ac.in' } });
+  const admin = await db.user.findFirst({ where: { email: 'registrar@aimscs.ac.in' } });
 
   if (!cseDept || !eceDept || !itDept || !faculty || !hod) {
     throw new Error('Base seed missing — run: npm run db:seed');
@@ -107,7 +107,7 @@ async function main() {
 
   for (let i = 0; i < STUDENT_COUNT; i++) {
     const roll = 100 + i;
-    const email = `synth.stu${String(roll).padStart(3, '0')}@jntuh.ac.in`;
+    const email = `synth.stu${String(roll).padStart(3, '0')}@aimscs.ac.in`;
     if (existingEmails.has(email)) continue;
 
     const r = rand01(i);
@@ -393,7 +393,7 @@ async function main() {
   console.log('\n💡 Sample synthetic logins (password: demo123)');
   for (let i = 0; i < Math.min(5, STUDENT_COUNT); i++) {
     const roll = 100 + i;
-    console.log(`   synth.stu${String(roll).padStart(3, '0')}@jntuh.ac.in`);
+    console.log(`   synth.stu${String(roll).padStart(3, '0')}@aimscs.ac.in`);
   }
   console.log('');
 }

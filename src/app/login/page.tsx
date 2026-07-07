@@ -13,6 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { KnuctDIDAuthPanel } from '@/components/knuct/did-auth-panel';
 import { DEMO_ACCOUNTS, DEMO_PASSWORD } from '@/lib/demo-accounts';
+import { BRAND } from '@/lib/branding';
 import { copyDemoShareKit, copyDemoWalkthrough } from '@/lib/demo-share';
 import { DEMO_FLOW, DEMO_PREP_STEPS, DEMO_DO_NOT_SHOW } from '@/lib/demo-walkthrough';
 import { ROLE_COLORS } from '@/lib/store';
@@ -20,10 +21,10 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 
 const QUICK_TRY = [
-  { label: 'Super Admin', email: 'vice.chancellor@jntuh.ac.in', icon: Crown, color: '#1A3C6E' },
-  { label: 'Admin', email: 'registrar@jntuh.ac.in', icon: Shield, color: '#7c3aed' },
-  { label: 'Faculty', email: 'faculty.venkat@jntuh.ac.in', icon: Users, color: '#1B6B4A' },
-  { label: 'Student', email: 'student.ravi@jntuh.ac.in', icon: User, color: '#2563eb' },
+  { label: 'Super Admin', email: 'vice.chancellor@aimscs.ac.in', icon: Crown, color: '#1A3C6E' },
+  { label: 'Admin', email: 'registrar@aimscs.ac.in', icon: Shield, color: '#7c3aed' },
+  { label: 'Faculty', email: 'faculty.venkat@aimscs.ac.in', icon: Users, color: '#1B6B4A' },
+  { label: 'Student', email: 'student.ravi@aimscs.ac.in', icon: User, color: '#2563eb' },
 ] as const;
 
 export default function LoginPage() {
@@ -41,7 +42,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     setMounted(true);
-    setEmail('vice.chancellor@jntuh.ac.in');
+    setEmail('vice.chancellor@aimscs.ac.in');
     setPassword(DEMO_PASSWORD);
 
     const params = new URLSearchParams(window.location.search);
@@ -71,7 +72,9 @@ export default function LoginPage() {
       }
 
       if (result?.error === 'CredentialsSignin') {
-        setError('Invalid email or password. On a fresh deploy, seed the database (npm run db:seed).');
+        setError('Invalid email or password. Use vice.chancellor@aimscs.ac.in / demo123 after seeding (npm run db:seed).');
+      } else if (result?.error === 'DatabaseConnectionError') {
+        setError('Database is waking up — wait a few seconds and try again.');
       } else if (result?.error) {
         setError(`Login failed (${result.error}). Wait a few seconds and try again.`);
       } else {
@@ -143,9 +146,9 @@ export default function LoginPage() {
           <div className="mx-auto h-12 w-12 rounded-xl bg-[#1A3C6E] flex items-center justify-center">
             <GraduationCap className="h-7 w-7 text-white" />
           </div>
-          <CardTitle className="text-xl text-[#1A3C6E]">JNTUH SCMS</CardTitle>
+          <CardTitle className="text-xl text-[#1A3C6E]">{BRAND.name}</CardTitle>
           <CardDescription>
-            Smart Campus Management System — sign in with email or Knuct DID
+            {BRAND.tagline} — sign in with email or Knuct DID
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -179,7 +182,7 @@ export default function LoginPage() {
                       <Input
                         id="email"
                         type="email"
-                        placeholder="name@jntuh.ac.in"
+                        placeholder={BRAND.emailPlaceholder}
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         disabled={loading}
