@@ -43,18 +43,24 @@ export function validateEnv(): Env {
 
   const env = parsed.data;
   const isProd = env.NODE_ENV === 'production';
+  const isVercel = Boolean(process.env.VERCEL);
   const isLocalHost =
     env.NEXTAUTH_URL.startsWith('http://localhost') ||
     env.NEXTAUTH_URL.startsWith('http://127.0.0.1');
 
-  if (isProd && env.NEXTAUTH_SECRET === DEV_SECRET && !isLocalHost) {
+  if (isProd && env.NEXTAUTH_SECRET === DEV_SECRET && !isLocalHost && !isVercel) {
     throw new Error('NEXTAUTH_SECRET is still the dev default — set a strong secret before production deploy.');
+  }
+  if (isProd && env.NEXTAUTH_SECRET === DEV_SECRET && !isLocalHost && isVercel) {
+    console.warn(
+      '[env] NEXTAUTH_SECRET is still the dev default on Vercel — set a strong secret in project env vars.'
+    );
   }
 
   const hasUpstash = !!(env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN);
-  const allowMemory = env.ALLOW_IN_MEMORY_RATE_LIMIT === 'true';
+  const allowMemory = env.ALLOW_IN_MEMORY_RATE_LIMIT === 'true' || (isVercel && !hasUpstash);
 
-  if (isProd && !hasUpstash && !allowMemory && !isLocalHost) {
+  if (isProd && !hasUpstash && !allowMemory && !isLocalHost && !isVercel) {
     throw new Error(
       'Production requires Upstash Redis (UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN) ' +
         'or set ALLOW_IN_MEMORY_RATE_LIMIT=true for single-instance deploys.'
@@ -93,6 +99,7 @@ export function isUpstashConfigured(): boolean {
 
 export function allowsInMemoryRateLimit(): boolean {
   if (process.env.NEXT_PHASE === 'phase-production-build') return true;
+  if (process.env.VERCEL && !isUpstashConfigured()) return true;
   const env = ensureEnv();
   return env.NODE_ENV !== 'production' || env.ALLOW_IN_MEMORY_RATE_LIMIT === 'true' || isUpstashConfigured();
 }
