@@ -139,6 +139,12 @@ export async function POST(request: Request) {
         select: { name: true },
       });
       resolvedDept = dept?.name ?? resolvedDept;
+    } else if (resolvedDeptId && !resolvedDept) {
+      const dept = await db.department.findUnique({
+        where: { id: resolvedDeptId },
+        select: { name: true },
+      });
+      resolvedDept = dept?.name ?? null;
     }
 
     const tempPassword = password?.trim() || generateTempPassword();

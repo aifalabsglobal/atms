@@ -1,12 +1,16 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { UserPlus, Loader2, Pencil, Upload, UserX } from 'lucide-react';
 import type { UserItem } from '@/lib/types';
 import type { Role } from '@/lib/store';
-import { STAFF_ROLES } from '@/lib/user-management';
+import {
+  defaultRoleForScope,
+  rolesForActor,
+  type RoleScope,
+} from '@/lib/user-management';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,58 +22,26 @@ import {
 } from '@/components/ui/select';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
-const ROLES: { value: Role; label: string }[] = [
-  { value: 'admin', label: 'Admin' },
-  { value: 'hod', label: 'HOD' },
-  { value: 'faculty', label: 'Faculty' },
-  { value: 'lab_assistant', label: 'Lab Assistant' },
-  { value: 'student', label: 'Student' },
-  { value: 'parent', label: 'Parent' },
-  { value: 'visitor', label: 'Visitor' },
-  { value: 'security', label: 'Security' },
-];
-
-const HOD_ROLES: Role[] = ['faculty', 'lab_assistant', 'student'];
-
-function rolesForActor(actorRole: Role, scope: 'all' | 'staff' | 'campus' = 'all'): { value: Role; label: string }[] {
-  let roles = rolesForActorUnscoped(actorRole);
-  if (scope === 'staff') {
-    roles = roles.filter((r) => STAFF_ROLES.includes(r.value));
-  } else if (scope === 'campus') {
-    roles = roles.filter((r) => !STAFF_ROLES.includes(r.value));
-  }
-  return roles;
-}
-
-function rolesForActorUnscoped(actorRole: Role): { value: Role; label: string }[] {
-  if (actorRole === 'super_admin') {
-    return [{ value: 'super_admin', label: 'Super Admin' }, ...ROLES];
-  }
-  if (actorRole === 'admin') return ROLES;
-  if (actorRole === 'hod') {
-    return ROLES.filter((r) => HOD_ROLES.includes(r.value));
-  }
-  return [];
-}
-
-function defaultRoleForScope(actorRole: Role, scope: 'all' | 'staff' | 'campus'): Role {
-  const roles = rolesForActor(actorRole, scope);
-  if (scope === 'staff') {
-    const faculty = roles.find((r) => r.value === 'faculty');
-    if (faculty) return faculty.value;
-  }
-  if (scope === 'campus') {
-    const student = roles.find((r) => r.value === 'student');
-    if (student) return student.value;
-  }
-  return roles[0]?.value ?? 'student';
-}
-
 const STATUSES = [
   { value: 'active', label: 'Active' },
   { value: 'inactive', label: 'Inactive' },
   { value: 'suspended', label: 'Suspended' },
 ] as const;
+
+type DepartmentOption = { id: string; name: string; code: string };
+
+function useDepartments(enabled: boolean) {
+  return useQuery({
+    queryKey: ['departments-picker'],
+    queryFn: () =>
+      fetch('/api/masters/departments?limit=100&isActive=true').then((r) => {
+        if (!r.ok) throw new Error('Failed to load departments');
+        return r.json() as Promise<{ departments: DepartmentOption[] }>;
+      }),
+    enabled,
+    staleTime: 60_000,
+  });
+}
 
 export async function uploadProfileImage(userId: string, imageBase64: string): Promise<string> {
   const res = await fetch('/api/users/profile-image', {
@@ -100,13 +72,15 @@ export function EditUserDialog({
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { updateUser, deactivateUser } = useUserMutations();
+  const { data: deptData } = useDepartments(open);
+  const departments = deptData?.departments ?? [];
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [form, setForm] = useState({
     name: '',
     role: 'student' as Role,
     status: 'active',
-    department: '',
+    departmentId: '',
     phone: '',
   });
 
@@ -116,7 +90,7 @@ export function EditUserDialog({
       name: user.name,
       role: user.role as Role,
       status: user.status,
-      department: user.department || '',
+      departmentId: '',
       phone: user.phone || '',
     });
     setAvatarUrl(user.avatarUrl);
@@ -127,13 +101,15 @@ export function EditUserDialog({
 
   const handleSave = () => {
     if (!user) return;
+    const selectedDept = departments.find((d) => d.id === form.departmentId);
     updateUser.mutate(
       {
         id: user.id,
         name: form.name,
         role: form.role,
         status: form.status,
-        department: form.department,
+        department: selectedDept?.name ?? user.department ?? undefined,
+        departmentId: form.departmentId || undefined,
         phone: form.phone,
       },
       { onSuccess: () => onOpenChange(false) },
@@ -151,6 +127,7 @@ export function EditUserDialog({
         const url = await uploadProfileImage(user.id, base64);
         setAvatarUrl(url);
         queryClient.invalidateQueries({ queryKey: ['users'] });
+        queryClient.invalidateQueries({ queryKey: ['settings-user-accounts'] });
         toast({ title: 'Profile photo updated' });
       } catch (err) {
         toast({ title: 'Upload failed', description: (err as Error).message, variant: 'destructive' });
@@ -226,8 +203,24 @@ export function EditUserDialog({
             </div>
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="eu-dept">Department</Label>
-            <Input id="eu-dept" value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))} disabled={!canEditDept} />
+            <Label>Department</Label>
+            {departments.length > 0 ? (
+              <Select
+                value={form.departmentId || 'none'}
+                onValueChange={(v) => setForm((f) => ({ ...f, departmentId: v === 'none' ? '' : v }))}
+                disabled={!canEditDept}
+              >
+                <SelectTrigger><SelectValue placeholder={user.department || 'Select department'} /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">{user.department ? `Keep: ${user.department}` : 'No department'}</SelectItem>
+                  {departments.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>{d.code} — {d.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input value={user.department || ''} disabled />
+            )}
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="eu-phone">Phone</Label>
@@ -263,37 +256,48 @@ export function CreateUserDialog({
   onOpenChange,
   actorRole,
   roleScope = 'all',
+  initialRole,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   actorRole: Role;
-  roleScope?: 'all' | 'staff' | 'campus';
+  roleScope?: RoleScope;
+  initialRole?: Role;
 }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { data: deptData } = useDepartments(open);
+  const departments = deptData?.departments ?? [];
   const [form, setForm] = useState({
     name: '',
     email: '',
     role: defaultRoleForScope(actorRole, roleScope),
-    department: '',
+    departmentId: '',
     phone: '',
     employeeId: '',
   });
 
   useEffect(() => {
     if (!open) return;
+    const role = initialRole ?? defaultRoleForScope(actorRole, roleScope);
     setForm((prev) => ({
       ...prev,
-      role: defaultRoleForScope(actorRole, roleScope),
+      role: rolesForActor(actorRole, roleScope).some((r) => r.value === role)
+        ? role
+        : defaultRoleForScope(actorRole, roleScope),
     }));
-  }, [open, actorRole, roleScope]);
+  }, [open, actorRole, roleScope, initialRole]);
 
   const createMutation = useMutation({
     mutationFn: async () => {
+      const selectedDept = departments.find((d) => d.id === form.departmentId);
       const res = await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          ...form,
+          department: selectedDept?.name,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to create user');
@@ -301,6 +305,8 @@ export function CreateUserDialog({
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['settings-user-accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['rbac-user-picker'] });
       toast({
         title: 'User created',
         description: data.tempPassword ? `Temporary password: ${data.tempPassword}` : undefined,
@@ -310,7 +316,7 @@ export function CreateUserDialog({
         name: '',
         email: '',
         role: defaultRoleForScope(actorRole, roleScope),
-        department: '',
+        departmentId: '',
         phone: '',
         employeeId: '',
       });
@@ -320,6 +326,7 @@ export function CreateUserDialog({
 
   const assignableRoles = rolesForActor(actorRole, roleScope);
   const isStaffForm = roleScope === 'staff';
+  const roleLabel = assignableRoles.find((r) => r.value === form.role)?.label ?? form.role;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -327,12 +334,16 @@ export function CreateUserDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <UserPlus className="h-5 w-5" />
-            {isStaffForm ? 'Add Staff Member' : roleScope === 'campus' ? 'Add Campus User' : 'Create User'}
+            {initialRole
+              ? `Add ${roleLabel}`
+              : isStaffForm
+                ? 'Add Staff Member'
+                : roleScope === 'campus'
+                  ? 'Add Campus User'
+                  : 'Create User'}
           </DialogTitle>
           <DialogDescription>
-            {isStaffForm
-              ? 'Add faculty, admin, or security staff. A temporary password will be generated.'
-              : 'Add a new campus user. A temporary password will be generated.'}
+            A temporary password will be generated. Share it securely with the user.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 py-2">
@@ -362,8 +373,24 @@ export function CreateUserDialog({
             </div>
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="cu-dept">Department</Label>
-            <Input id="cu-dept" value={form.department} onChange={(e) => setForm((f) => ({ ...f, department: e.target.value }))} disabled={actorRole === 'hod'} />
+            <Label>Department</Label>
+            {departments.length > 0 ? (
+              <Select
+                value={form.departmentId || 'none'}
+                onValueChange={(v) => setForm((f) => ({ ...f, departmentId: v === 'none' ? '' : v }))}
+                disabled={actorRole === 'hod'}
+              >
+                <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No department</SelectItem>
+                  {departments.map((d) => (
+                    <SelectItem key={d.id} value={d.id}>{d.code} — {d.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input placeholder="Department name" disabled={actorRole === 'hod'} />
+            )}
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="cu-phone">Phone</Label>
@@ -393,6 +420,7 @@ export function useUserMutations() {
       role?: Role;
       status?: string;
       department?: string;
+      departmentId?: string;
       phone?: string;
       resetPassword?: boolean;
     }) => {
@@ -407,6 +435,7 @@ export function useUserMutations() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['settings-user-accounts'] });
       if (data.tempPassword) {
         toast({ title: 'Password reset', description: `New password: ${data.tempPassword}` });
       } else {
@@ -425,6 +454,7 @@ export function useUserMutations() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['settings-user-accounts'] });
       toast({ title: 'User deactivated' });
     },
     onError: (err: Error) => toast({ title: 'Error', description: err.message, variant: 'destructive' }),

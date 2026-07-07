@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { GraduationCap, Loader2, Check, Share2, User, Users, Shield, BookOpen, ChevronDown, Crown, KeyRound } from 'lucide-react';
+import { BrandLogo } from '@/components/brand-logo';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -143,9 +144,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#1A3C6E]/5 via-background to-[#1A3C6E]/10 p-4 py-8">
       <Card className="w-full max-w-2xl shadow-lg">
         <CardHeader className="text-center space-y-3 pb-2">
-          <div className="mx-auto h-12 w-12 rounded-xl bg-[#1A3C6E] flex items-center justify-center">
-            <GraduationCap className="h-7 w-7 text-white" />
-          </div>
+          <BrandLogo size="lg" className="mx-auto" priority />
           <CardTitle className="text-xl text-[#1A3C6E]">{BRAND.name}</CardTitle>
           <CardDescription>
             {BRAND.tagline} — sign in with email or Knuct DID

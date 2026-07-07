@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { GraduationCap, CheckCircle2, Loader2, Download, Wallet } from 'lucide-react';
+import { CheckCircle2, Loader2, Download, Wallet } from 'lucide-react';
+import { BrandLogo } from '@/components/brand-logo';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -176,9 +177,7 @@ export default function RegisterPage() {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#1A3C6E]/5 via-background to-[#1A3C6E]/10 p-4 py-8">
       <Card className="w-full max-w-lg shadow-lg">
         <CardHeader className="text-center space-y-3 pb-2">
-          <div className="mx-auto h-12 w-12 rounded-xl bg-[#1A3C6E] flex items-center justify-center">
-            <GraduationCap className="h-7 w-7 text-white" />
-          </div>
+          <BrandLogo size="lg" className="mx-auto" priority />
           <CardTitle className="text-xl text-[#1A3C6E]">Register with Knuct</CardTitle>
           <CardDescription>
             Create a new Knuct wallet or link an existing one. An administrator will approve your campus account.

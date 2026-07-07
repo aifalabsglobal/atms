@@ -635,7 +635,7 @@ export default function UsersSection() {
 
   return (
     <div className="space-y-4">
-      {canManage && <RegistrationRequestsPanel />}
+      {canManage && <RegistrationRequestsPanel actorRole={currentUser.role} />}
 
       {/* Section Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">

@@ -2,11 +2,12 @@
 
 import { useAppStore, ROLE_LABELS, ROLE_COLORS, useEffectiveSections, type Role, type Section } from '@/lib/store';
 import { BRAND } from '@/lib/branding';
+import { BrandLogo } from '@/components/brand-logo';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, ScanLine, BookOpen, Users, ShieldAlert,
   BarChart3, MapPin, Settings, Menu, X, Bell, ChevronDown,
-  GraduationCap, LogOut, Moon, Sun, Search, Shield, UserCircle,
+  LogOut, Moon, Sun, Search, Shield, UserCircle,
   Database, CalendarDays, Loader2,
 } from 'lucide-react';
 import { useTheme } from 'next-themes';
@@ -154,9 +155,7 @@ function AppContent() {
               {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </Button>
             <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-lg bg-[#1A3C6E] flex items-center justify-center">
-                <GraduationCap className="h-5 w-5 text-white" />
-              </div>
+              <BrandLogo size="sm" priority />
               <div className="hidden sm:flex flex-col">
                 <span className="text-sm font-bold leading-tight text-[#1A3C6E]">{BRAND.name}</span>
                 <span className="text-[10px] text-muted-foreground leading-tight">{BRAND.tagline}</span>

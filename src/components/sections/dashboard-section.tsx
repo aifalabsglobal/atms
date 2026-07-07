@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils';
 import type { GeofenceItem } from '@/lib/types';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
+import { BrandLogo } from '@/components/brand-logo';
 import {
   Users, GraduationCap, BookOpen, ScanLine, Activity,
   ShieldAlert, UserPlus, ArrowUpRight, ArrowDownRight,
@@ -1355,9 +1356,7 @@ function VisitorDashboard({ data }: { data: DashboardData }) {
       <Card className="border-l-4" style={{ borderLeftColor: '#6B7280' }}>
         <CardContent className="p-4 md:p-5">
           <div className="flex items-start gap-4">
-            <div className="h-12 w-12 rounded-lg bg-[#1A3C6E] flex items-center justify-center shrink-0">
-              <GraduationCap className="h-7 w-7 text-white" />
-            </div>
+            <BrandLogo size="md" className="shrink-0" />
             <div>
               <h3 className="text-lg font-semibold text-[#1A3C6E]">AIMSCS</h3>
               <p className="text-sm text-muted-foreground">Welcome to the AIMSCS Smart Campus. Explore campus zones and information below.</p>

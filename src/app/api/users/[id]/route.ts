@@ -62,6 +62,16 @@ export async function PATCH(request: Request, context: RouteContext) {
     if (body.name?.trim()) data.name = body.name.trim();
     if (body.phone !== undefined) data.phone = body.phone?.trim() || null;
     if (body.department !== undefined) data.department = body.department?.trim() || null;
+    if (body.departmentId !== undefined) {
+      data.departmentId = body.departmentId || null;
+      if (body.departmentId && body.department === undefined) {
+        const dept = await db.department.findUnique({
+          where: { id: body.departmentId },
+          select: { name: true },
+        });
+        if (dept) data.department = dept.name;
+      }
+    }
 
     if (body.role) {
       if (!ALL_ROLES.includes(body.role as Role)) {

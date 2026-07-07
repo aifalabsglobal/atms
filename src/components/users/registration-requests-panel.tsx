@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import type { Role } from '@/lib/store';
+import { rolesForActor } from '@/lib/user-management';
 
 type RegistrationRequest = {
   id: string;
@@ -25,15 +26,8 @@ type RegistrationRequest = {
   createdAt: string;
 };
 
-const APPROVE_ROLES = [
-  { value: 'student', label: 'Student' },
-  { value: 'faculty', label: 'Faculty' },
-  { value: 'lab_assistant', label: 'Lab Assistant' },
-  { value: 'parent', label: 'Parent' },
-  { value: 'visitor', label: 'Visitor' },
-] as const;
-
-export function RegistrationRequestsPanel() {
+export function RegistrationRequestsPanel({ actorRole }: { actorRole: Role }) {
+  const approveRoles = rolesForActor(actorRole);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [roleOverrides, setRoleOverrides] = useState<Record<string, Role>>({});
@@ -141,7 +135,7 @@ export function RegistrationRequestsPanel() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {APPROVE_ROLES.map((r) => (
+                    {approveRoles.map((r) => (
                       <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
                     ))}
                   </SelectContent>

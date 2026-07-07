@@ -18,6 +18,7 @@ import {
   Link2, RefreshCw, Wallet, Save, RotateCcw, UserCircle, Trash2, Download,
 } from 'lucide-react';
 import { KnuctDIDAuthPanel } from '@/components/knuct/did-auth-panel';
+import { UserAccountsPanel } from '@/components/users/user-accounts-panel';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAppStore, ROLE_LABELS, useRoleSections, useSectionAccess, type Role, type Section } from '@/lib/store';
 import { ALL_ROLES, DEFAULT_ROLE_SECTIONS } from '@/lib/rbac-defaults';
@@ -881,6 +882,7 @@ export default function SettingsSection() {
         <TabsList className={showSettingsAdminTabs ? 'grid w-full max-w-3xl grid-cols-5' : 'grid w-full max-w-lg grid-cols-3'}>
           <TabsTrigger value="config">Configuration</TabsTrigger>
           <TabsTrigger value="rbac">RBAC Matrix</TabsTrigger>
+          {isSuperAdmin && <TabsTrigger value="users">User Accounts</TabsTrigger>}
           {showSettingsAdminTabs && <TabsTrigger value="knuct">Knuct</TabsTrigger>}
           {showSettingsAdminTabs && <TabsTrigger value="audit">Audit Log</TabsTrigger>}
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
@@ -1031,6 +1033,12 @@ export default function SettingsSection() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {isSuperAdmin && (
+          <TabsContent value="users" className="space-y-4">
+            <UserAccountsPanel actorRole={currentUser.role} />
+          </TabsContent>
+        )}
 
         {showSettingsAdminTabs && (
           <TabsContent value="knuct" className="space-y-4">

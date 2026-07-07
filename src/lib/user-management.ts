@@ -23,6 +23,57 @@ export const ALL_ROLES: Role[] = [
   'security',
 ];
 
+export const ROLE_OPTIONS: { value: Role; label: string }[] = [
+  { value: 'admin', label: 'Admin' },
+  { value: 'hod', label: 'HOD' },
+  { value: 'faculty', label: 'Faculty (Teacher)' },
+  { value: 'lab_assistant', label: 'Lab Assistant' },
+  { value: 'student', label: 'Student' },
+  { value: 'parent', label: 'Parent' },
+  { value: 'visitor', label: 'Visitor' },
+  { value: 'security', label: 'Security' },
+];
+
+const HOD_ASSIGNABLE: Role[] = ['faculty', 'lab_assistant', 'student'];
+
+export type RoleScope = 'all' | 'staff' | 'campus';
+
+export function rolesForActor(
+  actorRole: Role,
+  scope: RoleScope = 'all',
+): { value: Role; label: string }[] {
+  let roles: { value: Role; label: string }[];
+  if (actorRole === 'super_admin') {
+    roles = [{ value: 'super_admin', label: 'Super Admin' }, ...ROLE_OPTIONS];
+  } else if (actorRole === 'admin') {
+    roles = [...ROLE_OPTIONS];
+  } else if (actorRole === 'hod') {
+    roles = ROLE_OPTIONS.filter((r) => HOD_ASSIGNABLE.includes(r.value));
+  } else {
+    roles = [];
+  }
+
+  if (scope === 'staff') {
+    roles = roles.filter((r) => STAFF_ROLES.includes(r.value));
+  } else if (scope === 'campus') {
+    roles = roles.filter((r) => !STAFF_ROLES.includes(r.value));
+  }
+  return roles;
+}
+
+export function defaultRoleForScope(actorRole: Role, scope: RoleScope): Role {
+  const roles = rolesForActor(actorRole, scope);
+  if (scope === 'staff') {
+    const faculty = roles.find((r) => r.value === 'faculty');
+    if (faculty) return faculty.value;
+  }
+  if (scope === 'campus') {
+    const student = roles.find((r) => r.value === 'student');
+    if (student) return student.value;
+  }
+  return roles[0]?.value ?? 'student';
+}
+
 export function canAssignRole(actorRole: Role, targetRole: Role): boolean {
   if (actorRole === 'super_admin') return true;
   if (actorRole === 'admin') return targetRole !== 'super_admin';

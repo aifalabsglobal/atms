@@ -18,7 +18,8 @@ export const metadata: Metadata = {
   title: `${BRAND.name} - ${BRAND.tagline}`,
   description: `${BRAND.fullTitle} - Attendance & Learning Management`,
   icons: {
-    icon: "/logo.svg",
+    icon: BRAND.logoSrc,
+    apple: BRAND.logoSrc,
   },
 };
 
