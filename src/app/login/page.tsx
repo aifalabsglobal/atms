@@ -1,6 +1,6 @@
 'use client';
 
-import { signIn, getSession } from 'next-auth/react';
+import { signIn } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { GraduationCap, Loader2, Check, Share2, User, Users, Shield, BookOpen, ChevronDown, Crown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -37,41 +37,27 @@ export default function LoginPage() {
     setMounted(true);
     setEmail('vice.chancellor@jntuh.ac.in');
     setPassword(DEMO_PASSWORD);
+
+    const params = new URLSearchParams(window.location.search);
+    const authError = params.get('error');
+    if (authError === 'CredentialsSignin') {
+      setError('Invalid email or password. On a fresh deploy, seed the database (npm run db:seed).');
+    } else if (authError === 'Configuration') {
+      setError('Auth is misconfigured. Set NEXTAUTH_URL to your Vercel domain and a strong NEXTAUTH_SECRET.');
+    }
   }, []);
 
   const signInAs = async (targetEmail: string, targetPassword = DEMO_PASSWORD) => {
     setLoadingEmail(targetEmail);
     setError('');
     try {
-      const result = await signIn('credentials', {
+      await signIn('credentials', {
         email: targetEmail,
         password: targetPassword,
-        redirect: false,
+        callbackUrl: '/',
       });
-      if (result?.error) {
-        const msg =
-          result.error === 'Configuration'
-            ? 'Auth is misconfigured on the server. Set NEXTAUTH_URL to your Vercel domain and a strong NEXTAUTH_SECRET.'
-            : result.error === 'TooManyRequests'
-              ? 'Too many login attempts. Wait a minute and try again.'
-              : 'Invalid email or password. On a fresh deploy, seed the database (npm run db:seed).';
-        setError(msg);
-        return;
-      }
-
-      // Cold serverless + DB can take 15–30s; wait for session cookie before navigating.
-      for (let i = 0; i < 8; i++) {
-        const session = await getSession();
-        if (session?.user?.email) {
-          window.location.assign('/');
-          return;
-        }
-        await new Promise((r) => setTimeout(r, 500));
-      }
-      window.location.assign('/');
     } catch {
       setError('Login failed — the server may be waking up. Please try again in a few seconds.');
-    } finally {
       setLoadingEmail(null);
     }
   };

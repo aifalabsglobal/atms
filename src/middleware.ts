@@ -3,6 +3,9 @@ import { NextResponse } from 'next/server';
 import type { NextFetchEvent, NextRequest } from 'next/server';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { applySecurityHeaders } from '@/lib/security-headers';
+import { applyPlatformDefaults } from '@/lib/env';
+
+applyPlatformDefaults();
 
 function getClientIp(request: NextRequest): string {
   const forwarded = request.headers.get('x-forwarded-for');
@@ -12,6 +15,7 @@ function getClientIp(request: NextRequest): string {
 
 const authMiddleware = withAuth({
   pages: { signIn: '/login' },
+  secret: process.env.NEXTAUTH_SECRET,
 });
 
 export default async function middleware(request: NextRequest, event: NextFetchEvent) {

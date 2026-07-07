@@ -23,11 +23,18 @@ let cached: Env | null = null;
 
 /** Vercel sets VERCEL_URL per deployment; NextAuth needs NEXTAUTH_URL for cookies/sessions. */
 export function applyPlatformDefaults(): void {
-  if (!process.env.NEXTAUTH_URL && process.env.VERCEL_URL) {
-    process.env.NEXTAUTH_URL = `https://${process.env.VERCEL_URL}`;
-  }
-  if (!process.env.NEXTAUTH_URL && process.env.VERCEL_PROJECT_PRODUCTION_URL) {
-    process.env.NEXTAUTH_URL = `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`;
+  const vercelHost = process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : null;
+
+  if (vercelHost) {
+    const current = process.env.NEXTAUTH_URL ?? '';
+    // Override localhost placeholder copied from .env — breaks secure cookies on Vercel.
+    if (!current || current.includes('localhost') || current.includes('127.0.0.1')) {
+      process.env.NEXTAUTH_URL = vercelHost;
+    }
   }
 }
 

@@ -3,7 +3,10 @@ import CredentialsProvider from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
 import { db } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
+import { applyPlatformDefaults } from '@/lib/env';
 import type { Role } from '@/lib/store';
+
+applyPlatformDefaults();
 
 const JWT_DB_REFRESH_MS = 5 * 60 * 1000;
 
@@ -17,6 +20,7 @@ function initialsFromName(name: string): string {
 }
 
 export const authOptions: NextAuthOptions = {
+  secret: process.env.NEXTAUTH_SECRET,
   session: { strategy: 'jwt' },
   pages: { signIn: '/login' },
   providers: [
