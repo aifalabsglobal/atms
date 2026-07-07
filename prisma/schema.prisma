@@ -143,6 +143,32 @@ model KnuctWallet {
   updatedAt    DateTime @updatedAt
 
   @@index([status])
+  @@index([did])
+}
+
+model KnuctRegistrationRequest {
+  id              String   @id @default(cuid())
+  did             String   @unique
+  email           String
+  name            String
+  employeeId      String?
+  phone           String?
+  departmentId    String?
+  department      String?
+  requestedRole   String   @default("student")
+  status          String   @default("pending") // pending | approved | rejected
+  rejectionReason String?
+  reviewedById    String?
+  reviewedAt      DateTime?
+  approvedUserId  String?  @unique
+  privShareEnc    Bytes?
+  walletSource    String   @default("existing") // existing | created
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status])
+  @@index([email])
+  @@index([createdAt])
 }
 
 model BlockchainAnchor {

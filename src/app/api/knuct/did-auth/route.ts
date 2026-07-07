@@ -1,29 +1,21 @@
 /**
- * DID Auth API — two-step endpoint
+ * DID Auth API — two-step endpoint (requires NextAuth session)
  *
  * POST /api/knuct/did-auth  { step: 'challenge', hash: string }
  *   → { challenge: string }
  *
  * POST /api/knuct/did-auth  { step: 'complete', response: number[] }
  *   → { did: string }
- *
- * The client must call these in order. Between steps, the same
- * KnuctHttpAdapter (with its Knuct session cookies) is held in memory
- * keyed by the authenticated user's ID.
  */
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import {
-  createDIDAuthSession,
-  deleteDIDAuthSession,
-  getDIDAuthSession,
-  purgeDIDAuthSessions,
-} from '@/lib/knuct/did-auth-session';
-import { db } from '@/lib/db';
+import { purgeDIDAuthSessions } from '@/lib/knuct/did-auth-session';
+import { persistVerifiedDid, runDidAuthChallenge, runDidAuthComplete } from '@/lib/knuct/did-auth-flow';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+export const maxDuration = 30;
 
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
@@ -33,68 +25,39 @@ export async function POST(req: Request) {
 
   purgeDIDAuthSessions();
 
-  const body = await req.json() as { step?: string; hash?: string; response?: number[] };
+  const body = (await req.json()) as { step?: string; hash?: string; response?: number[] };
   const { step } = body;
+  const sessionKey = session.user.id;
 
-  // ── Step 1: challenge ─────────────────────────────────────────────────
   if (step === 'challenge') {
     const { hash } = body;
     if (!hash || typeof hash !== 'string') {
       return NextResponse.json({ error: 'hash is required' }, { status: 400 });
     }
 
-    const adapter = createDIDAuthSession(session.user.id);
     try {
-      const challenge = await adapter.authChallenge(hash);
+      const challenge = await runDidAuthChallenge(sessionKey, hash);
       return NextResponse.json({ challenge });
     } catch (err) {
-      deleteDIDAuthSession(session.user.id);
       const msg = err instanceof Error ? err.message : 'Challenge request failed';
       return NextResponse.json({ error: msg }, { status: 502 });
     }
   }
 
-  // ── Step 2: complete ──────────────────────────────────────────────────
   if (step === 'complete') {
     const { response } = body;
     if (!Array.isArray(response) || response.length === 0) {
       return NextResponse.json({ error: 'response array is required' }, { status: 400 });
     }
 
-    const adapter = getDIDAuthSession(session.user.id);
-    if (!adapter) {
-      return NextResponse.json(
-        { error: 'DID auth session expired — please start again' },
-        { status: 409 }
-      );
-    }
-
     try {
-      await adapter.authResponse(response);
-      await adapter.startNode();
-      const walletData = await adapter.walletData();
-
-      // Persist the verified DID into the user's knuct wallet record
-      await db.knuctWallet.upsert({
-        where: { userId: session.user.id },
-        create: {
-          userId: session.user.id,
-          did: walletData.did,
-          status: 'active',
-        },
-        update: {
-          did: walletData.did,
-          status: 'active',
-          lastError: null,
-        },
-      });
-
-      deleteDIDAuthSession(session.user.id);
-      return NextResponse.json({ did: walletData.did });
+      const did = await runDidAuthComplete(sessionKey, response);
+      await persistVerifiedDid(session.user.id, did);
+      return NextResponse.json({ did });
     } catch (err) {
-      deleteDIDAuthSession(session.user.id);
       const msg = err instanceof Error ? err.message : 'DID auth completion failed';
-      return NextResponse.json({ error: msg }, { status: 502 });
+      const status = msg.includes('expired') ? 409 : 502;
+      return NextResponse.json({ error: msg }, { status });
     }
   }
 

@@ -23,11 +23,6 @@ function pickRandomSeedWords(count: number): [KnuctSeedWord, KnuctSeedWord, Knuc
 
 export async function provisionWallet(userId: string): Promise<void> {
   const config = getKnuctConfig();
-  const adapter =
-    config.enabled && !isKnuctCircuitOpen()
-      ? createKnuctHttpAdapter(config.baseUrl)
-      : new MockKnuctAdapter();
-
   await db.knuctWallet.upsert({
     where: { userId },
     create: { userId, status: 'pending' },
@@ -38,30 +33,17 @@ export async function provisionWallet(userId: string): Promise<void> {
   const attempts = config.maxRetries + 1;
 
   for (let attempt = 1; attempt <= attempts; attempt++) {
-    const sessionAdapter =
-      config.enabled && !isKnuctCircuitOpen()
-        ? createKnuctHttpAdapter(config.baseUrl)
-        : adapter;
     try {
-      await sessionAdapter.startTempNode();
-
-      const passphrase = randomUUID();
-      const seedWords = pickRandomSeedWords(4);
-      const { did, privShareUrl } = await sessionAdapter.createWallet(passphrase, seedWords);
-
-      const share = await sessionAdapter.fetchPrivateShare(privShareUrl);
-      const encrypted = encryptBuffer(share.raw);
-
+      const { did, privShareEnc } = await createKnuctWalletBundle();
       await db.knuctWallet.update({
         where: { userId },
         data: {
           did,
-          privShareEnc: new Uint8Array(encrypted),
+          privShareEnc: new Uint8Array(privShareEnc),
           status: 'active',
           lastError: null,
         },
       });
-
       console.info('[knuct] wallet provisioned', { userId, did, mode: config.enabled ? 'live' : 'mock' });
       return;
     } catch (err) {
@@ -78,6 +60,32 @@ export async function provisionWallet(userId: string): Promise<void> {
     where: { userId },
     data: { status: 'failed', lastError: message.slice(0, 500) },
   });
+}
+
+/** Create a new Knuct wallet + encrypted privshare (for admin provision or self-registration). */
+export async function createKnuctWalletBundle(): Promise<{
+  did: string;
+  privShareRaw: Buffer;
+  privShareEnc: Uint8Array;
+}> {
+  const config = getKnuctConfig();
+  const adapter =
+    config.enabled && !isKnuctCircuitOpen()
+      ? createKnuctHttpAdapter(config.baseUrl)
+      : new MockKnuctAdapter();
+
+  await adapter.startTempNode();
+  const passphrase = randomUUID();
+  const seedWords = pickRandomSeedWords(4);
+  const { did, privShareUrl } = await adapter.createWallet(passphrase, seedWords);
+  const share = await adapter.fetchPrivateShare(privShareUrl);
+  const encrypted = encryptBuffer(share.raw);
+
+  return {
+    did,
+    privShareRaw: share.raw,
+    privShareEnc: new Uint8Array(encrypted),
+  };
 }
 
 /** Queue wallet provisioning without blocking the HTTP response (live Knuct can take 1–2 minutes). */

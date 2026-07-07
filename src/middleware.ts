@@ -23,6 +23,18 @@ export default async function middleware(request: NextRequest, event: NextFetchE
     return applySecurityHeaders(NextResponse.next());
   }
 
+  if (request.nextUrl.pathname === '/api/knuct/login') {
+    return applySecurityHeaders(NextResponse.next());
+  }
+
+  if (request.nextUrl.pathname.startsWith('/api/register')) {
+    return applySecurityHeaders(NextResponse.next());
+  }
+
+  if (request.nextUrl.pathname === '/register') {
+    return applySecurityHeaders(NextResponse.next());
+  }
+
   if (request.nextUrl.pathname.startsWith('/api/verify')) {
     return applySecurityHeaders(NextResponse.next());
   }

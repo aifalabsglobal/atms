@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import { db } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
 import { applyPlatformDefaults } from '@/lib/env';
+import { consumeKnuctLoginGrant } from '@/lib/knuct/login-grant';
 import type { Role } from '@/lib/store';
 
 applyPlatformDefaults();
@@ -17,6 +18,31 @@ function initialsFromName(name: string): string {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? '')
     .join('');
+}
+
+async function buildAuthUser(user: {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  department: string | null;
+  profileImageUrl: string | null;
+  linkedStudentId: string | null;
+}) {
+  await db.user.update({
+    where: { id: user.id },
+    data: { lastLoginAt: new Date() },
+  });
+
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role as Role,
+    department: user.department ?? undefined,
+    profileImageUrl: user.profileImageUrl ?? undefined,
+    linkedStudentId: user.linkedStudentId ?? undefined,
+  };
 }
 
 export const authOptions: NextAuthOptions = {
@@ -47,29 +73,44 @@ export const authOptions: NextAuthOptions = {
 
           if (!valid) return null;
 
-          await db.user.update({
-            where: { id: user.id },
-            data: { lastLoginAt: new Date() },
+          await logAudit({
+            userId: user.id,
+            action: 'login',
+            resource: `user:${user.id}`,
+            details: { email: user.email, role: user.role, method: 'password' },
           });
+
+          return buildAuthUser(user);
+        } catch (err) {
+          console.error('[auth] authorize failed:', err);
+          return null;
+        }
+      },
+    }),
+    CredentialsProvider({
+      id: 'knuct',
+      name: 'Knuct DID',
+      credentials: {
+        loginToken: { label: 'Login Token', type: 'password' },
+      },
+      async authorize(credentials) {
+        const userId = consumeKnuctLoginGrant(credentials?.loginToken);
+        if (!userId) return null;
+
+        try {
+          const user = await db.user.findUnique({ where: { id: userId } });
+          if (!user || user.status !== 'active') return null;
 
           await logAudit({
             userId: user.id,
             action: 'login',
             resource: `user:${user.id}`,
-            details: { email: user.email, role: user.role },
+            details: { email: user.email, role: user.role, method: 'knuct_did' },
           });
 
-          return {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            role: user.role as Role,
-            department: user.department ?? undefined,
-            profileImageUrl: user.profileImageUrl ?? undefined,
-            linkedStudentId: user.linkedStudentId ?? undefined,
-          };
+          return buildAuthUser(user);
         } catch (err) {
-          console.error('[auth] authorize failed:', err);
+          console.error('[auth] knuct authorize failed:', err);
           return null;
         }
       },
