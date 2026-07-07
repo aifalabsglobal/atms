@@ -22,7 +22,7 @@ function initialsFromName(name: string): string {
 export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
   session: { strategy: 'jwt' },
-  pages: { signIn: '/login' },
+  pages: { signIn: '/login', error: '/login' },
   providers: [
     CredentialsProvider({
       name: 'Credentials',
