@@ -4,6 +4,8 @@ import { applyPlatformDefaults } from '@/lib/env';
 
 applyPlatformDefaults();
 
+export const maxDuration = 30;
+
 const handler = NextAuth(authOptions);
 
 export { handler as GET, handler as POST };

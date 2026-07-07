@@ -5,6 +5,7 @@ import { getKnuctCircuitState } from '@/lib/knuct/circuit-breaker';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+export const maxDuration = 30;
 
 export async function GET() {
   const started = Date.now();
@@ -19,7 +20,12 @@ export async function GET() {
   }
 
   try {
-    const knuct = await getKnuctHealth({ ping: true });
+    const knuct = await Promise.race([
+      getKnuctHealth({ ping: true }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Knuct health ping timed out')), 5000)
+      ),
+    ]);
     const queue = getKnuctQueueStats();
     const circuit = getKnuctCircuitState();
     checks.knuct =
@@ -31,7 +37,7 @@ export async function GET() {
     checks.knuctQueue = queue.pending > 10 ? 'degraded' : 'ok';
   } catch (err) {
     console.error('[health] knuct check failed:', err);
-    checks.knuct = 'error';
+    checks.knuct = 'degraded';
   }
 
   const knuctMeta = (() => {
