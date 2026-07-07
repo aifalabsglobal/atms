@@ -2,6 +2,7 @@
 
 import { signIn } from 'next-auth/react';
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { GraduationCap, Loader2, Check, Share2, User, Users, Shield, BookOpen, ChevronDown, Crown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,6 +24,7 @@ const QUICK_TRY = [
 ] as const;
 
 export default function LoginPage() {
+  const router = useRouter();
   const { toast } = useToast();
   const [mounted, setMounted] = useState(false);
   const [email, setEmail] = useState('');
@@ -51,13 +53,29 @@ export default function LoginPage() {
     setLoadingEmail(targetEmail);
     setError('');
     try {
-      await signIn('credentials', {
+      const result = await signIn('credentials', {
         email: targetEmail,
         password: targetPassword,
         callbackUrl: '/',
+        redirect: false,
       });
+
+      if (result?.ok) {
+        router.replace('/');
+        router.refresh();
+        return;
+      }
+
+      if (result?.error === 'CredentialsSignin') {
+        setError('Invalid email or password. On a fresh deploy, seed the database (npm run db:seed).');
+      } else if (result?.error) {
+        setError(`Login failed (${result.error}). Wait a few seconds and try again.`);
+      } else {
+        setError('Login failed — the server may be waking up. Please try again in a few seconds.');
+      }
     } catch {
       setError('Login failed — the server may be waking up. Please try again in a few seconds.');
+    } finally {
       setLoadingEmail(null);
     }
   };

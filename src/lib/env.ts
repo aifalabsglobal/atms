@@ -23,6 +23,9 @@ let cached: Env | null = null;
 
 /** Vercel sets VERCEL_URL per deployment; NextAuth needs NEXTAUTH_URL for cookies/sessions. */
 export function applyPlatformDefaults(): void {
+  if (process.env.VERCEL) {
+    process.env.AUTH_TRUST_HOST = 'true';
+  }
   // Always match the active deployment host (production + preview URLs differ).
   if (process.env.VERCEL_URL) {
     process.env.NEXTAUTH_URL = `https://${process.env.VERCEL_URL}`;
@@ -71,7 +74,13 @@ export function validateEnv(): Env {
     (env.UPSTASH_REDIS_REST_URL && !env.UPSTASH_REDIS_REST_TOKEN) ||
     (!env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN)
   ) {
-    throw new Error('UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN must both be set or both omitted.');
+    const msg =
+      'UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN must both be set or both omitted.';
+    if (isVercel) {
+      console.warn(`[env] ${msg} Ignoring partial Upstash config on Vercel.`);
+    } else {
+      throw new Error(msg);
+    }
   }
 
   return env;
@@ -92,14 +101,23 @@ export function ensureEnv(): Env {
   return cached;
 }
 
+function hasUpstashEnvVars(): boolean {
+  return !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
+}
+
 export function isUpstashConfigured(): boolean {
-  const env = ensureEnv();
-  return !!(env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN);
+  if (!hasUpstashEnvVars()) return false;
+  try {
+    const env = ensureEnv();
+    return !!(env.UPSTASH_REDIS_REST_URL && env.UPSTASH_REDIS_REST_TOKEN);
+  } catch {
+    return hasUpstashEnvVars();
+  }
 }
 
 export function allowsInMemoryRateLimit(): boolean {
   if (process.env.NEXT_PHASE === 'phase-production-build') return true;
-  if (process.env.VERCEL && !isUpstashConfigured()) return true;
+  if (process.env.VERCEL && !hasUpstashEnvVars()) return true;
   const env = ensureEnv();
   return env.NODE_ENV !== 'production' || env.ALLOW_IN_MEMORY_RATE_LIMIT === 'true' || isUpstashConfigured();
 }

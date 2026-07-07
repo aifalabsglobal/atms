@@ -1,8 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { ensureEnv } from '@/lib/env';
 
-ensureEnv();
-
 const CONNECTION_ERROR_CODES = new Set(['P1001', 'P1017', 'P2024']);
 
 function isConnectionError(error: unknown): boolean {
@@ -16,6 +14,7 @@ function delay(ms: number) {
 }
 
 function createPrismaClient() {
+  ensureEnv();
   const client = new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
   });
