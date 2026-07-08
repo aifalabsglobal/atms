@@ -76,10 +76,12 @@ export async function validateRegistrationProfile(profile: RegistrationProfile) 
   return { email, name, employeeId, department, departmentId, requestedRole, phone: profile.phone?.trim() || null };
 }
 
+export type RegistrationWalletSource = 'existing' | 'created' | 'pending_create';
+
 export async function createRegistrationRequest(
   did: string,
   profile: RegistrationProfile,
-  opts?: { privShareEnc?: Uint8Array; walletSource?: 'existing' | 'created' }
+  opts?: { privShareEnc?: Uint8Array; walletSource?: RegistrationWalletSource }
 ) {
   const didError = await assertDidAvailableForRegistration(did);
   if (didError) throw new Error(didError);
@@ -174,8 +176,8 @@ export async function approveRegistrationRequest(params: {
   }
 
   let did = request.did;
-  let privShareEnc: Buffer | undefined = request.privShareEnc
-    ? Buffer.from(request.privShareEnc)
+  let privShareEnc: Uint8Array | undefined = request.privShareEnc
+    ? new Uint8Array(request.privShareEnc)
     : undefined;
 
   if (request.walletSource === 'pending_create' || !privShareEnc) {
@@ -183,7 +185,7 @@ export async function approveRegistrationRequest(params: {
     const liveDidTaken = await db.knuctWallet.findFirst({ where: { did: bundle.did }, select: { id: true } });
     if (liveDidTaken) throw new Error('Generated DID collision — try approving again.');
     did = bundle.did;
-    privShareEnc = Buffer.from(bundle.privShareEnc);
+    privShareEnc = new Uint8Array(bundle.privShareEnc);
   } else {
     const didTakenLive = await db.knuctWallet.findFirst({ where: { did: request.did }, select: { id: true } });
     if (didTakenLive) throw new Error('This DID is already linked to an account.');
@@ -218,7 +220,7 @@ export async function approveRegistrationRequest(params: {
       data: {
         userId: created.id,
         did,
-        privShareEnc,
+        privShareEnc: privShareEnc ? Buffer.from(privShareEnc) : undefined,
         status: 'active',
       },
     });
@@ -235,7 +237,7 @@ export async function approveRegistrationRequest(params: {
         department,
         departmentId,
         walletSource: privShareEnc ? 'created' : request.walletSource,
-        privShareEnc,
+        privShareEnc: privShareEnc ? Buffer.from(privShareEnc) : undefined,
       },
     });
 
