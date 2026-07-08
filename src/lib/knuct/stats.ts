@@ -144,7 +144,7 @@ export async function getKnuctDashboardStats(): Promise<KnuctDashboardStats> {
 }
 
 export async function getUserKnuctWallet(userId: string) {
-  return db.knuctWallet.findUnique({
+  const row = await db.knuctWallet.findUnique({
     where: { userId },
     select: {
       id: true,
@@ -153,6 +153,13 @@ export async function getUserKnuctWallet(userId: string) {
       lastError: true,
       createdAt: true,
       updatedAt: true,
+      privShareEnc: true,
     },
   });
+  if (!row) return null;
+  const { privShareEnc, ...wallet } = row;
+  return {
+    ...wallet,
+    hasPrivShare: privShareEnc != null && privShareEnc.length > 0,
+  };
 }

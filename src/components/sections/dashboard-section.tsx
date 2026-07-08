@@ -6,6 +6,7 @@ import type { GeofenceItem } from '@/lib/types';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { BrandLogo } from '@/components/brand-logo';
+import { MyKnuctWalletPanel } from '@/components/knuct/my-knuct-wallet-panel';
 import {
   Users, GraduationCap, BookOpen, ScanLine, Activity,
   ShieldAlert, UserPlus, ArrowUpRight, ArrowDownRight,
@@ -1561,6 +1562,8 @@ export default function DashboardSection() {
 
       {/* Role-specific Welcome */}
       <WelcomeBanner />
+
+      <MyKnuctWalletPanel />
 
       {/* Role-specific content */}
       {(role === 'super_admin' || role === 'admin') && <AdminDashboard data={data} role={role} />}
