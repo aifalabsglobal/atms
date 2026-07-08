@@ -42,6 +42,7 @@ export const ADMIN_ROLES: Role[] = ['super_admin', 'admin'];
 export const CAMPUS_READ_ROLES: Role[] = ['super_admin', 'admin', 'hod', 'faculty', 'lab_assistant', 'security'];
 
 export async function canAccessSection(role: Role, section: Section, userId?: string): Promise<boolean> {
+  if (role === 'super_admin') return true;
   return canAccessSectionAsync(role, section, userId);
 }
 
@@ -85,6 +86,7 @@ export async function requireSection(section: Section) {
   const { error, session } = await requireAuth();
   if (error || !session) return { error, session: null };
   const role = session.user.role as Role;
+  if (role === 'super_admin') return { error: null, session };
   if (!(await canAccessSection(role, section, session.user.id))) {
     return {
       error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }),

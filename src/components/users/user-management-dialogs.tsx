@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
-import { UserPlus, Loader2, Pencil, Upload, UserX } from 'lucide-react';
+import { UserPlus, Loader2, Pencil, Upload, UserX, KeyRound } from 'lucide-react';
 import type { UserItem } from '@/lib/types';
 import type { Role } from '@/lib/store';
 import {
@@ -41,6 +41,57 @@ function useDepartments(enabled: boolean) {
     enabled,
     staleTime: 60_000,
   });
+}
+
+type StudentOption = { id: string; name: string; email: string };
+
+function useStudents(enabled: boolean) {
+  return useQuery({
+    queryKey: ['students-picker'],
+    queryFn: () =>
+      fetch('/api/users?role=student&status=active&limit=200').then((r) => {
+        if (!r.ok) throw new Error('Failed to load students');
+        return r.json() as Promise<{ users: StudentOption[] }>;
+      }),
+    enabled,
+    staleTime: 60_000,
+  });
+}
+
+function StudentPicker({
+  value,
+  onChange,
+  disabled,
+  placeholder = 'Select student',
+}: {
+  value: string;
+  onChange: (id: string) => void;
+  disabled?: boolean;
+  placeholder?: string;
+}) {
+  const { data, isLoading } = useStudents(true);
+  const students = data?.users ?? [];
+
+  return (
+    <Select value={value || 'none'} onValueChange={(v) => onChange(v === 'none' ? '' : v)} disabled={disabled || isLoading}>
+      <SelectTrigger><SelectValue placeholder={isLoading ? 'Loading…' : placeholder} /></SelectTrigger>
+      <SelectContent>
+        <SelectItem value="none">{placeholder}</SelectItem>
+        {students.map((s) => (
+          <SelectItem key={s.id} value={s.id}>{s.name} — {s.email}</SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+function resolveDepartmentId(user: UserItem, departments: DepartmentOption[]): string {
+  if (user.departmentId) return user.departmentId;
+  if (user.department) {
+    const match = departments.find((d) => d.name === user.department);
+    if (match) return match.id;
+  }
+  return '';
 }
 
 export async function uploadProfileImage(userId: string, imageBase64: string): Promise<string> {
@@ -82,6 +133,7 @@ export function EditUserDialog({
     status: 'active',
     departmentId: '',
     phone: '',
+    linkedStudentId: '',
   });
 
   useEffect(() => {
@@ -90,17 +142,22 @@ export function EditUserDialog({
       name: user.name,
       role: user.role as Role,
       status: user.status,
-      departmentId: '',
+      departmentId: resolveDepartmentId(user, departments),
       phone: user.phone || '',
+      linkedStudentId: user.linkedStudentId || '',
     });
     setAvatarUrl(user.avatarUrl);
-  }, [user]);
+  }, [user, departments]);
 
   const assignableRoles = rolesForActor(actorRole);
   const canEditDept = actorRole !== 'hod';
 
   const handleSave = () => {
     if (!user) return;
+    if (form.role === 'parent' && !form.linkedStudentId) {
+      toast({ title: 'Student required', description: 'Select a linked student for parent accounts.', variant: 'destructive' });
+      return;
+    }
     const selectedDept = departments.find((d) => d.id === form.departmentId);
     updateUser.mutate(
       {
@@ -108,12 +165,19 @@ export function EditUserDialog({
         name: form.name,
         role: form.role,
         status: form.status,
-        department: selectedDept?.name ?? user.department ?? undefined,
-        departmentId: form.departmentId || undefined,
+        department: selectedDept?.name ?? (form.departmentId ? undefined : user.department ?? undefined),
+        departmentId: form.departmentId || null,
         phone: form.phone,
+        linkedStudentId: form.role === 'parent' ? form.linkedStudentId : null,
       },
       { onSuccess: () => onOpenChange(false) },
     );
+  };
+
+  const handleResetPassword = () => {
+    if (!user) return;
+    if (!window.confirm(`Reset password for ${user.email}? A new temporary password will be generated.`)) return;
+    updateUser.mutate({ id: user.id, resetPassword: true });
   };
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -181,7 +245,11 @@ export function EditUserDialog({
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-1.5">
               <Label>Role</Label>
-              <Select value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v as Role }))}>
+              <Select value={form.role} onValueChange={(v) => setForm((f) => ({
+                ...f,
+                role: v as Role,
+                linkedStudentId: v === 'parent' ? f.linkedStudentId : '',
+              }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {assignableRoles.map((r) => (
@@ -212,7 +280,7 @@ export function EditUserDialog({
               >
                 <SelectTrigger><SelectValue placeholder={user.department || 'Select department'} /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">{user.department ? `Keep: ${user.department}` : 'No department'}</SelectItem>
+                  <SelectItem value="none">No department</SelectItem>
                   {departments.map((d) => (
                     <SelectItem key={d.id} value={d.id}>{d.code} — {d.name}</SelectItem>
                   ))}
@@ -222,12 +290,34 @@ export function EditUserDialog({
               <Input value={user.department || ''} disabled />
             )}
           </div>
+          {form.role === 'parent' && (
+            <div className="grid gap-1.5">
+              <Label>Linked student</Label>
+              <StudentPicker
+                value={form.linkedStudentId}
+                onChange={(id) => setForm((f) => ({ ...f, linkedStudentId: id }))}
+                placeholder={user.linkedStudent ? `${user.linkedStudent.name} — ${user.linkedStudent.email}` : 'Select student'}
+              />
+            </div>
+          )}
           <div className="grid gap-1.5">
             <Label htmlFor="eu-phone">Phone</Label>
             <Input id="eu-phone" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} />
           </div>
         </div>
         <DialogFooter className="flex-col sm:flex-row gap-2">
+          {['super_admin', 'admin'].includes(actorRole) && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="mr-auto gap-1.5"
+              disabled={updateUser.isPending}
+              onClick={handleResetPassword}
+            >
+              {updateUser.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}
+              Reset password
+            </Button>
+          )}
           {['super_admin', 'admin'].includes(actorRole) && user.status !== 'inactive' && (
             <Button
               variant="destructive"
@@ -275,6 +365,7 @@ export function CreateUserDialog({
     departmentId: '',
     phone: '',
     employeeId: '',
+    linkedStudentId: '',
   });
 
   useEffect(() => {
@@ -285,11 +376,15 @@ export function CreateUserDialog({
       role: rolesForActor(actorRole, roleScope).some((r) => r.value === role)
         ? role
         : defaultRoleForScope(actorRole, roleScope),
+      linkedStudentId: role === 'parent' ? prev.linkedStudentId : '',
     }));
   }, [open, actorRole, roleScope, initialRole]);
 
   const createMutation = useMutation({
     mutationFn: async () => {
+      if (form.role === 'parent' && !form.linkedStudentId) {
+        throw new Error('Select a linked student for parent accounts');
+      }
       const selectedDept = departments.find((d) => d.id === form.departmentId);
       const res = await fetch('/api/users', {
         method: 'POST',
@@ -297,6 +392,7 @@ export function CreateUserDialog({
         body: JSON.stringify({
           ...form,
           department: selectedDept?.name,
+          linkedStudentId: form.role === 'parent' ? form.linkedStudentId : undefined,
         }),
       });
       const data = await res.json();
@@ -319,6 +415,7 @@ export function CreateUserDialog({
         departmentId: '',
         phone: '',
         employeeId: '',
+        linkedStudentId: '',
       });
     },
     onError: (err: Error) => toast({ title: 'Error', description: err.message, variant: 'destructive' }),
@@ -358,7 +455,11 @@ export function CreateUserDialog({
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-1.5">
               <Label>Role</Label>
-              <Select value={form.role} onValueChange={(v) => setForm((f) => ({ ...f, role: v as Role }))}>
+              <Select value={form.role} onValueChange={(v) => setForm((f) => ({
+                ...f,
+                role: v as Role,
+                linkedStudentId: v === 'parent' ? f.linkedStudentId : '',
+              }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {assignableRoles.map((r) => (
@@ -392,6 +493,15 @@ export function CreateUserDialog({
               <Input placeholder="Department name" disabled={actorRole === 'hod'} />
             )}
           </div>
+          {form.role === 'parent' && (
+            <div className="grid gap-1.5">
+              <Label>Linked student</Label>
+              <StudentPicker
+                value={form.linkedStudentId}
+                onChange={(id) => setForm((f) => ({ ...f, linkedStudentId: id }))}
+              />
+            </div>
+          )}
           <div className="grid gap-1.5">
             <Label htmlFor="cu-phone">Phone</Label>
             <Input id="cu-phone" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} />
@@ -399,7 +509,7 @@ export function CreateUserDialog({
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending || !form.name || !form.email}>
+          <Button onClick={() => createMutation.mutate()} disabled={createMutation.isPending || !form.name || !form.email || (form.role === 'parent' && !form.linkedStudentId)}>
             {createMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Create
           </Button>
@@ -420,8 +530,9 @@ export function useUserMutations() {
       role?: Role;
       status?: string;
       department?: string;
-      departmentId?: string;
+      departmentId?: string | null;
       phone?: string;
+      linkedStudentId?: string | null;
       resetPassword?: boolean;
     }) => {
       const res = await fetch(`/api/users/${id}`, {

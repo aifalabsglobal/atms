@@ -1,15 +1,17 @@
 'use client';
 
 import { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   UserPlus, Search, Pencil, GraduationCap, BookOpen, Shield, UserCog,
-  Users, FlaskConical, Heart, MapPin, ShieldCheck, Crown,
+  Users, FlaskConical, Heart, MapPin, ShieldCheck, Crown, Wallet, Loader2,
 } from 'lucide-react';
 import type { UserItem } from '@/lib/types';
 import type { Role } from '@/lib/store';
 import { ROLE_LABELS } from '@/lib/store';
 import { rolesForActor } from '@/lib/user-management';
+import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,12 +49,35 @@ const QUICK_CREATE: { label: string; role: Role; icon: typeof UserPlus }[] = [
   { label: 'Visitor', role: 'visitor', icon: MapPin },
 ];
 
+const WALLET_BADGE_STYLES: Record<string, string> = {
+  active: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+  pending: 'bg-amber-100 text-amber-800 border-amber-200',
+  failed: 'bg-red-100 text-red-800 border-red-200',
+};
+
+function WalletBadge({ wallet }: { wallet?: UserItem['knuctWallet'] }) {
+  if (!wallet) {
+    return (
+      <Badge variant="outline" className="text-[10px] text-muted-foreground">
+        No wallet
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className={cn('text-[10px] font-mono', WALLET_BADGE_STYLES[wallet.status] ?? 'bg-gray-100')}>
+      {wallet.status === 'active' && wallet.did ? `${wallet.did.slice(0, 10)}…` : wallet.status}
+    </Badge>
+  );
+}
+
 type UsersApiResponse = {
   users: UserItem[];
   total: number;
 };
 
 export function UserAccountsPanel({ actorRole }: { actorRole: Role }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [page, setPage] = useState(1);
@@ -62,6 +87,7 @@ export function UserAccountsPanel({ actorRole }: { actorRole: Role }) {
   const [editOpen, setEditOpen] = useState(false);
 
   const assignableRoles = rolesForActor(actorRole);
+  const canProvisionWallet = ['super_admin', 'admin'].includes(actorRole);
   const limit = 15;
 
   const queryParams = useMemo(() => {
@@ -90,6 +116,27 @@ export function UserAccountsPanel({ actorRole }: { actorRole: Role }) {
     setCreateRole(role);
     setCreateOpen(true);
   };
+
+  const provisionWallet = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await fetch('/api/knuct', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((data as { error?: string }).error ?? 'Provisioning failed');
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings-user-accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      toast({ title: 'Wallet provisioning started', description: 'Status will update shortly.' });
+    },
+    onError: (err: Error) => {
+      toast({ title: 'Provisioning failed', description: err.message, variant: 'destructive' });
+    },
+  });
 
   return (
     <div className="space-y-4">
@@ -195,13 +242,14 @@ export function UserAccountsPanel({ actorRole }: { actorRole: Role }) {
                       <TableHead>Role</TableHead>
                       <TableHead>Department</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead className="w-[80px]" />
+                      <TableHead>Wallet</TableHead>
+                      <TableHead className="w-[100px]" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {users.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                        <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                           No users match your filters.
                         </TableCell>
                       </TableRow>
@@ -218,7 +266,29 @@ export function UserAccountsPanel({ actorRole }: { actorRole: Role }) {
                           <TableCell className="text-sm">{user.department || '—'}</TableCell>
                           <TableCell className="text-sm capitalize">{user.status}</TableCell>
                           <TableCell>
-                            <Button
+                            <div className="flex flex-col gap-1">
+                              <WalletBadge wallet={user.knuctWallet} />
+                              {canProvisionWallet && user.knuctWallet?.status !== 'active' && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 px-1 text-[10px] gap-1 justify-start"
+                                  disabled={provisionWallet.isPending}
+                                  onClick={() => provisionWallet.mutate(user.id)}
+                                >
+                                  {provisionWallet.isPending ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    <Wallet className="h-3 w-3" />
+                                  )}
+                                  Provision
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1">
+                              <Button
                               variant="ghost"
                               size="icon"
                               className="h-8 w-8"
@@ -229,6 +299,7 @@ export function UserAccountsPanel({ actorRole }: { actorRole: Role }) {
                             >
                               <Pencil className="h-4 w-4" />
                             </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))

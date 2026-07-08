@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { DEFAULT_ROLE_SECTIONS } from '@/lib/rbac-defaults';
+import { ALL_SECTIONS, DEFAULT_ROLE_SECTIONS } from '@/lib/rbac-defaults';
 import { STAFF_ROLES } from '@/lib/user-management';
 import type { Role, Section } from '@/lib/roles';
 
@@ -134,6 +134,7 @@ export type SectionContext = {
   lmsTab?: string;
   lmsCourseId?: string;
   attendanceSessionId?: string;
+  settingsTab?: string;
 };
 
 interface AppState {
@@ -224,12 +225,15 @@ export function useEffectiveSections(): Section[] {
   const user = useAppStore((s) => s.currentUser);
   const userEffective = useAppStore((s) => s.userEffectiveSections);
   const roleMatrix = useRoleSections();
+  if (user?.role === 'super_admin') return [...ALL_SECTIONS];
   if (userEffective?.length) return userEffective;
   if (user) return roleMatrix[user.role] ?? DEFAULT_ROLE_SECTIONS[user.role] ?? ['dashboard'];
   return ['dashboard'];
 }
 
 export function useSectionAccess(section: Section): boolean {
+  const user = useAppStore((s) => s.currentUser);
+  if (user?.role === 'super_admin') return true;
   const sections = useEffectiveSections();
   return sections.includes(section);
 }
@@ -237,6 +241,7 @@ export function useSectionAccess(section: Section): boolean {
 /** Section RBAC + role capability (e.g. HOD has masters section but read-only). */
 export function useSectionWrite(section: Section, writeRoles: Role[]): boolean {
   const user = useAppStore((s) => s.currentUser);
+  if (user?.role === 'super_admin') return true;
   const sections = useEffectiveSections();
   if (!user) return false;
   return sections.includes(section) && writeRoles.includes(user.role);
@@ -252,6 +257,7 @@ export function useCanWriteMasters(): boolean {
 
 export function useIsMastersReadOnly(): boolean {
   const user = useAppStore((s) => s.currentUser);
+  if (user?.role === 'super_admin') return false;
   const sections = useEffectiveSections();
   if (!user || !sections.includes('masters')) return true;
   return user.role === 'hod' || !MASTERS_WRITE_ROLES.includes(user.role);
@@ -259,6 +265,7 @@ export function useIsMastersReadOnly(): boolean {
 
 export function useCanManageTimetable(): boolean {
   const user = useAppStore((s) => s.currentUser);
+  if (user?.role === 'super_admin') return true;
   const sections = useEffectiveSections();
   if (!user) return false;
   const hasScope = sections.includes('attendance') || sections.includes('masters');
@@ -271,6 +278,7 @@ export function useCanWriteLms(): boolean {
 
 export function useCanViewLmsRoster(): boolean {
   const user = useAppStore((s) => s.currentUser);
+  if (user?.role === 'super_admin') return true;
   const sections = useEffectiveSections();
   if (!user || !sections.includes('lms')) return false;
   return user.role === 'hod' || LMS_WRITE_ROLES.includes(user.role);

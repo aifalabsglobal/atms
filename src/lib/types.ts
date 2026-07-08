@@ -119,10 +119,13 @@ export interface UserItem {
   name: string;
   employeeId: string | null;
   department: string | null;
+  departmentId: string | null;
   phone: string | null;
   role: string;
   status: string;
   avatarUrl: string | null;
+  linkedStudentId: string | null;
+  linkedStudent?: { id: string; name: string; email: string } | null;
   lastLoginAt: string | null;
   createdAt: string;
   _count: { attendanceRecords: number; courseEnrollments: number; submissions: number; taughtCourses: number };

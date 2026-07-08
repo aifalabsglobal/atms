@@ -89,6 +89,7 @@ export function canAccessSectionSync(
   matrix?: Record<Role, Section[]> | null,
   override?: UserRbacOverrideInput | null,
 ): boolean {
+  if (role === 'super_admin') return ALL_SECTIONS.includes(section);
   if (override) {
     return resolveEffectiveSections(role, matrix ?? DEFAULT_ROLE_SECTIONS, override).includes(section);
   }
@@ -133,6 +134,7 @@ export function resolveEffectiveSections(
   matrix: Record<Role, Section[]>,
   override?: UserRbacOverrideInput | null,
 ): Section[] {
+  if (role === 'super_admin') return [...ALL_SECTIONS];
   const base = [...(matrix[role] ?? DEFAULT_ROLE_SECTIONS[role] ?? ['dashboard'] as Section[])];
   if (!override || (override.grant.length === 0 && override.revoke.length === 0)) {
     return base;
@@ -142,9 +144,6 @@ export function resolveEffectiveSections(
   for (const s of override.revoke) effective.delete(s);
   const result = [...effective];
   if (!result.includes('dashboard')) result.unshift('dashboard');
-  if (role === 'super_admin') {
-    if (!result.includes('settings')) result.push('settings');
-  }
   return result;
 }
 

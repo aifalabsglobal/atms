@@ -32,7 +32,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     const target = await db.user.findUnique({
       where: { id },
-      select: { id: true, email: true, role: true, departmentId: true, status: true },
+      select: { id: true, email: true, role: true, departmentId: true, linkedStudentId: true, status: true },
     });
 
     if (!target) {
@@ -112,6 +112,26 @@ export async function PATCH(request: Request, context: RouteContext) {
       data.passwordHash = await bcrypt.hash(newPassword, 10);
     }
 
+    const effectiveRole = (body.role ?? target.role) as string;
+    if (body.linkedStudentId !== undefined || (body.role && body.role !== target.role)) {
+      if (effectiveRole === 'parent') {
+        const linkedId = body.linkedStudentId !== undefined ? body.linkedStudentId : target.linkedStudentId;
+        if (!linkedId) {
+          return NextResponse.json({ error: 'linkedStudentId is required for parent accounts' }, { status: 400 });
+        }
+        const ward = await db.user.findUnique({
+          where: { id: linkedId },
+          select: { id: true, role: true, status: true },
+        });
+        if (!ward || ward.role !== 'student' || ward.status !== 'active') {
+          return NextResponse.json({ error: 'Linked student must be an active student account' }, { status: 400 });
+        }
+        data.linkedStudentId = linkedId;
+      } else if (body.linkedStudentId !== undefined || target.linkedStudentId) {
+        data.linkedStudentId = null;
+      }
+    }
+
     if (Object.keys(data).length === 0) {
       return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
     }
@@ -120,7 +140,8 @@ export async function PATCH(request: Request, context: RouteContext) {
       where: { id },
       data,
       select: {
-        id: true, email: true, name: true, role: true, department: true, status: true, phone: true, employeeId: true, lastLoginAt: true,
+        id: true, email: true, name: true, role: true, department: true, departmentId: true,
+        status: true, phone: true, employeeId: true, linkedStudentId: true, lastLoginAt: true,
       },
     });
 

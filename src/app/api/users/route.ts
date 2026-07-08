@@ -56,11 +56,13 @@ export async function GET(request: Request) {
       where.departmentId = scope.departmentId;
     }
 
-    const [users, total] = await Promise.all([
+    const [usersRaw, total] = await Promise.all([
       db.user.findMany({
         where,
         select: {
-          id: true, email: true, name: true, employeeId: true, department: true, phone: true, role: true, status: true, avatarUrl: true, lastLoginAt: true, createdAt: true,
+          id: true, email: true, name: true, employeeId: true, department: true, departmentId: true,
+          phone: true, role: true, status: true, avatarUrl: true, linkedStudentId: true,
+          lastLoginAt: true, createdAt: true,
           knuctWallet: { select: { did: true, status: true } },
           _count: { select: { attendanceRecords: true, courseEnrollments: true, submissions: true, taughtCourses: true } },
         },
@@ -70,6 +72,19 @@ export async function GET(request: Request) {
       }),
       db.user.count({ where }),
     ]);
+
+    const linkedIds = [...new Set(usersRaw.map((u) => u.linkedStudentId).filter((id): id is string => !!id))];
+    const linkedStudents = linkedIds.length
+      ? await db.user.findMany({
+          where: { id: { in: linkedIds } },
+          select: { id: true, name: true, email: true },
+        })
+      : [];
+    const linkedStudentMap = new Map(linkedStudents.map((s) => [s.id, s]));
+    const users = usersRaw.map((u) => ({
+      ...u,
+      linkedStudent: u.linkedStudentId ? linkedStudentMap.get(u.linkedStudentId) ?? null : null,
+    }));
 
     const roleDistWhere: Record<string, unknown> =
       scope.level === 'department' ? { departmentId: scope.departmentId } : {};
@@ -110,10 +125,23 @@ export async function POST(request: Request) {
     const actorRole = session.user.role as Role;
     const scope = await getCampusScope(session);
     const body = await request.json();
-    const { email, name, role, department, departmentId, phone, employeeId, password } = body;
+    const { email, name, role, department, departmentId, phone, employeeId, password, linkedStudentId } = body;
 
     if (!email?.trim() || !name?.trim() || !role) {
       return NextResponse.json({ error: 'email, name, and role are required' }, { status: 400 });
+    }
+
+    if (role === 'parent') {
+      if (!linkedStudentId) {
+        return NextResponse.json({ error: 'linkedStudentId is required for parent accounts' }, { status: 400 });
+      }
+      const ward = await db.user.findUnique({
+        where: { id: linkedStudentId },
+        select: { id: true, role: true, status: true },
+      });
+      if (!ward || ward.role !== 'student' || ward.status !== 'active') {
+        return NextResponse.json({ error: 'Linked student must be an active student account' }, { status: 400 });
+      }
     }
 
     if (!ALL_ROLES.includes(role as Role)) {
@@ -159,11 +187,13 @@ export async function POST(request: Request) {
         departmentId: resolvedDeptId,
         phone: phone?.trim() || null,
         employeeId: employeeId?.trim() || null,
+        linkedStudentId: role === 'parent' ? linkedStudentId : null,
         passwordHash,
         status: 'active',
       },
       select: {
-        id: true, email: true, name: true, role: true, department: true, status: true, employeeId: true, createdAt: true,
+        id: true, email: true, name: true, role: true, department: true, departmentId: true,
+        status: true, employeeId: true, linkedStudentId: true, createdAt: true,
       },
     });
 

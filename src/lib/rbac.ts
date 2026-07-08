@@ -110,6 +110,7 @@ export async function canAccessSectionAsync(
   section: Section,
   userId?: string,
 ): Promise<boolean> {
+  if (role === 'super_admin') return ALL_SECTIONS.includes(section);
   if (!userId) {
     const matrix = await getRbacMatrix();
     return matrix[role]?.includes(section) ?? false;
