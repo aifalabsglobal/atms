@@ -25,6 +25,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { CreateUserDialog, EditUserDialog } from '@/components/users/user-management-dialogs';
 import { RegistrationRequestsPanel } from '@/components/users/registration-requests-panel';
+import { WalletProvisionRequestsPanel } from '@/components/users/wallet-provision-requests-panel';
 
 const ROLE_BADGE: Record<string, string> = {
   super_admin: 'bg-red-100 text-red-800',
@@ -141,6 +142,7 @@ export function UserAccountsPanel({ actorRole }: { actorRole: Role }) {
   return (
     <div className="space-y-4">
       <RegistrationRequestsPanel actorRole={actorRole} />
+      <WalletProvisionRequestsPanel actorRole={actorRole} />
 
       <Card>
         <CardHeader>

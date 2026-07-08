@@ -2,6 +2,7 @@ import { db } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
 import { anchorResource } from '@/lib/knuct/anchor-service';
 import { createKnuctWalletBundle } from '@/lib/knuct/wallet-service';
+import { placeholderRegistrationDid } from '@/lib/knuct/wallet-provision-request-service';
 import {
   ALL_ROLES,
   canAssignRole,
@@ -102,23 +103,27 @@ export async function createRegistrationRequest(
   });
 }
 
-export async function createRegistrationWithNewWallet(profile: RegistrationProfile) {
+export async function createRegistrationPendingWallet(profile: RegistrationProfile) {
   await validateRegistrationProfile(profile);
-  const { did, privShareRaw, privShareEnc } = await createKnuctWalletBundle();
+  const placeholderDid = placeholderRegistrationDid();
 
-  const didError = await assertDidAvailableForRegistration(did);
+  const didError = await assertDidAvailableForRegistration(placeholderDid);
   if (didError) throw new Error(didError);
 
-  const request = await createRegistrationRequest(did, profile, {
-    privShareEnc,
-    walletSource: 'created',
+  const request = await createRegistrationRequest(placeholderDid, profile, {
+    walletSource: 'pending_create',
   });
 
   return {
     request,
-    privShareFilename: `knuct-privshare-${request.id}.png`,
-    privShareBase64: privShareRaw.toString('base64'),
+    message:
+      'Registration submitted. An administrator will review your profile and create your Knuct wallet upon approval.',
   };
+}
+
+/** @deprecated Use createRegistrationPendingWallet — wallet is created on admin approval. */
+export async function createRegistrationWithNewWallet(profile: RegistrationProfile) {
+  return createRegistrationPendingWallet(profile);
 }
 
 export async function listRegistrationRequests(status = 'pending') {
@@ -164,7 +169,25 @@ export async function approveRegistrationRequest(params: {
   if (existingUser) throw new Error('An account with this email already exists.');
 
   const didTaken = await db.knuctWallet.findFirst({ where: { did: request.did }, select: { id: true } });
-  if (didTaken) throw new Error('This DID is already linked to an account.');
+  if (didTaken && request.walletSource !== 'pending_create') {
+    throw new Error('This DID is already linked to an account.');
+  }
+
+  let did = request.did;
+  let privShareEnc: Buffer | undefined = request.privShareEnc
+    ? Buffer.from(request.privShareEnc)
+    : undefined;
+
+  if (request.walletSource === 'pending_create' || !privShareEnc) {
+    const bundle = await createKnuctWalletBundle();
+    const liveDidTaken = await db.knuctWallet.findFirst({ where: { did: bundle.did }, select: { id: true } });
+    if (liveDidTaken) throw new Error('Generated DID collision — try approving again.');
+    did = bundle.did;
+    privShareEnc = Buffer.from(bundle.privShareEnc);
+  } else {
+    const didTakenLive = await db.knuctWallet.findFirst({ where: { did: request.did }, select: { id: true } });
+    if (didTakenLive) throw new Error('This DID is already linked to an account.');
+  }
 
   let department = params.department ?? request.department;
   let departmentId = params.departmentId ?? request.departmentId;
@@ -194,8 +217,8 @@ export async function approveRegistrationRequest(params: {
     await tx.knuctWallet.create({
       data: {
         userId: created.id,
-        did: request.did,
-        privShareEnc: request.privShareEnc ?? undefined,
+        did,
+        privShareEnc,
         status: 'active',
       },
     });
@@ -204,12 +227,15 @@ export async function approveRegistrationRequest(params: {
       where: { id: request.id },
       data: {
         status: 'approved',
+        did,
         reviewedById: params.reviewerId,
         reviewedAt: new Date(),
         approvedUserId: created.id,
         requestedRole: assignedRole,
         department,
         departmentId,
+        walletSource: privShareEnc ? 'created' : request.walletSource,
+        privShareEnc,
       },
     });
 
@@ -224,7 +250,7 @@ export async function approveRegistrationRequest(params: {
       approvedUserId: user.id,
       email: user.email,
       role: assignedRole,
-      did: request.did.slice(0, 24),
+      did: did.slice(0, 24),
       method: 'knuct_registration',
     },
   });
@@ -234,7 +260,7 @@ export async function approveRegistrationRequest(params: {
     userId: user.id,
     email: user.email,
     role: assignedRole,
-    did: request.did,
+    did,
     registrationRequestId: request.id,
   }).catch(() => null);
 

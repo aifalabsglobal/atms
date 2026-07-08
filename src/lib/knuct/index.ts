@@ -17,4 +17,13 @@ export { fetchKnuctAccountInfo, fetchKnuctCapiBundle, fetchKnuctWalletDashboard 
 export { parseKnuctAccountView } from './account-view';
 export type { KnuctAccountView, KnuctTokenRow } from './account-view';
 export { knuctKvBackend } from './redis-store';
+export {
+  approveWalletProvisionRequest,
+  createWalletProvisionRequest,
+  getPendingWalletProvisionRequest,
+  isWalletProvisionerRole,
+  listWalletProvisionRequests,
+  rejectWalletProvisionRequest,
+  queueWalletProvisionRequestOnUserCreate,
+} from './wallet-provision-request-service';
 export type { KnuctAdapter, KnuctDashboardStats, KnuctWalletResult } from './types';

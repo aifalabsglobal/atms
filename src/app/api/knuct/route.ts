@@ -9,6 +9,10 @@ import { getKnuctPublicConfig } from '@/lib/knuct/config';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { getClientIp } from '@/lib/audit';
 import { requireAuth, canAccessSection } from '@/lib/auth-helpers';
+import {
+  getPendingWalletProvisionRequest,
+  isWalletProvisionerRole,
+} from '@/lib/knuct/wallet-provision-request-service';
 import type { Role } from '@/lib/store';
 
 export const dynamic = 'force-dynamic';
@@ -29,7 +33,7 @@ export async function GET() {
         getKnuctDashboardStats(),
         getUserKnuctWallet(session.user.id),
       ]);
-      return NextResponse.json({ config, health, stats, wallet: ownWallet });
+      return NextResponse.json({ config, health, stats, wallet: ownWallet, provisionRequest: await getPendingWalletProvisionRequest(session.user.id) });
     }
 
     if (role === 'admin' && hasSettings) {
@@ -37,12 +41,13 @@ export async function GET() {
         getKnuctHealth(),
         getUserKnuctWallet(session.user.id),
       ]);
-      return NextResponse.json({ config, health, wallet: ownWallet });
+      return NextResponse.json({ config, health, wallet: ownWallet, provisionRequest: await getPendingWalletProvisionRequest(session.user.id) });
     }
 
     const ownWallet = await getUserKnuctWallet(session.user.id);
     const health = await getKnuctHealth();
-    return NextResponse.json({ config, health, wallet: ownWallet });
+    const provisionRequest = await getPendingWalletProvisionRequest(session.user.id);
+    return NextResponse.json({ config, health, wallet: ownWallet, provisionRequest });
   } catch (error) {
     console.error('[knuct] status error:', error);
     return NextResponse.json({ error: 'Failed to load Knuct status' }, { status: 500 });
@@ -63,9 +68,17 @@ export async function POST(request: Request) {
 
     if (targetUserId !== session.user.id) {
       const hasSettings = await canAccessSection(role, 'settings', session.user.id);
-      if (!hasSettings || (role !== 'super_admin' && role !== 'admin')) {
+      if (!hasSettings || !isWalletProvisionerRole(role)) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
       }
+    } else if (!isWalletProvisionerRole(role)) {
+      return NextResponse.json(
+        {
+          error:
+            'Wallet provisioning requires administrator approval. Submit a request from your dashboard wallet panel.',
+        },
+        { status: 403 }
+      );
     }
 
     await queueWalletProvision(targetUserId);

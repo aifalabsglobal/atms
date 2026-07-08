@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { CheckCircle2, Loader2, Download, Wallet } from 'lucide-react';
+import { CheckCircle2, Loader2, Wallet } from 'lucide-react';
 import { BrandLogo } from '@/components/brand-logo';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -26,20 +26,8 @@ const REGISTER_ROLES = [
 
 type SubmitResult = {
   did?: string;
-  privShareFilename?: string;
-  privShareBase64?: string;
+  message?: string;
 };
-
-function downloadPrivShare(filename: string, base64: string) {
-  const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-  const blob = new Blob([bytes], { type: 'application/octet-stream' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
 
 function ProfileFields({
   profile,
@@ -162,8 +150,7 @@ export default function RegisterPage() {
       if (!res.ok) throw new Error(data.error ?? 'Wallet creation failed');
       setResult({
         did: data.did,
-        privShareFilename: data.privShareFilename,
-        privShareBase64: data.privShareBase64,
+        message: data.message,
       });
       setSubmitted(true);
     } catch (err) {
@@ -194,21 +181,9 @@ export default function RegisterPage() {
                 <p className="text-xs font-mono text-green-800 break-all">DID: {result.did}</p>
               )}
               <p className="text-sm text-green-700">
-                An administrator will review your request. After approval, sign in with your private share on the login page.
+                An administrator will review your request and create your Knuct wallet upon approval.
+                After approval, sign in with email, download your private share from the dashboard, then use Knuct login.
               </p>
-              {result?.privShareBase64 && result.privShareFilename && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="gap-2 border-green-300"
-                  onClick={() =>
-                    downloadPrivShare(result.privShareFilename!, result.privShareBase64!)
-                  }
-                >
-                  <Download className="h-4 w-4" />
-                  Download private share (save this file!)
-                </Button>
-              )}
               <Button asChild className="bg-[#1A3C6E] hover:bg-[#1A3C6E]/90">
                 <Link href="/login">Back to login</Link>
               </Button>
@@ -227,8 +202,7 @@ export default function RegisterPage() {
                 <TabsContent value="create" className="space-y-4 mt-4">
                   <ProfileFields profile={profile} setProfile={setProfile} disabled={creating} />
                   <p className="text-xs text-muted-foreground">
-                    We will create a Knuct wallet on the blockchain for you, then submit your profile for admin approval.
-                    You will download your private share once — keep it safe; it is your login key.
+                    Submit your profile for admin approval. Your Knuct wallet will be created when an administrator approves your registration — then download your private share from the dashboard.
                   </p>
                   {createError && (
                     <p className="text-sm text-destructive">{createError}</p>
@@ -245,7 +219,7 @@ export default function RegisterPage() {
                         Creating wallet… (may take 1–2 min)
                       </>
                     ) : (
-                      'Create Knuct wallet & register'
+                        'Create registration request'
                     )}
                   </Button>
                 </TabsContent>

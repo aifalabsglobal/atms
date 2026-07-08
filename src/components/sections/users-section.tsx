@@ -41,6 +41,7 @@ import {
 import { Pie, PieChart, Cell } from 'recharts';
 import { CreateUserDialog, EditUserDialog, useUserMutations } from '@/components/users/user-management-dialogs';
 import { RegistrationRequestsPanel } from '@/components/users/registration-requests-panel';
+import { WalletProvisionRequestsPanel } from '@/components/users/wallet-provision-requests-panel';
 import { useToast } from '@/hooks/use-toast';
 import { STAFF_ROLES, CAMPUS_USER_ROLES } from '@/lib/user-management';
 
@@ -636,6 +637,7 @@ export default function UsersSection() {
   return (
     <div className="space-y-4">
       {canManage && <RegistrationRequestsPanel actorRole={currentUser.role} />}
+      {canProvisionWallet && <WalletProvisionRequestsPanel actorRole={currentUser.role} />}
 
       {/* Section Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">

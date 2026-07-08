@@ -129,6 +129,7 @@ model User {
   knuctWallet        KnuctWallet?
   rbacOverride       UserRbacOverride?
   knuctCredentials   KnuctCredential[]
+  knuctWalletProvisionRequests KnuctWalletProvisionRequest[]
 }
 
 model KnuctWallet {
@@ -168,6 +169,24 @@ model KnuctRegistrationRequest {
 
   @@index([status])
   @@index([email])
+  @@index([createdAt])
+}
+
+model KnuctWalletProvisionRequest {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  requestType     String   // create | reprovision
+  status          String   @default("pending") // pending | approved | rejected
+  userNote        String?
+  rejectionReason String?
+  reviewedById    String?
+  reviewedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status])
+  @@index([userId])
   @@index([createdAt])
 }
 

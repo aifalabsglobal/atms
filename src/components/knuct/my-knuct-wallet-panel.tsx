@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { KnuctDIDAuthPanel } from '@/components/knuct/did-auth-panel';
 import { parseKnuctAccountView } from '@/lib/knuct/account-view';
+import { useAppStore } from '@/lib/store';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
@@ -32,6 +33,12 @@ type KnuctStatusResponse = {
   config?: { enabled?: boolean };
   health?: { adapterMode?: string; health?: string };
   wallet?: KnuctWalletStatus | null;
+  provisionRequest?: {
+    id: string;
+    requestType: string;
+    status: string;
+    createdAt: string;
+  } | null;
 };
 
 type KnuctAccountResponse = {
@@ -50,6 +57,8 @@ const STATUS_STYLES: Record<string, string> = {
 export function MyKnuctWalletPanel({ className }: { className?: string }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { currentUser } = useAppStore();
+  const isAdmin = currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
   const [open, setOpen] = useState(true);
   const [showAuth, setShowAuth] = useState(false);
 
@@ -66,6 +75,8 @@ export function MyKnuctWalletPanel({ className }: { className?: string }) {
 
   const wallet = data?.wallet;
   const walletActive = wallet?.status === 'active';
+  const pendingRequest = data?.provisionRequest;
+  const requestPending = pendingRequest?.status === 'pending';
 
   const { data: capiData, refetch: refetchCapi } = useQuery<KnuctAccountResponse>({
     queryKey: ['knuct-capi-account'],
@@ -84,38 +95,66 @@ export function MyKnuctWalletPanel({ className }: { className?: string }) {
   );
 
   const provisionMutation = useMutation({
-    mutationFn: () =>
-      fetch('/api/knuct', {
+    mutationFn: async () => {
+      if (isAdmin) {
+        const res = await fetch('/api/knuct', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error((payload as { error?: string }).error ?? 'Provisioning failed');
+        return payload;
+      }
+
+      const res = await fetch('/api/knuct/wallet-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      }).then(async (r) => {
-        const payload = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error((payload as { error?: string }).error ?? 'Provisioning failed');
-        return payload;
-      }),
+        body: JSON.stringify({
+          action: 'request',
+          requestType: walletActive ? 'reprovision' : 'create',
+        }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((payload as { error?: string }).error ?? 'Request failed');
+      return payload;
+    },
     onSuccess: (payload) => {
       queryClient.invalidateQueries({ queryKey: ['knuct-my-wallet'] });
       queryClient.invalidateQueries({ queryKey: ['knuct-status'] });
+      queryClient.invalidateQueries({ queryKey: ['knuct-wallet-provision-requests'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      const status = (payload as { wallet?: KnuctWalletStatus }).wallet?.status;
-      if (status === 'active') {
-        toast({ title: 'Wallet ready', description: 'Your Knuct wallet is active. Download your private share and keep it safe.' });
-      } else if (status === 'failed') {
-        toast({
-          title: 'Provisioning failed',
-          description: (payload as { wallet?: KnuctWalletStatus }).wallet?.lastError ?? 'Unknown error',
-          variant: 'destructive',
-        });
-      } else {
-        toast({
-          title: 'Provisioning started',
-          description: 'This can take 1–2 minutes on live Knuct. This panel will refresh automatically.',
-        });
+
+      if (isAdmin) {
+        const status = (payload as { wallet?: KnuctWalletStatus }).wallet?.status;
+        if (status === 'active') {
+          toast({ title: 'Wallet ready', description: 'Your Knuct wallet is active. Download your private share and keep it safe.' });
+        } else if (status === 'failed') {
+          toast({
+            title: 'Provisioning failed',
+            description: (payload as { wallet?: KnuctWalletStatus }).wallet?.lastError ?? 'Unknown error',
+            variant: 'destructive',
+          });
+        } else {
+          toast({
+            title: 'Provisioning started',
+            description: 'This can take 1–2 minutes on live Knuct. This panel will refresh automatically.',
+          });
+        }
+        return;
       }
+
+      toast({
+        title: 'Request submitted',
+        description: (payload as { message?: string }).message ?? 'An administrator must approve before your wallet is created or re-provisioned.',
+      });
     },
     onError: (err: Error) => {
-      toast({ title: 'Provisioning failed', description: err.message, variant: 'destructive' });
+      toast({
+        title: isAdmin ? 'Provisioning failed' : 'Request failed',
+        description: err.message,
+        variant: 'destructive',
+      });
     },
   });
 
@@ -139,7 +178,7 @@ export function MyKnuctWalletPanel({ className }: { className?: string }) {
                 My Knuct Wallet
               </CardTitle>
               <CardDescription>
-                Your campus blockchain identity — provision a wallet, download your private share, and view tokens after DID auth.
+                Your campus blockchain identity — request wallet creation or re-provision (admin approval required for most roles).
               </CardDescription>
             </div>
             <CollapsibleTrigger asChild>
@@ -180,6 +219,11 @@ export function MyKnuctWalletPanel({ className }: { className?: string }) {
                     </p>
                     {wallet?.lastError && (
                       <p className="text-xs text-red-600">{wallet.lastError}</p>
+                    )}
+                    {requestPending && (
+                      <Badge variant="outline" className="bg-amber-50 text-amber-800 border-amber-200">
+                        Approval pending ({pendingRequest.requestType === 'reprovision' ? 're-provision' : 'new wallet'})
+                      </Badge>
                     )}
                     {!data?.config?.enabled && (
                       <p className="text-[11px] text-muted-foreground">
@@ -255,7 +299,7 @@ export function MyKnuctWalletPanel({ className }: { className?: string }) {
                     size="sm"
                     variant="outline"
                     className="gap-2"
-                    disabled={provisionMutation.isPending || wallet?.status === 'pending'}
+                    disabled={provisionMutation.isPending || wallet?.status === 'pending' || requestPending}
                     onClick={() => provisionMutation.mutate()}
                   >
                     {provisionMutation.isPending ? (
@@ -263,7 +307,13 @@ export function MyKnuctWalletPanel({ className }: { className?: string }) {
                     ) : (
                       <RefreshCw className="h-3.5 w-3.5" />
                     )}
-                    {walletActive ? 'Re-provision wallet' : 'Provision my wallet'}
+                    {isAdmin
+                      ? walletActive
+                        ? 'Re-provision wallet'
+                        : 'Provision my wallet'
+                      : walletActive
+                        ? 'Request re-provision'
+                        : 'Request wallet'}
                   </Button>
 
                   {walletActive && wallet?.hasPrivShare !== false && (
@@ -305,7 +355,9 @@ export function MyKnuctWalletPanel({ className }: { className?: string }) {
                 )}
 
                 <p className="text-[11px] text-muted-foreground">
-                  Keep your private share PNG safe — it is your Knuct login key. Never share it. Re-provisioning creates a new wallet and invalidates the old share.
+                  Keep your private share PNG safe — it is your Knuct login key. Never share it.
+                  {!isAdmin && ' Wallet creation and re-provision require administrator approval.'}
+                  {' '}Re-provisioning creates a new wallet and invalidates the old share.
                 </p>
               </>
             )}

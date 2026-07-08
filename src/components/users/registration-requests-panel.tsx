@@ -99,7 +99,7 @@ export function RegistrationRequestsPanel({ actorRole }: { actorRole: Role }) {
           <Badge variant="secondary">{requests.length} pending</Badge>
         </div>
         <CardDescription>
-          Approve to create an active account linked to the applicant&apos;s DID. They will sign in with their private share.
+          Approve to create a campus account. For new-wallet registrations, the Knuct wallet is created on approval.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">

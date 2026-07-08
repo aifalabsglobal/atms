@@ -107,6 +107,12 @@ export function enqueueWalletProvision(userId: string): void {
 
 export function maybeProvisionWalletOnCreate(userId: string): void {
   if (getKnuctConfig().walletOnUserCreate) {
-    enqueueWalletProvision(userId);
+    void import('./wallet-provision-request-service')
+      .then(({ queueWalletProvisionRequestOnUserCreate }) =>
+        queueWalletProvisionRequestOnUserCreate(userId)
+      )
+      .catch((err) => {
+        console.error('[knuct] wallet provision request on user create failed', { userId, err });
+      });
   }
 }

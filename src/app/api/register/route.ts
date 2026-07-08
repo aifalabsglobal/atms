@@ -8,7 +8,7 @@ import { randomBytes } from 'crypto';
 import { NextResponse } from 'next/server';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { runDidAuthChallenge, runDidAuthComplete } from '@/lib/knuct/did-auth-flow';
-import { createRegistrationRequest, createRegistrationWithNewWallet } from '@/lib/knuct/registration-service';
+import { createRegistrationRequest, createRegistrationPendingWallet } from '@/lib/knuct/registration-service';
 import { purgeDIDAuthSessions } from '@/lib/knuct/did-auth-session';
 
 export const dynamic = 'force-dynamic';
@@ -65,7 +65,7 @@ export async function POST(req: Request) {
     }
 
     try {
-      const result = await createRegistrationWithNewWallet({
+      const result = await createRegistrationPendingWallet({
         name,
         email,
         employeeId: body.employeeId,
@@ -79,11 +79,8 @@ export async function POST(req: Request) {
         id: result.request.id,
         did: result.request.did,
         status: result.request.status,
-        walletSource: 'created',
-        privShareFilename: result.privShareFilename,
-        privShareBase64: result.privShareBase64,
-        message:
-          'Knuct wallet created and registration submitted. Download your private share now — you need it to sign in after approval.',
+        walletSource: 'pending_create',
+        message: result.message,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Wallet creation failed';
