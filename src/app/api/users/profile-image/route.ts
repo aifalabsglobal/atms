@@ -1,8 +1,7 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
 import { requireAuth, ADMIN_ROLES } from '@/lib/auth-helpers';
+import { uploadImageFromBase64 } from '@/lib/object-storage';
 
 export async function POST(request: Request) {
   try {
@@ -27,15 +26,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    const profilesDir = path.join(process.cwd(), 'public', 'profiles');
-    if (!fs.existsSync(profilesDir)) fs.mkdirSync(profilesDir, { recursive: true });
-
-    const filename = `${userId}.png`;
-    const filepath = path.join(profilesDir, filename);
-    const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, '');
-    fs.writeFileSync(filepath, Buffer.from(base64Data, 'base64'));
-
-    const profileImageUrl = `/profiles/${filename}`;
+    const { url: profileImageUrl } = await uploadImageFromBase64('profiles', userId, imageBase64);
 
     await db.user.update({
       where: { id: userId },

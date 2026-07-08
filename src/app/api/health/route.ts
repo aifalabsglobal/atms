@@ -3,6 +3,7 @@ import { db } from '@/lib/db';
 import { getKnuctHealth, getKnuctQueueStats } from '@/lib/knuct';
 import { getKnuctCircuitState } from '@/lib/knuct/circuit-breaker';
 import { knuctKvPing } from '@/lib/knuct/redis-store';
+import { getObjectStorageBackend } from '@/lib/object-storage';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -72,9 +73,17 @@ export async function GET() {
     }
   })();
 
+  const storageBackend = getObjectStorageBackend();
+  const onVercel = Boolean(process.env.VERCEL);
+  checks.objectStorage =
+    storageBackend === 's3' || !onVercel || process.env.NODE_ENV !== 'production' ? 'ok' : 'degraded';
+
   const latencyMs = Date.now() - started;
   const healthy =
-    checks.database === 'ok' && checks.knuct !== 'error' && checks.redis !== 'error';
+    checks.database === 'ok' &&
+    checks.knuct !== 'error' &&
+    checks.redis !== 'error' &&
+    checks.objectStorage !== 'degraded';
 
   return NextResponse.json(
     {
@@ -83,6 +92,7 @@ export async function GET() {
       version: process.env.npm_package_version ?? '0.2.0',
       checks,
       redis: redisMeta,
+      storage: { backend: storageBackend },
       knuct: knuctMeta,
       latencyMs,
     },

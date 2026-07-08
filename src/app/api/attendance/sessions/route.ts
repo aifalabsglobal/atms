@@ -10,6 +10,7 @@ import {
   toValidationResponse,
   validateSessionTimetableLink,
 } from '@/lib/timetable-helpers';
+import { logAudit, getClientIp } from '@/lib/audit';
 
 export async function GET(request: Request) {
   try {
@@ -206,6 +207,19 @@ export async function POST(request: Request) {
       }
       throw err;
     }
+
+    await logAudit({
+      userId: session.user.id,
+      action: 'session.create',
+      resource: `session:${attendanceSession.id}`,
+      details: {
+        courseId,
+        sessionDate,
+        captureMethod: captureMethod || 'manual',
+        timetableSlotId: timetableSlotId || null,
+      },
+      ipAddress: getClientIp(request),
+    });
 
     return NextResponse.json(attendanceSession, { status: 201 });
   } catch (error) {

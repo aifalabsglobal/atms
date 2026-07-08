@@ -6,7 +6,7 @@ export const DEFAULT_ROLE_SECTIONS: Record<Role, Section[]> = {
   admin: ['dashboard', 'masters', 'attendance', 'lms', 'users', 'violations', 'reports', 'geofences', 'calendar', 'settings'],
   hod: ['dashboard', 'masters', 'attendance', 'lms', 'users', 'violations', 'reports', 'geofences', 'calendar'],
   faculty: ['dashboard', 'attendance', 'lms', 'violations', 'reports', 'geofences', 'calendar'],
-  lab_assistant: ['dashboard', 'attendance', 'geofences', 'calendar'],
+  lab_assistant: ['dashboard', 'attendance', 'lms', 'geofences', 'calendar'],
   student: ['dashboard', 'attendance', 'lms', 'reports', 'geofences', 'calendar'],
   parent: ['dashboard', 'attendance', 'lms', 'reports', 'calendar'],
   visitor: ['dashboard', 'geofences', 'calendar'],

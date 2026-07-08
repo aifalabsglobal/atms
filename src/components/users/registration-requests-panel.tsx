@@ -64,7 +64,7 @@ export function RegistrationRequestsPanel({ actorRole }: { actorRole: Role }) {
         description:
           vars.action === 'approve'
             ? 'The user can now sign in with their Knuct private share.'
-            : 'The applicant has been notified via status only.',
+            : 'The applicant will receive an in-app notification after their account is created.',
       });
       queryClient.invalidateQueries({ queryKey: ['registration-requests'] });
       queryClient.invalidateQueries({ queryKey: ['users'] });

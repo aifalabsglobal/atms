@@ -11,6 +11,10 @@ export function isFaceVerificationEnabled(): boolean {
   return process.env.FACE_VERIFICATION_ENABLED === 'true';
 }
 
+function isRemoteUrl(url: string): boolean {
+  return url.startsWith('http://') || url.startsWith('https://');
+}
+
 /**
  * Face verification: stub locally, or delegate to FACE_VERIFICATION_API_URL when enabled.
  */
@@ -59,6 +63,23 @@ export async function verifyFaceMatch(
       isMatch: false,
       confidence: null,
       reason: 'Face verification enabled but FACE_VERIFICATION_API_URL is not set',
+    };
+  }
+
+  if (isRemoteUrl(profileImageUrl)) {
+    const selfieData = selfieBase64.replace(/^data:image\/\w+;base64,/, '');
+    if (!selfieData || selfieData.length < 100) {
+      return {
+        isMatch: false,
+        confidence: null,
+        reason: 'Invalid or empty selfie image',
+      };
+    }
+    return {
+      isMatch: false,
+      confidence: null,
+      reason:
+        'Demo mode — profile stored remotely; configure FACE_VERIFICATION_ENABLED and FACE_VERIFICATION_API_URL for live matching',
     };
   }
 

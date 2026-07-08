@@ -1,4 +1,5 @@
 import { db } from '@/lib/db';
+import { isAuditLoggingEnabledSync } from '@/lib/system-config';
 
 export type AuditAction =
   | 'login'
@@ -17,6 +18,8 @@ export async function logAudit(params: {
   details?: Record<string, unknown> | string;
   ipAddress?: string | null;
 }) {
+  if (!isAuditLoggingEnabledSync()) return;
+
   try {
     await db.auditLog.create({
       data: {

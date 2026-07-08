@@ -6,6 +6,7 @@ import { logAudit } from '@/lib/audit';
 import { applyPlatformDefaults } from '@/lib/env';
 import { consumeKnuctLoginGrant } from '@/lib/knuct/login-grant';
 import { revokeUserKnuctSession } from '@/lib/knuct/knuct-persistent-session';
+import { isPlaceholderPasswordHash, verifyPlaceholderPassword } from '@/lib/demo-mode';
 import type { Role } from '@/lib/store';
 
 applyPlatformDefaults();
@@ -67,10 +68,9 @@ export const authOptions: NextAuthOptions = {
 
           if (!user || user.status !== 'active') return null;
 
-          const valid =
-            user.passwordHash === '$2a$10$placeholder'
-              ? credentials.password === 'demo123'
-              : await bcrypt.compare(credentials.password, user.passwordHash);
+          const valid = isPlaceholderPasswordHash(user.passwordHash)
+            ? verifyPlaceholderPassword(credentials.password)
+            : await bcrypt.compare(credentials.password, user.passwordHash);
 
           if (!valid) return null;
 

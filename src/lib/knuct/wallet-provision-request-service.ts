@@ -111,6 +111,9 @@ export async function approveWalletProvisionRequest(params: {
     },
   });
 
+  const { notifyWalletProvisionResolved } = await import('@/lib/notifications');
+  await notifyWalletProvisionResolved(request.userId, true, request.requestType);
+
   return request;
 }
 
@@ -143,6 +146,9 @@ export async function rejectWalletProvisionRequest(params: {
       requestType: request.requestType,
     },
   });
+
+  const { notifyWalletProvisionResolved } = await import('@/lib/notifications');
+  await notifyWalletProvisionResolved(request.userId, false, request.requestType);
 }
 
 /** Queue wallet creation when admin creates a user (requires separate approval). */

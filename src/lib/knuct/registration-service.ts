@@ -266,6 +266,9 @@ export async function approveRegistrationRequest(params: {
     registrationRequestId: request.id,
   }).catch(() => null);
 
+  const { notifyRegistrationApproved } = await import('@/lib/notifications');
+  await notifyRegistrationApproved(user.id, assignedRole);
+
   return user;
 }
 

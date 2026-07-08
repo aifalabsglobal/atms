@@ -1,7 +1,5 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
 import { requireSection, resolveStudentId, SELF_MARK_METHODS } from '@/lib/auth-helpers';
 import type { Role } from '@/lib/store';
 import { verifyFaceMatch } from '@/lib/face-verification';
@@ -10,6 +8,7 @@ import { captureMethodRequiresGeofence } from '@/lib/geofence-policy';
 import { rateLimitByUser } from '@/lib/api-rate-limit';
 import { logAudit, getClientIp } from '@/lib/audit';
 import { getSystemConfig } from '@/lib/system-config';
+import { uploadImageFromBase64, resolvePublicAssetUrl } from '@/lib/object-storage';
 
 export async function POST(request: Request) {
   try {
@@ -151,13 +150,12 @@ export async function POST(request: Request) {
 
     let selfieUrl: string | null = null;
     if (selfieBase64) {
-      const selfiesDir = path.join(process.cwd(), 'public', 'selfies');
-      if (!fs.existsSync(selfiesDir)) fs.mkdirSync(selfiesDir, { recursive: true });
-      const filename = `${studentId}-${Date.now()}.png`;
-      const filepath = path.join(selfiesDir, filename);
-      const base64Data = selfieBase64.replace(/^data:image\/\w+;base64,/, '');
-      fs.writeFileSync(filepath, Buffer.from(base64Data, 'base64'));
-      selfieUrl = `/selfies/${filename}`;
+      const uploaded = await uploadImageFromBase64(
+        'selfies',
+        `${studentId}-${Date.now()}`,
+        selfieBase64,
+      );
+      selfieUrl = uploaded.url;
     }
 
     let faceVerified = false;
@@ -167,7 +165,8 @@ export async function POST(request: Request) {
       try {
         const student = await db.user.findUnique({ where: { id: studentId } });
         if (student?.profileImageUrl) {
-          const result = await verifyFaceMatch(selfieBase64, student.profileImageUrl);
+          const profileForMatch = resolvePublicAssetUrl(student.profileImageUrl, new URL(request.url).origin);
+          const result = await verifyFaceMatch(selfieBase64, profileForMatch);
           faceVerified = result.isMatch;
           confidence = result.confidence;
         }

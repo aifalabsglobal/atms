@@ -576,7 +576,7 @@ function ConfigurationPanel({ isSuperAdmin }: { isSuperAdmin: boolean }) {
               {
                 key: 'auditLoggingEnabled' as const,
                 label: 'Audit logging',
-                hint: 'Reference flag — audit events continue when integrations are wired',
+                hint: 'When disabled, audit log writes are skipped (login and security events may still apply elsewhere)',
               },
             ].map((item) => (
               <div key={item.key} className="flex items-center justify-between rounded-lg border p-3">

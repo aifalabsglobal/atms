@@ -93,9 +93,12 @@ export function CreateCourseDialog({
   const [form, setForm] = useState({ programId: '', subjectId: '', code: '', name: '', instructorId: '' });
 
   const { data: programsData } = useQuery({
-    queryKey: ['masters-programs-picker'],
-    queryFn: () => fetch('/api/masters/programs?limit=50').then((r) => r.json()),
-    enabled: open && (role === 'super_admin' || role === 'admin'),
+    queryKey: ['lms-programs-picker'],
+    queryFn: () => fetch('/api/lms/programs?limit=50').then((r) => {
+      if (!r.ok) throw new Error('Failed to load programs');
+      return r.json();
+    }),
+    enabled: open,
   });
   const { data: subjectsData } = useQuery({
     queryKey: ['masters-subjects-picker'],
