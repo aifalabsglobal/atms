@@ -33,13 +33,13 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip,
   ResponsiveContainer, CartesianGrid,
 } from 'recharts';
-import { CreateCourseDialog, CreateAssignmentDialog, EditAssignmentDialog, SubmitAssignmentDialog, CourseRosterDialog, GradeSubmissionsDialog, CreateQuizDialog, EditQuizDialog, TakeQuizDialog, ManageModulesDialog, CreateCodingProblemDialog } from '@/components/lms/lms-dialogs';
+import { CreateCourseDialog, CreateAssignmentDialog, EditAssignmentDialog, SubmitAssignmentDialog, CourseRosterDialog, AssignCourseInstructorDialog, GradeSubmissionsDialog, CreateQuizDialog, EditQuizDialog, TakeQuizDialog, ManageModulesDialog, CreateCodingProblemDialog } from '@/components/lms/lms-dialogs';
 import { CodingWorkspace } from '@/components/lms/coding-workspace';
 
 // ─── Type Definitions ───────────────────────────────────────────────────────
 
 interface Program { name: string; code: string }
-interface Instructor { name: string; email: string }
+interface Instructor { id?: string; name: string; email: string }
 interface ModuleItem { id: string; title: string; orderIndex: number; isPublished: boolean; _count: { lessons: number } }
 
 interface Course {
@@ -1351,6 +1351,7 @@ export default function LmsSection() {
   const [takeQuizOpen, setTakeQuizOpen] = useState(false);
   const [submitAssignment, setSubmitAssignment] = useState<Assignment | null>(null);
   const [rosterCourse, setRosterCourse] = useState<Course | null>(null);
+  const [assignInstructorCourse, setAssignInstructorCourse] = useState<Course | null>(null);
   const [modulesCourse, setModulesCourse] = useState<Course | null>(null);
   const [gradeAssignment, setGradeAssignment] = useState<Assignment | null>(null);
   const [editAssignment, setEditAssignment] = useState<Assignment | null>(null);
@@ -1372,6 +1373,7 @@ export default function LmsSection() {
   const isHodLmsReadOnly = useCanViewLmsRoster() && !canWriteLms;
   const canCreateCourse = useSectionWrite('lms', MASTERS_WRITE_ROLES);
   const canDeleteCourse = useSectionWrite('lms', MASTERS_WRITE_ROLES);
+  const canAssignInstructor = canDeleteCourse;
   const canManage = canWriteLms || isHodLmsReadOnly;
 
   if (!currentUser) return null;
@@ -1639,7 +1641,21 @@ export default function LmsSection() {
                         <TableRow key={c.id}>
                           <TableCell className="font-mono text-xs font-semibold">{c.code}</TableCell>
                           <TableCell className="text-sm max-w-[200px] truncate">{c.name}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{c.instructor?.name || 'TBA'}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            <div className="flex items-center gap-2">
+                              <span>{c.instructor?.name || 'TBA'}</span>
+                              {canAssignInstructor && (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 px-2 text-[10px]"
+                                  onClick={() => setAssignInstructorCourse(c)}
+                                >
+                                  Assign
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
                           <TableCell className="text-right">
                             <Badge variant="secondary">{c._count.enrollments}</Badge>
                           </TableCell>
@@ -1803,6 +1819,22 @@ export default function LmsSection() {
         course={rosterCourse ? { id: rosterCourse.id, code: rosterCourse.code, name: rosterCourse.name } : null}
         campusWide={['super_admin', 'admin'].includes(currentUser.role)}
         readOnly={isHodLmsReadOnly}
+      />
+      <AssignCourseInstructorDialog
+        open={!!assignInstructorCourse}
+        onOpenChange={(o) => !o && setAssignInstructorCourse(null)}
+        course={assignInstructorCourse ? {
+          id: assignInstructorCourse.id,
+          code: assignInstructorCourse.code,
+          name: assignInstructorCourse.name,
+          instructor: assignInstructorCourse.instructor?.id
+            ? {
+                id: assignInstructorCourse.instructor.id,
+                name: assignInstructorCourse.instructor.name,
+                email: assignInstructorCourse.instructor.email,
+              }
+            : null,
+        } : null}
       />
       <ManageModulesDialog open={!!modulesCourse} onOpenChange={(o) => !o && setModulesCourse(null)} course={modulesCourse ? { id: modulesCourse.id, code: modulesCourse.code, name: modulesCourse.name } : null} />
       <GradeSubmissionsDialog open={!!gradeAssignment} onOpenChange={(o) => !o && setGradeAssignment(null)} assignment={gradeAssignment ? { id: gradeAssignment.id, title: gradeAssignment.title, maxScore: gradeAssignment.maxScore } : null} />

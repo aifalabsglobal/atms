@@ -23,6 +23,68 @@ import { BUNDLED_CODING_PROBLEMS } from '@/data/leetcode-problems';
 
 const NAVY = '#1A3C6E';
 
+type InstructorCandidate = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  department: string | null;
+  employeeId: string | null;
+};
+
+function useInstructorCandidates(open: boolean, departmentId?: string | null, enabled = true) {
+  return useQuery({
+    queryKey: ['lms-instructor-candidates', departmentId ?? 'all'],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (departmentId) params.set('departmentId', departmentId);
+      const res = await fetch(`/api/lms/instructor-candidates?${params}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to load instructors');
+      return data as { candidates: InstructorCandidate[] };
+    },
+    enabled: open && enabled,
+  });
+}
+
+function InstructorSelectField({
+  value,
+  onChange,
+  departmentId,
+  open,
+  label = 'Instructor',
+  description,
+}: {
+  value: string;
+  onChange: (id: string) => void;
+  departmentId?: string | null;
+  open: boolean;
+  label?: string;
+  description?: string;
+}) {
+  const { data, isLoading } = useInstructorCandidates(open, departmentId);
+  const candidates = data?.candidates ?? [];
+
+  return (
+    <div>
+      <Label>{label}</Label>
+      {description && <p className="text-[11px] text-muted-foreground mt-0.5 mb-1">{description}</p>}
+      <Select value={value || '__none__'} onValueChange={(v) => onChange(v === '__none__' ? '' : v)}>
+        <SelectTrigger><SelectValue placeholder={isLoading ? 'Loading…' : 'Select instructor'} /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__none__">Unassigned (TBA)</SelectItem>
+          {candidates.map((c) => (
+            <SelectItem key={c.id} value={c.id}>
+              {c.name} — {c.role === 'lab_assistant' ? 'Lab Asst' : 'Faculty'}
+              {c.department ? ` · ${c.department}` : ''}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 export function CreateCourseDialog({
   open, onOpenChange, role,
 }: { open: boolean; onOpenChange: (o: boolean) => void; role: Role }) {
@@ -43,6 +105,15 @@ export function CreateCourseDialog({
 
   const programs = programsData?.programs ?? [];
   const subjects = subjectsData?.subjects ?? [];
+  const isAdmin = role === 'super_admin' || role === 'admin';
+  const selectedProgram = programs.find((p: { id: string }) => p.id === form.programId) as
+    | { id: string; departmentId?: string; department?: { id: string } }
+    | undefined;
+  const programDepartmentId = selectedProgram?.departmentId ?? selectedProgram?.department?.id;
+
+  useEffect(() => {
+    if (!open) setForm({ programId: '', subjectId: '', code: '', name: '', instructorId: '' });
+  }, [open]);
 
   const mutation = useMutation({
     mutationFn: async () => {
@@ -112,6 +183,19 @@ export function CreateCourseDialog({
               <div><Label>Code</Label><Input value={form.code} onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))} /></div>
               <div><Label>Name</Label><Input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} /></div>
             </>
+          )}
+          {isAdmin ? (
+            <InstructorSelectField
+              open={open}
+              value={form.instructorId}
+              onChange={(instructorId) => setForm((f) => ({ ...f, instructorId }))}
+              departmentId={programDepartmentId}
+              description={programDepartmentId ? 'Filtered to instructors in the program department' : 'Select a program first to narrow by department'}
+            />
+          ) : (
+            <p className="text-xs text-muted-foreground rounded-md border bg-muted/40 px-3 py-2">
+              You will be assigned as the instructor for this course.
+            </p>
           )}
         </div>
         <DialogFooter>
@@ -348,6 +432,14 @@ export function PublishSubjectDialog({
   const { toast } = useToast();
   const qc = useQueryClient();
   const [programId, setProgramId] = useState('');
+  const [instructorId, setInstructorId] = useState('');
+
+  useEffect(() => {
+    if (!open) {
+      setProgramId('');
+      setInstructorId('');
+    }
+  }, [open]);
 
   const { data } = useQuery({
     queryKey: ['masters-programs-publish'],
@@ -363,7 +455,7 @@ export function PublishSubjectDialog({
       const res = await fetch('/api/masters/subjects/publish', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subjectId: subject?.id, programId }),
+        body: JSON.stringify({ subjectId: subject?.id, programId, instructorId: instructorId || undefined }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || 'Failed');
@@ -395,6 +487,13 @@ export function PublishSubjectDialog({
             ))}
           </SelectContent>
         </Select>
+        <InstructorSelectField
+          open={open}
+          value={instructorId}
+          onChange={setInstructorId}
+          departmentId={subject.departmentId}
+          description="Assign faculty who will manage this course and its roster"
+        />
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button onClick={() => mutation.mutate()} disabled={!programId || mutation.isPending} style={{ backgroundColor: NAVY }} className="text-white">
@@ -411,6 +510,85 @@ type RosterStudent = {
   enrolledAt: string;
   student: { id: string; name: string; email: string; employeeId: string | null; department: string | null };
 };
+
+export function AssignCourseInstructorDialog({
+  open,
+  onOpenChange,
+  course,
+  departmentId,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  course: {
+    id: string;
+    code: string;
+    name: string;
+    instructor: { id: string; name: string; email: string } | null;
+  } | null;
+  departmentId?: string | null;
+}) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [instructorId, setInstructorId] = useState('');
+
+  useEffect(() => {
+    if (open && course) {
+      setInstructorId(course.instructor?.id ?? '');
+    }
+    if (!open) setInstructorId('');
+  }, [open, course]);
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/lms/courses?id=${course!.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ instructorId: instructorId || null }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to assign instructor');
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['lms-courses'] });
+      toast({ title: 'Instructor updated' });
+      onOpenChange(false);
+    },
+    onError: (e: Error) => toast({ title: 'Error', description: e.message, variant: 'destructive' }),
+  });
+
+  if (!course) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Assign Instructor</DialogTitle>
+          <DialogDescription>{course.code} — {course.name}</DialogDescription>
+        </DialogHeader>
+        <InstructorSelectField
+          open={open}
+          value={instructorId}
+          onChange={setInstructorId}
+          departmentId={departmentId}
+          description="This faculty member can manage the course roster, modules, and assignments"
+        />
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button
+            onClick={() => mutation.mutate()}
+            disabled={mutation.isPending}
+            style={{ backgroundColor: NAVY }}
+            className="text-white"
+          >
+            {mutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export function CourseRosterDialog({
   open, onOpenChange, course, campusWide, readOnly,

@@ -58,7 +58,7 @@ export async function GET(request: Request) {
         where,
         include: {
           program: { select: { name: true, code: true } },
-          instructor: { select: { name: true, email: true } },
+          instructor: { select: { id: true, name: true, email: true } },
           _count: { select: { enrollments: true, modules: true, assignments: true, attendanceSessions: true } },
           modules: { include: { _count: { select: { lessons: true } } }, orderBy: { orderIndex: 'asc' } },
         },
@@ -133,7 +133,7 @@ export async function POST(request: Request) {
       },
       include: {
         program: { select: { name: true, code: true } },
-        instructor: { select: { name: true, email: true } },
+        instructor: { select: { id: true, name: true, email: true } },
       },
     });
 
@@ -164,18 +164,21 @@ export async function PUT(request: Request) {
     }
 
     const body = await request.json();
+    const canAssignInstructor = role === 'super_admin' || role === 'admin';
     const course = await db.course.update({
       where: { id },
       data: {
         ...(body.name !== undefined && { name: body.name }),
         ...(body.description !== undefined && { description: body.description }),
-        ...(body.instructorId !== undefined && { instructorId: body.instructorId }),
+        ...(canAssignInstructor && body.instructorId !== undefined && {
+          instructorId: body.instructorId || null,
+        }),
         ...(body.isActive !== undefined && { isActive: body.isActive }),
         ...(body.syllabus !== undefined && { syllabus: body.syllabus }),
       },
       include: {
         program: { select: { name: true, code: true } },
-        instructor: { select: { name: true, email: true } },
+        instructor: { select: { id: true, name: true, email: true } },
       },
     });
 
