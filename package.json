@@ -30,10 +30,10 @@
     "knuct:pilot": "npx tsx scripts/knuct-pilot-cohort.ts",
     "knuct:pilot:sync": "npx tsx scripts/knuct-pilot-cohort.ts --sync",
     "db:migrate": "prisma migrate dev",
-    "db:migrate:deploy": "prisma migrate deploy",
+    "db:migrate:deploy": "node scripts/migrate-deploy.mjs",
     "db:baseline": "npx tsx scripts/db-baseline.ts",
     "db:reset": "prisma migrate reset",
-    "postinstall": "prisma generate"
+    "postinstall": "node scripts/prisma-generate.mjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
