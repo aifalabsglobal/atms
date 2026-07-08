@@ -1,5 +1,5 @@
 {
-  "buildCommand": "node scripts/vercel-build.mjs",
+  "buildCommand": "npm run vercel-build",
   "installCommand": "npm ci",
   "framework": "nextjs",
   "regions": ["bom1"]

@@ -21,10 +21,27 @@ export type Env = z.infer<typeof envSchema>;
 
 let cached: Env | null = null;
 
+/** Neon pooler URLs cannot run Prisma migrations — strip -pooler for directUrl. */
+function neonDirectDatabaseUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.includes('-pooler')) {
+      parsed.hostname = parsed.hostname.replace('-pooler', '');
+    }
+    parsed.searchParams.delete('pgbouncer');
+    return parsed.toString();
+  } catch {
+    return url.replace('-pooler', '');
+  }
+}
+
 /** Vercel sets VERCEL_URL per deployment; NextAuth needs NEXTAUTH_URL for cookies/sessions. */
 export function applyPlatformDefaults(): void {
   if (process.env.VERCEL) {
     process.env.AUTH_TRUST_HOST = 'true';
+  }
+  if (process.env.DATABASE_URL && !process.env.DIRECT_DATABASE_URL) {
+    process.env.DIRECT_DATABASE_URL = neonDirectDatabaseUrl(process.env.DATABASE_URL);
   }
   // Always match the active deployment host (production + preview URLs differ).
   if (process.env.VERCEL_URL) {
