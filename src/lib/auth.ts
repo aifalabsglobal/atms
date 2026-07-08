@@ -5,6 +5,7 @@ import { db, isConnectionError } from '@/lib/db';
 import { logAudit } from '@/lib/audit';
 import { applyPlatformDefaults } from '@/lib/env';
 import { consumeKnuctLoginGrant } from '@/lib/knuct/login-grant';
+import { revokeUserKnuctSession } from '@/lib/knuct/knuct-persistent-session';
 import type { Role } from '@/lib/store';
 
 applyPlatformDefaults();
@@ -178,6 +179,17 @@ export const authOptions: NextAuthOptions = {
         session.user.avatar = initialsFromName(session.user.name ?? '');
       }
       return session;
+    },
+  },
+  events: {
+    async signOut({ token, session }) {
+      const userId = (token?.id as string | undefined) ?? session?.user?.id;
+      if (!userId) return;
+      try {
+        await revokeUserKnuctSession(userId);
+      } catch (err) {
+        console.warn('[auth] Knuct session revoke on signOut failed:', err);
+      }
     },
   },
 };

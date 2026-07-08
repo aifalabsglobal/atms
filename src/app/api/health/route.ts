@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getKnuctHealth, getKnuctQueueStats } from '@/lib/knuct';
 import { getKnuctCircuitState } from '@/lib/knuct/circuit-breaker';
+import { knuctKvPing } from '@/lib/knuct/redis-store';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -17,6 +18,26 @@ export async function GET() {
   } catch (err) {
     console.error('[health] database check failed:', err);
     checks.database = 'error';
+  }
+
+  let redisMeta: Awaited<ReturnType<typeof knuctKvPing>> | undefined;
+  try {
+    redisMeta = await Promise.race([
+      knuctKvPing(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Redis ping timed out')), 5000)
+      ),
+    ]);
+    checks.redis = redisMeta.status === 'ok' ? 'ok' : 'error';
+  } catch (err) {
+    console.error('[health] redis check failed:', err);
+    checks.redis = 'error';
+    redisMeta = {
+      backend: 'upstash',
+      status: 'error',
+      latencyMs: 0,
+      error: err instanceof Error ? err.message : 'Redis ping failed',
+    };
   }
 
   try {
@@ -52,7 +73,8 @@ export async function GET() {
   })();
 
   const latencyMs = Date.now() - started;
-  const healthy = checks.database === 'ok' && checks.knuct !== 'error';
+  const healthy =
+    checks.database === 'ok' && checks.knuct !== 'error' && checks.redis !== 'error';
 
   return NextResponse.json(
     {
@@ -60,6 +82,7 @@ export async function GET() {
       service: 'aimscs',
       version: process.env.npm_package_version ?? '0.2.0',
       checks,
+      redis: redisMeta,
       knuct: knuctMeta,
       latencyMs,
     },

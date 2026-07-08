@@ -91,3 +91,56 @@ export async function knuctKvDel(key: string): Promise<void> {
 export function knuctKvBackend(): 'upstash' | 'memory' {
   return isUpstashConfigured() ? 'upstash' : 'memory';
 }
+
+export type KnuctKvPingResult = {
+  backend: 'upstash' | 'memory';
+  status: 'ok' | 'error';
+  latencyMs: number;
+  error?: string;
+};
+
+/** Real Upstash SET/GET roundtrip (no in-memory fallback). Memory backend returns ok immediately. */
+export async function knuctKvPing(): Promise<KnuctKvPingResult> {
+  if (!isUpstashConfigured()) {
+    return { backend: 'memory', status: 'ok', latencyMs: 0 };
+  }
+
+  const started = Date.now();
+  const key = `knuct:health:${Date.now()}`;
+  const value = 'pong';
+
+  try {
+    await upstashPipeline([
+      ['SET', key, value],
+      ['EXPIRE', key, 10],
+    ]);
+
+    const url = process.env.UPSTASH_REDIS_REST_URL!;
+    const token = process.env.UPSTASH_REDIS_REST_TOKEN!;
+    const getRes = await fetch(`${url}/get/${encodeURIComponent(key)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: 'no-store',
+    });
+    if (!getRes.ok) {
+      throw new Error(`GET failed: HTTP ${getRes.status}`);
+    }
+    const getData = (await getRes.json()) as { result: string | null };
+    if (getData.result !== value) {
+      throw new Error('roundtrip value mismatch');
+    }
+
+    await fetch(`${url}/del/${encodeURIComponent(key)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      cache: 'no-store',
+    });
+
+    return { backend: 'upstash', status: 'ok', latencyMs: Date.now() - started };
+  } catch (err) {
+    return {
+      backend: 'upstash',
+      status: 'error',
+      latencyMs: Date.now() - started,
+      error: err instanceof Error ? err.message : 'Redis ping failed',
+    };
+  }
+}

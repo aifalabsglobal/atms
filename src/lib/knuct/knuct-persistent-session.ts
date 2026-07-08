@@ -37,6 +37,15 @@ export async function deleteUserKnuctSession(userId: string): Promise<void> {
   await knuctKvDel(userKey(userId));
 }
 
+/** End Knuct server session and remove persisted cookies (e.g. on app sign-out). */
+export async function revokeUserKnuctSession(userId: string): Promise<void> {
+  const adapter = await loadUserKnuctSession(userId);
+  if (adapter) {
+    await adapter.logout();
+  }
+  await deleteUserKnuctSession(userId);
+}
+
 export async function refreshUserKnuctSession(
   userId: string,
   adapter: KnuctHttpAdapter
