@@ -118,3 +118,58 @@ export async function sendPasswordResetEmail(email: string, name: string, tempPa
 export function emailStatus(): 'configured' | 'disabled' {
   return isEmailConfigured() ? 'configured' : 'disabled';
 }
+
+export async function sendRegistrationApprovedEmail(
+  email: string,
+  name: string,
+  role: string,
+) {
+  const loginUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
+  return sendEmail({
+    to: email,
+    subject: 'AIMSCS registration approved',
+    html: `
+      <p>Hello ${name},</p>
+      <p>Your AIMSCS campus registration has been <strong>approved</strong>.</p>
+      <p><strong>Role:</strong> ${role.replace(/_/g, ' ')}</p>
+      <p>Sign in at <a href="${loginUrl}/login">${loginUrl}/login</a> using your Knuct DID or credentials provided by the admin.</p>
+    `,
+    text: `Hello ${name}. Your AIMSCS registration was approved as ${role}. Sign in at ${loginUrl}/login`,
+  });
+}
+
+export async function sendRegistrationRejectedEmail(
+  email: string,
+  name: string,
+  reason?: string,
+) {
+  return sendEmail({
+    to: email,
+    subject: 'AIMSCS registration update',
+    html: `
+      <p>Hello ${name},</p>
+      <p>Your AIMSCS registration request was not approved at this time.</p>
+      ${reason ? `<p><strong>Reason:</strong> ${reason}</p>` : ''}
+      <p>Contact the campus administration if you believe this was an error.</p>
+    `,
+    text: `Hello ${name}. Your registration was not approved.${reason ? ` Reason: ${reason}` : ''}`,
+  });
+}
+
+export async function sendLowAttendanceEmail(
+  email: string,
+  name: string,
+  pct: number,
+  threshold: number,
+) {
+  return sendEmail({
+    to: email,
+    subject: 'AIMSCS low attendance warning',
+    html: `
+      <p>Hello ${name},</p>
+      <p>Your recorded attendance is <strong>${pct}%</strong>, which is below the campus minimum of <strong>${threshold}%</strong>.</p>
+      <p>Please attend upcoming sessions and contact your faculty or HOD if you need condonation support.</p>
+    `,
+    text: `Hello ${name}. Attendance ${pct}% is below the ${threshold}% minimum.`,
+  });
+}

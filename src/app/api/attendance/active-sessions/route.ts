@@ -1,7 +1,8 @@
 import { db } from '@/lib/db';
-import { isFaceVerificationEnabled } from '@/lib/face-verification';
+import { isFaceVerificationApiConfigured, getFaceVerificationMode } from '@/lib/face-verification';
 import { NextResponse } from 'next/server';
 import { requireSection, resolveStudentId, getCampusScope, buildCourseIdFilter } from '@/lib/auth-helpers';
+import { getSystemConfig } from '@/lib/system-config';
 
 export async function GET(request: Request) {
   try {
@@ -47,10 +48,14 @@ export async function GET(request: Request) {
       return { ...rest, alreadyMarked, existingRecord };
     });
 
+    const systemConfig = await getSystemConfig();
+
     return NextResponse.json({
       sessions: enriched,
       total: enriched.length,
-      faceVerificationConfigured: isFaceVerificationEnabled() && Boolean(process.env.FACE_VERIFICATION_API_URL?.trim()),
+      faceVerificationConfigured: isFaceVerificationApiConfigured(),
+      faceVerificationMode: getFaceVerificationMode(),
+      faceVerificationEnforced: systemConfig.policies.faceVerificationEnforced,
     });
   } catch (error) {
     console.error('Active sessions API error:', error);

@@ -269,6 +269,9 @@ export async function approveRegistrationRequest(params: {
   const { notifyRegistrationApproved } = await import('@/lib/notifications');
   await notifyRegistrationApproved(user.id, assignedRole);
 
+  const { sendRegistrationApprovedEmail } = await import('@/lib/email');
+  await sendRegistrationApprovedEmail(user.email, user.name, assignedRole);
+
   return user;
 }
 
@@ -302,4 +305,8 @@ export async function rejectRegistrationRequest(params: {
       did: request.did.slice(0, 24),
     },
   });
+
+  const reason = params.reason?.trim() || 'Rejected by administrator';
+  const { sendRegistrationRejectedEmail } = await import('@/lib/email');
+  await sendRegistrationRejectedEmail(request.email, request.name, reason);
 }

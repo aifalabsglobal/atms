@@ -177,7 +177,11 @@ function StudentMarkAttendance() {
   });
 
   const activeSessions: ActiveSession[] = activeData?.sessions ?? [];
+  const faceVerificationMode = (activeData?.faceVerificationMode ?? 'disabled') as 'live' | 'demo' | 'disabled';
+  const faceVerificationEnforced = activeData?.faceVerificationEnforced === true;
   const faceVerificationConfigured = activeData?.faceVerificationConfigured === true;
+  const selfieRequired = faceVerificationEnforced && faceVerificationConfigured;
+  const faceMisconfigured = faceVerificationEnforced && !faceVerificationConfigured;
 
   // Get user location
   const requestLocation = useCallback((sessionOverride?: ActiveSession | null) => {
@@ -263,8 +267,8 @@ function StudentMarkAttendance() {
       toast({
         title: 'Attendance Marked Successfully!',
         description: selectedSession?.geofence
-          ? `Geo: ${data.geofenceValidated ? '✅ Verified' : '❌ Failed'} | Face: ${data.faceVerified ? '✅ Verified' : '⚠️ Skipped'}`
-          : `Marked present | Face: ${data.faceVerified ? '✅ Verified' : '⚠️ Skipped'}`,
+          ? `Geo: ${data.geofenceValidated ? '✅ Verified' : '❌ Failed'} | Face: ${data.faceVerified ? '✅ Verified' : faceVerificationMode === 'live' ? '❌ No match' : '⚠️ Skipped'}`
+          : `Marked present | Face: ${data.faceVerified ? '✅ Verified' : faceVerificationMode === 'live' ? '❌ No match' : '⚠️ Skipped'}`,
       });
     },
     onError: (err) => {
@@ -286,6 +290,18 @@ function StudentMarkAttendance() {
     }
     if (geofenceCheck?.requiresGeofence && !geofenceCheck.inside) {
       toast({ title: 'Outside geofence', description: geofenceStatusLabel(geofenceCheck), variant: 'destructive' });
+      return;
+    }
+    if (selfieRequired && !selfieBase64) {
+      toast({ title: 'Selfie required', description: 'Face verification is enforced — capture a selfie before marking.', variant: 'destructive' });
+      return;
+    }
+    if (faceMisconfigured) {
+      toast({
+        title: 'Face verification unavailable',
+        description: 'Contact an administrator — enforcement is on but the verification API is not configured.',
+        variant: 'destructive',
+      });
       return;
     }
     setMarkingStep('submitting');
@@ -328,6 +344,22 @@ function StudentMarkAttendance() {
           </Button>
         )}
       </div>
+
+      {faceMisconfigured && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">
+          Face verification is enforced in Settings but the verification API is not configured. Attendance marking is blocked until an administrator sets FACE_VERIFICATION_API_URL.
+        </div>
+      )}
+      {faceVerificationMode === 'demo' && !faceVerificationEnforced && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+          Face verification runs in demo mode (no external API). Selfies are stored for audit; matching uses a placeholder until FACE_VERIFICATION_API_URL is configured.
+        </div>
+      )}
+      {faceVerificationMode === 'live' && (
+        <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-xs text-green-800">
+          Live face verification is active{faceVerificationEnforced ? ' and enforced' : ''}. Your selfie will be matched against your profile photo.
+        </div>
+      )}
 
       {/* Step 1: Select Session */}
       {markingStep === 'select' && (
@@ -479,7 +511,7 @@ function StudentMarkAttendance() {
               {/* Camera / Selfie */}
               <div className="space-y-2">
                 <Label className="text-xs font-semibold flex items-center gap-1.5">
-                  <Camera className="h-3.5 w-3.5" /> Selfie Capture (Optional)
+                  <Camera className="h-3.5 w-3.5" /> Selfie Capture {selfieRequired ? '(Required)' : '(Optional)'}
                 </Label>
                 {selfieBase64 ? (
                   <div className="flex items-center gap-3">
@@ -490,7 +522,13 @@ function StudentMarkAttendance() {
                       <p className="font-medium text-green-700 flex items-center gap-1">
                         <CheckCircle2 className="h-3.5 w-3.5" /> Selfie Captured
                       </p>
-                      <p className="text-muted-foreground mt-0.5">Selfie stored for audit — automated face matching is not configured</p>
+                      <p className="text-muted-foreground mt-0.5">
+                        {faceVerificationMode === 'live'
+                          ? 'Will be matched against your profile photo when you submit.'
+                          : faceVerificationMode === 'demo'
+                            ? 'Stored for audit — demo matching only (no live API).'
+                            : 'Stored for audit — face matching is not configured.'}
+                      </p>
                     </div>
                     <Button variant="outline" size="sm" className="text-xs h-7 ml-auto" onClick={() => setSelfieBase64(null)}>
                       Retake
@@ -541,7 +579,9 @@ function StudentMarkAttendance() {
                   className="bg-[#1A3C6E] hover:bg-[#1A3C6E]/90 text-white gap-2"
                   disabled={
                     markMutation.isPending ||
+                    faceMisconfigured ||
                     !userLocation ||
+                    (selfieRequired && !selfieBase64) ||
                     (selectedSession.geofence
                       ? geofenceCheck?.requiresGeofence && !geofenceCheck.inside
                       : geoRequiredForSession(selectedSession))
@@ -557,8 +597,11 @@ function StudentMarkAttendance() {
                 {!userLocation && (
                   <span className="text-xs text-amber-600">⚠️ Location required</span>
                 )}
-                {!selfieBase64 && userLocation && (
-                  <span className="text-xs text-muted-foreground">Selfie optional (face verification will be skipped)</span>
+                {selfieRequired && !selfieBase64 && userLocation && (
+                  <span className="text-xs text-amber-600">⚠️ Selfie required for face verification</span>
+                )}
+                {!selfieRequired && !selfieBase64 && userLocation && faceVerificationMode === 'disabled' && (
+                  <span className="text-xs text-muted-foreground">Selfie optional (face verification off)</span>
                 )}
               </div>
             </CardContent>

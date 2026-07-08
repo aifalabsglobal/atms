@@ -24,6 +24,7 @@
     "test:knuct:live": "npx tsx scripts/test-knuct-live.ts",
     "test:timetable": "npx tsx scripts/test-timetable-helpers.ts",
     "test:geofence": "npx tsx scripts/test-geofence-policy.ts",
+    "test:storage": "npx tsx --env-file=.env scripts/test-object-storage.ts",
     "verify:geofences": "npx tsx scripts/geofence-verify.ts",
     "verify:timetable": "npx tsx scripts/timetable-verify.ts",
     "verify:production": "npx tsx scripts/production-verify.ts",

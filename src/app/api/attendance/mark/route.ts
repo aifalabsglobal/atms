@@ -2,13 +2,17 @@ import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { requireSection, resolveStudentId, SELF_MARK_METHODS } from '@/lib/auth-helpers';
 import type { Role } from '@/lib/store';
-import { verifyFaceMatch } from '@/lib/face-verification';
+import { verifyFaceMatch, isFaceVerificationApiConfigured } from '@/lib/face-verification';
 import { validateGeofenceLocation } from '@/lib/geofence';
 import { captureMethodRequiresGeofence } from '@/lib/geofence-policy';
 import { rateLimitByUser } from '@/lib/api-rate-limit';
 import { logAudit, getClientIp } from '@/lib/audit';
 import { getSystemConfig } from '@/lib/system-config';
 import { uploadImageFromBase64, resolvePublicAssetUrl } from '@/lib/object-storage';
+import {
+  maybeNotifyLowAttendance,
+  notifyAttendanceIntegrityIssue,
+} from '@/lib/attendance-notifications';
 
 export async function POST(request: Request) {
   try {
@@ -85,6 +89,17 @@ export async function POST(request: Request) {
       captureMethodRequiresGeofence(method);
 
     const systemConfig = await getSystemConfig();
+
+    if (systemConfig.policies.faceVerificationEnforced && !isFaceVerificationApiConfigured()) {
+      return NextResponse.json(
+        {
+          error:
+            'Face verification is enforced in Settings but FACE_VERIFICATION_API_URL is not configured. Contact an administrator.',
+        },
+        { status: 503 },
+      );
+    }
+
     const enforceGeofence =
       systemConfig.policies.geofenceSelfMarkRequired && sessionNeedsGeo;
 
@@ -136,6 +151,13 @@ export async function POST(request: Request) {
           ipAddress: getClientIp(request),
         });
 
+        await notifyAttendanceIntegrityIssue({
+          studentId,
+          issueType: 'out_of_geofence',
+          courseCode: attendanceSession.course.code,
+          detail: msg,
+        });
+
         return NextResponse.json(
           {
             error: msg,
@@ -161,7 +183,7 @@ export async function POST(request: Request) {
     let faceVerified = false;
     let confidence: number | null = null;
 
-    if (selfieBase64) {
+    if (selfieBase64 && isFaceVerificationApiConfigured()) {
       try {
         const student = await db.user.findUnique({ where: { id: studentId } });
         if (student?.profileImageUrl) {
@@ -175,6 +197,12 @@ export async function POST(request: Request) {
       }
 
       if (systemConfig.policies.faceVerificationEnforced && !faceVerified) {
+        await notifyAttendanceIntegrityIssue({
+          studentId,
+          issueType: 'face_mismatch',
+          courseCode: attendanceSession.course.code,
+        });
+
         return NextResponse.json(
           {
             error: 'Face verification failed — attendance not recorded. Ensure your profile photo is clear and try again.',
@@ -208,6 +236,8 @@ export async function POST(request: Request) {
       where: { id: sessionId },
       data: { presentCount },
     });
+
+    await maybeNotifyLowAttendance(studentId);
 
     return NextResponse.json(
       {

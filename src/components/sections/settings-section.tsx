@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { KnuctDIDAuthPanel } from '@/components/knuct/did-auth-panel';
+import { KnuctCredentialsPanel } from '@/components/knuct/knuct-credentials-panel';
 import { UserAccountsPanel } from '@/components/users/user-accounts-panel';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAppStore, ROLE_LABELS, useRoleSections, useSectionAccess, type Role, type Section, type SectionContext } from '@/lib/store';
@@ -1212,6 +1213,12 @@ export default function SettingsSection() {
                         <p className="text-sm text-muted-foreground">
                           Auto-provision on user create: {knuctData?.config?.walletOnUserCreate ? 'on' : 'off'}
                         </p>
+                        <p className="text-sm text-muted-foreground">
+                          Chain publish: {knuctData?.config?.chainPublishEnabled ? (knuctData?.config?.chainPublishConfigured ? 'enabled · configured' : 'enabled · URL missing') : 'off'}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          Credentials: {knuctData?.config?.credentialsEnabled ? (knuctData?.config?.credentialMintConfigured ? 'enabled · mint configured' : 'enabled · hash-only') : 'off'}
+                        </p>
                       </div>
                     </div>
 
@@ -1317,6 +1324,8 @@ export default function SettingsSection() {
                 )}
               </CardContent>
             </Card>
+
+            <KnuctCredentialsPanel />
 
             {isSuperAdmin && (
               <Card>
@@ -1491,7 +1500,8 @@ export default function SettingsSection() {
           <Card className="border-amber-200 bg-amber-50/50 dark:bg-amber-950/20">
             <CardContent className="p-4 text-sm text-muted-foreground">
               Only <strong>in-app notifications</strong> are fully wired today. SMS, push, and external email
-              channels below are reference designs — not configurable in this demo build.
+              In-app alerts are live for low attendance, failed mark attempts, registration, and wallet approvals.
+              Email/SMS channels below require provider env vars (Resend/SMTP, Twilio).
             </CardContent>
           </Card>
           <Card>

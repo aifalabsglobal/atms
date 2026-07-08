@@ -11,6 +11,16 @@ export function isFaceVerificationEnabled(): boolean {
   return process.env.FACE_VERIFICATION_ENABLED === 'true';
 }
 
+export function isFaceVerificationApiConfigured(): boolean {
+  return isFaceVerificationEnabled() && Boolean(process.env.FACE_VERIFICATION_API_URL?.trim());
+}
+
+export function getFaceVerificationMode(): 'live' | 'demo' | 'disabled' {
+  if (isFaceVerificationApiConfigured()) return 'live';
+  if (isFaceVerificationEnabled()) return 'demo';
+  return 'disabled';
+}
+
 function isRemoteUrl(url: string): boolean {
   return url.startsWith('http://') || url.startsWith('https://');
 }
@@ -31,7 +41,7 @@ export async function verifyFaceMatch(
   }
 
   const apiUrl = process.env.FACE_VERIFICATION_API_URL?.trim();
-  if (isFaceVerificationEnabled() && apiUrl) {
+  if (isFaceVerificationApiConfigured() && apiUrl) {
     try {
       const res = await fetch(apiUrl, {
         method: 'POST',
