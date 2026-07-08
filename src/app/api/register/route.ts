@@ -25,7 +25,7 @@ export async function POST(req: Request) {
   const limited = await enforceRateLimit(`register:${clientIp(req)}`, 8, 60_000);
   if (limited) return limited;
 
-  purgeDIDAuthSessions();
+  await purgeDIDAuthSessions();
 
   const body = (await req.json()) as {
     step?: string;
@@ -104,7 +104,7 @@ export async function POST(req: Request) {
     }
 
     try {
-      const did = await runDidAuthComplete(flowId, response);
+      const { did } = await runDidAuthComplete(flowId, response);
       const request = await createRegistrationRequest(did, {
         name,
         email,

@@ -11,7 +11,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { purgeDIDAuthSessions } from '@/lib/knuct/did-auth-session';
-import { persistVerifiedDid, runDidAuthChallenge, runDidAuthComplete } from '@/lib/knuct/did-auth-flow';
+import { persistKnuctSessionForUser, persistVerifiedDid, runDidAuthChallenge, runDidAuthComplete } from '@/lib/knuct/did-auth-flow';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -23,7 +23,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  purgeDIDAuthSessions();
+  await purgeDIDAuthSessions();
 
   const body = (await req.json()) as { step?: string; hash?: string; response?: number[] };
   const { step } = body;
@@ -51,9 +51,10 @@ export async function POST(req: Request) {
     }
 
     try {
-      const did = await runDidAuthComplete(sessionKey, response);
+      const { did, sessionCookies } = await runDidAuthComplete(sessionKey, response);
       await persistVerifiedDid(session.user.id, did);
-      return NextResponse.json({ did });
+      const { accountInfo } = await persistKnuctSessionForUser(session.user.id, sessionCookies);
+      return NextResponse.json({ did, accountInfo: accountInfo ?? null });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'DID auth completion failed';
       const status = msg.includes('expired') ? 409 : 502;

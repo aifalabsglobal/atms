@@ -1,33 +1,65 @@
 import { db } from '@/lib/db';
+import { createKnuctHttpAdapter } from './knuct-client';
 import {
   createDIDAuthSession,
   deleteDIDAuthSession,
   getDIDAuthSession,
+  saveDIDAuthSession,
 } from '@/lib/knuct/did-auth-session';
+import { refreshUserKnuctSession } from '@/lib/knuct/knuct-persistent-session';
 
 export async function runDidAuthChallenge(sessionKey: string, hash: string): Promise<string> {
-  const adapter = createDIDAuthSession(sessionKey);
+  let adapter = await getDIDAuthSession(sessionKey);
+  if (!adapter) {
+    adapter = await createDIDAuthSession(sessionKey);
+  }
   try {
-    return await adapter.authChallenge(hash);
+    const challenge = await adapter.authChallenge(hash);
+    await saveDIDAuthSession(sessionKey, adapter);
+    return challenge;
   } catch (err) {
-    deleteDIDAuthSession(sessionKey);
+    await deleteDIDAuthSession(sessionKey);
     throw err;
   }
 }
 
-export async function runDidAuthComplete(sessionKey: string, response: number[]): Promise<string> {
-  const adapter = getDIDAuthSession(sessionKey);
+export async function runDidAuthComplete(
+  sessionKey: string,
+  response: number[]
+): Promise<{ did: string; sessionCookies: Record<string, string> }> {
+  const adapter = await getDIDAuthSession(sessionKey);
   if (!adapter) {
     throw new Error('DID auth session expired — please start again');
   }
 
   try {
     await adapter.authResponse(response);
+    await saveDIDAuthSession(sessionKey, adapter);
     await adapter.startNode();
+    await saveDIDAuthSession(sessionKey, adapter);
     const walletData = await adapter.walletData();
-    return walletData.did;
+    const sessionCookies = adapter.exportCookies();
+    return { did: walletData.did, sessionCookies };
   } finally {
-    deleteDIDAuthSession(sessionKey);
+    await deleteDIDAuthSession(sessionKey);
+  }
+}
+
+/** Persist Knuct session cookies for a user and optionally fetch CAPI account info. */
+export async function persistKnuctSessionForUser(
+  userId: string,
+  sessionCookies: Record<string, string>
+): Promise<{ accountInfo?: unknown }> {
+  const adapter = createKnuctHttpAdapter();
+  adapter.loadCookies(sessionCookies);
+  await refreshUserKnuctSession(userId, adapter);
+  try {
+    const accountInfo = await adapter.capiGetAccountInfo();
+    await refreshUserKnuctSession(userId, adapter);
+    return { accountInfo };
+  } catch (err) {
+    console.warn('[knuct] getAccountInfo after auth failed (non-fatal):', err);
+    return {};
   }
 }
 

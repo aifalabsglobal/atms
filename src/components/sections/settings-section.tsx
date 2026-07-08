@@ -897,6 +897,20 @@ export default function SettingsSection() {
       query.state.data?.wallet?.status === 'pending' ? 3000 : false,
   });
 
+  const { data: knuctCapiData } = useQuery({
+    queryKey: ['knuct-capi-account'],
+    queryFn: () => fetch('/api/knuct/account').then((r) => {
+      if (!r.ok) throw new Error('Failed to load Knuct account (complete DID auth first)');
+      return r.json() as Promise<{
+        sessionActive: boolean;
+        accountInfo: unknown;
+        dashboard: unknown;
+        sessionStore: string;
+      }>;
+    }),
+    enabled: showSettingsAdminTabs && knuctData?.wallet?.status === 'active',
+  });
+
   const { data: anchorsData, isLoading: anchorsLoading } = useQuery({
     queryKey: ['knuct-anchors'],
     queryFn: () => fetch('/api/knuct/anchors?limit=20').then((r) => {
@@ -1243,8 +1257,28 @@ export default function SettingsSection() {
 
                     {/* DID Authentication — private share upload, runs entirely in browser */}
                     <KnuctDIDAuthPanel
-                      onSuccess={() => refetchKnuct()}
+                      onSuccess={() => {
+                        refetchKnuct();
+                        queryClient.invalidateQueries({ queryKey: ['knuct-capi-account'] });
+                      }}
                     />
+
+                    {knuctCapiData?.sessionActive && knuctCapiData.accountInfo != null && (
+                      <div className="rounded-lg border p-4 space-y-2">
+                        <p className="text-sm font-medium">Live Knuct account (CAPI getAccountInfo)</p>
+                        <pre className="text-[10px] font-mono bg-muted/50 p-2 rounded overflow-x-auto max-h-40">
+                          {JSON.stringify(knuctCapiData.accountInfo, null, 2)}
+                        </pre>
+                        {knuctCapiData.dashboard != null && (
+                          <>
+                            <p className="text-xs font-medium text-muted-foreground mt-2">Dashboard (CAPI getDashboard)</p>
+                            <pre className="text-[10px] font-mono bg-muted/50 p-2 rounded overflow-x-auto max-h-32">
+                              {JSON.stringify(knuctCapiData.dashboard, null, 2)}
+                            </pre>
+                          </>
+                        )}
+                      </div>
+                    )}
 
                     <div className="flex gap-2">
                       <Button

@@ -10,7 +10,7 @@
 import { randomBytes } from 'crypto';
 import { NextResponse } from 'next/server';
 import { enforceRateLimit } from '@/lib/rate-limit';
-import { findActiveUserByDid, runDidAuthChallenge, runDidAuthComplete } from '@/lib/knuct/did-auth-flow';
+import { findActiveUserByDid, persistKnuctSessionForUser, runDidAuthChallenge, runDidAuthComplete } from '@/lib/knuct/did-auth-flow';
 import { createKnuctLoginGrant } from '@/lib/knuct/login-grant';
 import { purgeDIDAuthSessions } from '@/lib/knuct/did-auth-session';
 
@@ -28,7 +28,7 @@ export async function POST(req: Request) {
   const limited = await enforceRateLimit(`knuct-login:${clientIp(req)}`, 10, 60_000);
   if (limited) return limited;
 
-  purgeDIDAuthSessions();
+  await purgeDIDAuthSessions();
 
   const body = (await req.json()) as {
     step?: string;
@@ -64,7 +64,7 @@ export async function POST(req: Request) {
     }
 
     try {
-      const did = await runDidAuthComplete(flowId, response);
+      const { did, sessionCookies } = await runDidAuthComplete(flowId, response);
       const user = await findActiveUserByDid(did);
       if (!user) {
         return NextResponse.json(
@@ -76,8 +76,9 @@ export async function POST(req: Request) {
         );
       }
 
-      const loginToken = createKnuctLoginGrant(user.id);
-      return NextResponse.json({ did, loginToken });
+      const { accountInfo } = await persistKnuctSessionForUser(user.id, sessionCookies);
+      const loginToken = await createKnuctLoginGrant(user.id);
+      return NextResponse.json({ did, loginToken, accountInfo: accountInfo ?? null });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'DID login failed';
       const status = msg.includes('expired') ? 409 : 502;

@@ -3,10 +3,19 @@
  * All functions that touch the DOM (getImageData) must run client-side only.
  */
 import md5 from 'md5';
+import { isMobileDevice } from './device';
+
+declare global {
+  interface Window {
+    cv?: {
+      imread: (img: HTMLImageElement) => { data: Uint8Array; delete: () => void };
+    };
+  }
+}
 
 /**
- * Reads a File object's pixel data using the Canvas API (browser only).
- * Returns a Uint8Array of RGBA image bytes via callback.
+ * Reads a File object's pixel data using Canvas (desktop) or OpenCV.js (mobile).
+ * Matches Knuct vendor privShare.js behaviour.
  */
 export function getImageData(
   file: File,
@@ -15,20 +24,37 @@ export function getImageData(
 ): void {
   if (typeof callback !== 'function') throw new Error('callback must be a function');
 
-  const cvs = document.createElement('canvas');
-  const ctx = cvs.getContext('2d');
   const img = new Image();
 
   img.onload = () => {
-    if (!ctx) {
-      errCallback?.(new Error('Canvas 2D context unavailable'));
-      return;
+    try {
+      if (!isMobileDevice()) {
+        const cvs = document.createElement('canvas');
+        const ctx = cvs.getContext('2d');
+        if (!ctx) {
+          errCallback?.(new Error('Canvas 2D context unavailable'));
+          return;
+        }
+        cvs.width = img.width;
+        cvs.height = img.height;
+        ctx.drawImage(img, 0, 0);
+        const imgData = ctx.getImageData(0, 0, img.width, img.height);
+        callback(new Uint8Array(imgData.data.buffer));
+        return;
+      }
+
+      const cv = window.cv;
+      if (!cv?.imread) {
+        errCallback?.(new Error('OpenCV.js is not loaded — wait for mobile OpenCV to finish loading'));
+        return;
+      }
+      const mat = cv.imread(img);
+      const imgData = mat.data;
+      mat.delete();
+      callback(imgData);
+    } catch (err) {
+      errCallback?.(err);
     }
-    cvs.width = img.width;
-    cvs.height = img.height;
-    ctx.drawImage(img, 0, 0);
-    const imgData = ctx.getImageData(0, 0, img.width, img.height);
-    callback(new Uint8Array(imgData.data.buffer));
   };
 
   img.onerror = (err) => errCallback?.(err);
@@ -80,7 +106,7 @@ export function mbBase32(data: number[] | Uint8Array): string {
 
 /**
  * Full pipeline: File → privShare bytes + challenge hash string.
- * Returns both so the caller can keep privShare for the response step.
+ * On mobile, call ensureOpenCvReady() before this function.
  */
 export function computePrivShareHash(
   file: File

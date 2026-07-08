@@ -1,36 +1,33 @@
 import { randomBytes } from 'crypto';
+import { knuctKvDel, knuctKvGet, knuctKvSet } from './redis-store';
 
-const TTL_MS = 2 * 60 * 1000;
+const TTL_SEC = 2 * 60;
+const KEY_PREFIX = 'knuct:login-grant:';
 
 interface Grant {
   userId: string;
-  expiresAt: number;
 }
 
-const grants = new Map<string, Grant>();
-
-export function createKnuctLoginGrant(userId: string): string {
-  purgeExpiredKnuctLoginGrants();
+export async function createKnuctLoginGrant(userId: string): Promise<string> {
   const token = randomBytes(32).toString('hex');
-  grants.set(token, { userId, expiresAt: Date.now() + TTL_MS });
+  const payload: Grant = { userId };
+  await knuctKvSet(`${KEY_PREFIX}${token}`, JSON.stringify(payload), TTL_SEC);
   return token;
 }
 
-export function consumeKnuctLoginGrant(token: string | undefined | null): string | null {
+export async function consumeKnuctLoginGrant(token: string | undefined | null): Promise<string | null> {
   if (!token) return null;
-  purgeExpiredKnuctLoginGrants();
-  const grant = grants.get(token);
-  if (!grant || Date.now() > grant.expiresAt) {
-    grants.delete(token);
+  const raw = await knuctKvGet(`${KEY_PREFIX}${token}`);
+  await knuctKvDel(`${KEY_PREFIX}${token}`);
+  if (!raw) return null;
+  try {
+    const grant = JSON.parse(raw) as Grant;
+    return grant.userId ?? null;
+  } catch {
     return null;
   }
-  grants.delete(token);
-  return grant.userId;
 }
 
-export function purgeExpiredKnuctLoginGrants(): void {
-  const now = Date.now();
-  for (const [key, grant] of grants.entries()) {
-    if (now > grant.expiresAt) grants.delete(key);
-  }
+export async function purgeExpiredKnuctLoginGrants(): Promise<void> {
+  /* TTL handled by redis-store */
 }

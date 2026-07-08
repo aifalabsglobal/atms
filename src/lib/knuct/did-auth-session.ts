@@ -1,45 +1,55 @@
 /**
- * Server-side in-memory store for in-flight DID auth adapter sessions.
- * Each user gets one KnuctHttpAdapter instance that persists across the
- * challenge → response → startnode → walletdata sequence so that
- * Knuct's session cookies are maintained.
- * Entries expire after 10 minutes (Knuct sessions last 15 min).
+ * Server-side store for in-flight DID auth sessions.
+ * Persists Knuct cookie jars in Redis (or memory fallback) so challenge → response
+ * works across serverless instances.
  */
-import { KnuctHttpAdapter } from './knuct-client';
+import { createKnuctHttpAdapter, type KnuctHttpAdapter } from './knuct-client';
+import { knuctKvDel, knuctKvGet, knuctKvSet } from './redis-store';
 
-const TTL_MS = 10 * 60 * 1000;
+const TTL_SEC = 10 * 60; // 10 minutes (Knuct sessions last ~15 min)
+const KEY_PREFIX = 'knuct:did-auth:';
 
-interface Entry {
-  adapter: KnuctHttpAdapter;
-  expiresAt: number;
+function sessionKey(id: string): string {
+  return `${KEY_PREFIX}${id}`;
 }
 
-const store = new Map<string, Entry>();
+async function saveAdapter(id: string, adapter: KnuctHttpAdapter): Promise<void> {
+  await knuctKvSet(sessionKey(id), JSON.stringify(adapter.exportCookies()), TTL_SEC);
+}
 
-export function createDIDAuthSession(userId: string): KnuctHttpAdapter {
-  const adapter = new KnuctHttpAdapter();
-  store.set(userId, { adapter, expiresAt: Date.now() + TTL_MS });
+async function loadAdapter(id: string): Promise<KnuctHttpAdapter | null> {
+  const raw = await knuctKvGet(sessionKey(id));
+  if (!raw) return null;
+  try {
+    const cookies = JSON.parse(raw) as Record<string, string>;
+    const adapter = createKnuctHttpAdapter();
+    adapter.loadCookies(cookies);
+    return adapter;
+  } catch {
+    await knuctKvDel(sessionKey(id));
+    return null;
+  }
+}
+
+export async function createDIDAuthSession(sessionKey: string): Promise<KnuctHttpAdapter> {
+  const adapter = createKnuctHttpAdapter();
+  await saveAdapter(sessionKey, adapter);
   return adapter;
 }
 
-export function getDIDAuthSession(userId: string): KnuctHttpAdapter | null {
-  const entry = store.get(userId);
-  if (!entry) return null;
-  if (Date.now() > entry.expiresAt) {
-    store.delete(userId);
-    return null;
-  }
-  return entry.adapter;
+export async function getDIDAuthSession(sessionKey: string): Promise<KnuctHttpAdapter | null> {
+  return loadAdapter(sessionKey);
 }
 
-export function deleteDIDAuthSession(userId: string): void {
-  store.delete(userId);
+export async function saveDIDAuthSession(sessionKey: string, adapter: KnuctHttpAdapter): Promise<void> {
+  await saveAdapter(sessionKey, adapter);
 }
 
-/** Purge expired entries (call occasionally to avoid memory leak) */
-export function purgeDIDAuthSessions(): void {
-  const now = Date.now();
-  for (const [key, entry] of store.entries()) {
-    if (now > entry.expiresAt) store.delete(key);
-  }
+export async function deleteDIDAuthSession(id: string): Promise<void> {
+  await knuctKvDel(sessionKey(id));
+}
+
+/** Purge expired entries — no-op for Redis TTL; clears stale memory entries. */
+export async function purgeDIDAuthSessions(): Promise<void> {
+  /* Redis handles TTL; memory fallback purges on read in redis-store */
 }

@@ -51,6 +51,23 @@ export class KnuctHttpAdapter implements KnuctAdapter {
     this.baseUrl = (baseUrl ?? getKnuctConfig().baseUrl).replace(/\/$/, '');
   }
 
+  /** Export Knuct session cookies for Redis persistence across serverless instances. */
+  exportCookies(): Record<string, string> {
+    return Object.fromEntries(this.cookies);
+  }
+
+  /** Restore cookies from a persisted session. */
+  loadCookies(cookies: Record<string, string>): void {
+    this.cookies.clear();
+    for (const [k, v] of Object.entries(cookies)) {
+      if (k && v) this.cookies.set(k, v);
+    }
+  }
+
+  get capiBaseUrl(): string {
+    return `${this.baseUrl}/capi`;
+  }
+
   async startTempNode(): Promise<void> {
     await this.request('GET', '/sapi/starttempnode', { expectStatus: 204 });
   }
@@ -122,6 +139,53 @@ export class KnuctHttpAdapter implements KnuctAdapter {
       // logout errors are non-fatal
     });
     this.cookies.clear();
+  }
+
+  /** CAPI: check if user is registered (requires active Knuct session cookies). */
+  async capiCheck(): Promise<unknown> {
+    return this.capiRequest('GET', '/check');
+  }
+
+  /** CAPI: initial IPFS / node sync after authentication. */
+  async capiStart(): Promise<unknown> {
+    return this.capiRequest('GET', '/start');
+  }
+
+  /** CAPI: user account details — vendor E2E validation endpoint. */
+  async capiGetAccountInfo(): Promise<unknown> {
+    return this.capiRequest('GET', '/getAccountInfo');
+  }
+
+  /** CAPI: wallet statistics for dashboard display. */
+  async capiGetDashboard(): Promise<unknown> {
+    return this.capiRequest('GET', '/getDashboard');
+  }
+
+  private async capiRequest(method: string, path: string, retried = false): Promise<unknown> {
+    const url = `${this.capiBaseUrl}${path.startsWith('/') ? path : `/${path}`}`;
+    try {
+      const res = await this.fetchWithSession(url, { method });
+      if (res.status === 409 && !retried) {
+        await this.startNode();
+        return this.capiRequest(method, path, true);
+      }
+      if (res.status === 401) {
+        throw new Error('Knuct CAPI authentication failed (401) — session expired');
+      }
+      if (!res.ok) {
+        const detail = await res.text().catch(() => '');
+        throw new Error(`Knuct CAPI ${path} failed: HTTP ${res.status}${detail ? ` — ${detail.slice(0, 200)}` : ''}`);
+      }
+      const text = await res.text();
+      if (!text) return {};
+      recordKnuctSuccess();
+      return JSON.parse(text) as unknown;
+    } catch (err) {
+      if (!(err instanceof Error && err.message.includes('HTTP'))) {
+        recordKnuctFailure();
+      }
+      throw err;
+    }
   }
 
   async fetchPrivateShare(privShareUrl: string): Promise<KnuctPrivShare> {

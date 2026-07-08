@@ -8,12 +8,14 @@
  *  - login: POST /api/knuct/login → loginToken
  *  - register: POST /api/register → pending approval
  */
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { ShieldCheck, Upload, Loader2, CheckCircle2, XCircle, KeyRound } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { computePrivShareHash } from '@/lib/knuct/priv-share';
 import { createChallengeResponse } from '@/lib/knuct/nlss';
+import { ensureOpenCvReady } from '@/lib/knuct/opencv-loader';
+import { isMobileDevice } from '@/lib/knuct/device';
 
 type Step = 'idle' | 'hashing' | 'challenge' | 'responding' | 'completing' | 'done' | 'error';
 
@@ -70,6 +72,14 @@ export function KnuctDIDAuthPanel({
     mode === 'register' ? '/api/register' :
     '/api/knuct/did-auth';
 
+  useEffect(() => {
+    if (isMobileDevice()) {
+      ensureOpenCvReady().catch((err) => {
+        console.warn('[knuct] OpenCV preload failed:', err);
+      });
+    }
+  }, []);
+
   const reset = () => {
     setStep('idle');
     setDid(null);
@@ -93,6 +103,9 @@ export function KnuctDIDAuthPanel({
 
     try {
       setStep('hashing');
+      if (isMobileDevice()) {
+        await ensureOpenCvReady();
+      }
       const { privShare, hash } = await computePrivShareHash(file);
 
       setStep('challenge');

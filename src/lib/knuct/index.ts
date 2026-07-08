@@ -13,4 +13,6 @@ export { startPilotProvisioning, resolvePilotUserIds } from './pilot-service';
 export type { PilotProvisionResult } from './pilot-service';
 export { resetKnuctCircuit } from './circuit-breaker';
 export { createKnuctHttpAdapter } from './knuct-client';
+export { fetchKnuctAccountInfo, fetchKnuctCapiBundle, fetchKnuctWalletDashboard } from './capi-service';
+export { knuctKvBackend } from './redis-store';
 export type { KnuctAdapter, KnuctDashboardStats, KnuctWalletResult } from './types';

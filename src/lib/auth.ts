@@ -97,7 +97,7 @@ export const authOptions: NextAuthOptions = {
         loginToken: { label: 'Login Token', type: 'password' },
       },
       async authorize(credentials) {
-        const userId = consumeKnuctLoginGrant(credentials?.loginToken);
+        const userId = await consumeKnuctLoginGrant(credentials?.loginToken);
         if (!userId) return null;
 
         try {
