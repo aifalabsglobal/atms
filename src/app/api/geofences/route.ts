@@ -1,3 +1,4 @@
+import { rateLimitByUser } from '@/lib/api-rate-limit';
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { logAudit, getClientIp } from '@/lib/audit';
@@ -35,6 +36,9 @@ export async function POST(request: Request) {
   try {
     const { error, session } = await requireGeofenceWrite();
     if (error || !session) return error;
+
+    const limited = await rateLimitByUser(request, session.user.id, 'geofence-create', 20, 60_000);
+    if (limited) return limited;
 
     const body = await request.json();
     const validationError = validateGeofenceBody(body);

@@ -2,11 +2,15 @@ import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { requireAuth, ADMIN_ROLES } from '@/lib/auth-helpers';
 import { uploadImageFromBase64 } from '@/lib/object-storage';
+import { rateLimitByUser } from '@/lib/api-rate-limit';
 
 export async function POST(request: Request) {
   try {
     const { error, session } = await requireAuth();
     if (error || !session) return error;
+
+    const limited = await rateLimitByUser(request, session.user.id, 'profile-image', 10, 60_000);
+    if (limited) return limited;
 
     const body = await request.json();
     const { userId, imageBase64 } = body;

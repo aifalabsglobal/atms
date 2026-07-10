@@ -28,25 +28,29 @@ export async function GET() {
     const hasSettings = await canAccessSection(role, 'settings', session.user.id);
 
     if (role === 'super_admin' && hasSettings) {
-      const [health, stats, ownWallet] = await Promise.all([
+      const [health, stats, ownWallet, provisionRequest] = await Promise.all([
         getKnuctHealth(),
         getKnuctDashboardStats(),
         getUserKnuctWallet(session.user.id),
+        getPendingWalletProvisionRequest(session.user.id),
       ]);
-      return NextResponse.json({ config, health, stats, wallet: ownWallet, provisionRequest: await getPendingWalletProvisionRequest(session.user.id) });
+      return NextResponse.json({ config, health, stats, wallet: ownWallet, provisionRequest });
     }
 
     if (role === 'admin' && hasSettings) {
-      const [health, ownWallet] = await Promise.all([
+      const [health, ownWallet, provisionRequest] = await Promise.all([
         getKnuctHealth(),
         getUserKnuctWallet(session.user.id),
+        getPendingWalletProvisionRequest(session.user.id),
       ]);
-      return NextResponse.json({ config, health, wallet: ownWallet, provisionRequest: await getPendingWalletProvisionRequest(session.user.id) });
+      return NextResponse.json({ config, health, wallet: ownWallet, provisionRequest });
     }
 
-    const ownWallet = await getUserKnuctWallet(session.user.id);
-    const health = await getKnuctHealth();
-    const provisionRequest = await getPendingWalletProvisionRequest(session.user.id);
+    const [ownWallet, health, provisionRequest] = await Promise.all([
+      getUserKnuctWallet(session.user.id),
+      getKnuctHealth(),
+      getPendingWalletProvisionRequest(session.user.id),
+    ]);
     return NextResponse.json({ config, health, wallet: ownWallet, provisionRequest });
   } catch (error) {
     console.error('[knuct] status error:', error);

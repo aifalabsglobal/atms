@@ -19,7 +19,7 @@ export function downloadCsv(filename: string, rows: (string | number | null | un
   URL.revokeObjectURL(url);
 }
 
-type StudentExportData = {
+export type StudentExportData = {
   student: { name: string; email: string; employeeId: string | null; department: string | null };
   riskStatus?: string;
   attendance: {
@@ -37,7 +37,7 @@ type StudentExportData = {
   violations: { type: string; severity: string; reviewStatus: string }[];
 };
 
-type StaffExportData = {
+export type StaffExportData = {
   scopeLabel: string;
   analyticsScope: string;
   kpis: {
@@ -53,7 +53,7 @@ type StaffExportData = {
   weeklyAttendanceTrend: { week: string; rate: number; present: number; absent: number; late: number }[];
   departmentAnalytics: { department: string; students: number; avgAttendance: number; atRisk: number }[];
   atRiskStudents: { name: string; employeeId: string | null; department: string | null; stats: { percentage: number; total: number } }[];
-  studentAttendanceReport: { name: string; employeeId: string | null; department: string | null; stats: { present: number; absent: number; late: number; total: number; percentage: number } }[];
+  studentAttendanceReport?: { name: string; employeeId: string | null; department: string | null; stats: { present: number; absent: number; late: number; total: number; percentage: number } }[];
   lmsEngagement: { topCourses: { code: string; name: string; enrollments: number; avgGrade: number | null }[] };
 };
 
@@ -154,7 +154,7 @@ export function exportStaffReportCsv(data: StaffExportData) {
     [],
     ['Student attendance roster'],
     ['Name', 'ID', 'Department', 'Present', 'Absent', 'Late', 'Total', '%'],
-    ...data.studentAttendanceReport.map((s) => [
+    ...(data.studentAttendanceReport ?? []).map((s) => [
       s.name,
       s.employeeId,
       s.department,

@@ -40,7 +40,7 @@ export function RegistrationRequestsPanel({ actorRole }: { actorRole: Role }) {
           if (!r.ok) throw new Error('Failed to load requests');
           return r.json() as Promise<{ requests: RegistrationRequest[]; total: number }>;
         }),
-    refetchInterval: 15000,
+    refetchInterval: 60_000,
   });
 
   const review = useMutation({

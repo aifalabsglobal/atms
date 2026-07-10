@@ -4,6 +4,8 @@ import { isFaceVerificationEnabled } from '@/lib/face-verification';
 import { getRateLimitBackend } from '@/lib/rate-limit';
 import { isChainPublishEnabled } from '@/lib/knuct/chain-publish';
 import { isKnuctLiveEnabled } from '@/lib/knuct/config';
+import { getAuthMethodSummary } from '@/lib/mfa';
+import { isSmsConfigured } from '@/lib/sms';
 import {
   cloneDefaultSystemConfig,
   parseSystemConfig,
@@ -42,12 +44,13 @@ export interface SystemRuntimeStatus {
   database: { provider: string };
   auth: { method: string };
   geofencing: { algorithm: string };
+  sms: { configured: boolean };
 }
 
 let cachedSettings: SystemConfigSettings | null = null;
 let cacheMeta: { updatedAt: string | null; updatedBy: string | null } | null = null;
 let cacheTime = 0;
-const CACHE_MS = 30_000;
+const CACHE_MS = 120_000;
 
 export function invalidateSystemConfigCache() {
   cachedSettings = null;
@@ -156,8 +159,9 @@ function buildRuntimeStatus(settings: SystemConfigSettings): SystemRuntimeStatus
     },
     rateLimit: { backend: getRateLimitBackend() },
     database: { provider: 'PostgreSQL (Neon) + Prisma' },
-    auth: { method: 'next-auth JWT (credentials)' },
+    auth: { method: getAuthMethodSummary() },
     geofencing: { algorithm: 'Haversine (circle) + point-in-polygon' },
+    sms: { configured: isSmsConfigured() },
   };
 }
 

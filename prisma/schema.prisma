@@ -108,6 +108,8 @@ model User {
   linkedStudentId String?  // For parent role: linked ward student id
   status        String   @default("active")  // active, inactive, suspended
   passwordHash  String   @default("$2a$10$placeholder")
+  mfaEnabled    Boolean  @default(false)
+  mfaSecret     String?
   lastLoginAt   DateTime?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

@@ -77,11 +77,18 @@ export async function maybeNotifyLowAttendance(studentId: string): Promise<void>
   if (config.notifications.lowAttendanceEmailEnabled) {
     const student = await db.user.findUnique({
       where: { id: studentId },
-      select: { email: true, name: true },
+      select: { email: true, name: true, phone: true },
     });
     if (student?.email) {
       const { sendLowAttendanceEmail } = await import('@/lib/email');
       await sendLowAttendanceEmail(student.email, student.name, pct, config.attendance.eligibilityPct);
+    }
+    if (student?.phone) {
+      const { sendSms } = await import('@/lib/sms');
+      await sendSms(
+        student.phone,
+        `AIMSCS: attendance ${pct}% is below the ${config.attendance.eligibilityPct}% minimum. Check the app for details.`,
+      );
     }
   }
 }

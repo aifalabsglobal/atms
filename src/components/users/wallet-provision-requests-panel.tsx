@@ -37,7 +37,7 @@ export function WalletProvisionRequestsPanel({ actorRole }: { actorRole: Role })
         return r.json() as Promise<{ requests: WalletProvisionRequest[]; total: number }>;
       }),
     enabled: canReview,
-    refetchInterval: 15000,
+    refetchInterval: 60_000,
   });
 
   const review = useMutation({

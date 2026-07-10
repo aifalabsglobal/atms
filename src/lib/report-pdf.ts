@@ -1,0 +1,228 @@
+import type { StudentExportData, StaffExportData } from '@/lib/report-export';
+import { jsPDF } from 'jspdf';
+
+function downloadPdfBlob(filename: string, doc: jsPDF) {
+  doc.save(filename);
+}
+
+function addFooter(doc: jsPDF, page: number) {
+  const h = doc.internal.pageSize.getHeight();
+  doc.setFontSize(8);
+  doc.setTextColor(120);
+  doc.text(`AIMSCS · page ${page}`, 14, h - 8);
+  doc.setTextColor(0);
+}
+
+function ensureSpace(doc: jsPDF, y: number, needed: number, pageRef: { n: number }): number {
+  const h = doc.internal.pageSize.getHeight();
+  if (y + needed < h - 16) return y;
+  addFooter(doc, pageRef.n);
+  doc.addPage();
+  pageRef.n += 1;
+  return 18;
+}
+
+export function exportStudentReportPdf(data: StudentExportData) {
+  const doc = new jsPDF();
+  const page = { n: 1 };
+  let y = 18;
+
+  doc.setFontSize(16);
+  doc.setTextColor(26, 60, 110);
+  doc.text('AIMSCS — Student Report', 14, y);
+  y += 8;
+  doc.setFontSize(10);
+  doc.setTextColor(80);
+  doc.text(`Generated ${new Date().toLocaleString('en-IN')}`, 14, y);
+  y += 10;
+
+  doc.setTextColor(0);
+  doc.setFontSize(12);
+  doc.text(data.student.name, 14, y);
+  y += 6;
+  doc.setFontSize(10);
+  doc.text(`Email: ${data.student.email}`, 14, y);
+  y += 5;
+  doc.text(`ID: ${data.student.employeeId ?? '—'} · Dept: ${data.student.department ?? '—'}`, 14, y);
+  y += 5;
+  if (data.riskStatus) {
+    doc.text(`Risk: ${data.riskStatus}`, 14, y);
+    y += 8;
+  } else {
+    y += 4;
+  }
+
+  doc.setFontSize(12);
+  doc.setTextColor(26, 60, 110);
+  doc.text('Attendance', 14, y);
+  y += 6;
+  doc.setFontSize(10);
+  doc.setTextColor(0);
+  doc.text(
+    `Overall ${data.attendance.overallPercentage}% · Present ${data.attendance.presentCount} · Absent ${data.attendance.absentCount} · Late ${data.attendance.lateCount} · Sessions ${data.attendance.totalSessions}`,
+    14,
+    y,
+  );
+  y += 8;
+
+  doc.setFontSize(11);
+  doc.text('Course attendance', 14, y);
+  y += 6;
+  doc.setFontSize(9);
+  for (const c of data.attendance.courseAttendance.slice(0, 20)) {
+    y = ensureSpace(doc, y, 6, page);
+    doc.text(`${c.course.code} — ${c.course.name}: ${c.percentage}% (${c.present}/${c.total})`, 14, y);
+    y += 5;
+  }
+
+  y += 4;
+  y = ensureSpace(doc, y, 30, page);
+  doc.setFontSize(11);
+  doc.setTextColor(26, 60, 110);
+  doc.text('Academics', 14, y);
+  y += 6;
+  doc.setFontSize(10);
+  doc.setTextColor(0);
+  doc.text(
+    `Assignments ${data.assignments.total} (graded ${data.assignments.graded}, avg ${data.assignments.avgScore ?? '—'}%)`,
+    14,
+    y,
+  );
+  y += 5;
+  doc.text(
+    `Quizzes ${data.quizzes.totalAttempts} · avg ${data.quizzes.avgScore}% · best ${data.quizzes.bestScore}%`,
+    14,
+    y,
+  );
+  y += 5;
+  doc.text(
+    `Grades: ${Object.entries(data.grades.distribution)
+      .map(([g, n]) => `${g}=${n}`)
+      .join(' · ')}`,
+    14,
+    y,
+  );
+  y += 8;
+
+  if (data.violations.length > 0) {
+    y = ensureSpace(doc, y, 20, page);
+    doc.setFontSize(11);
+    doc.setTextColor(26, 60, 110);
+    doc.text('Violations', 14, y);
+    y += 6;
+    doc.setFontSize(9);
+    doc.setTextColor(0);
+    for (const v of data.violations.slice(0, 15)) {
+      y = ensureSpace(doc, y, 5, page);
+      doc.text(`${v.type} · ${v.severity} · ${v.reviewStatus}`, 14, y);
+      y += 5;
+    }
+  }
+
+  addFooter(doc, page.n);
+  const slug = data.student.employeeId || data.student.name.split(' ')[0];
+  downloadPdfBlob(`student-report-${slug}-${new Date().toISOString().slice(0, 10)}.pdf`, doc);
+}
+
+export function exportStaffReportPdf(data: StaffExportData) {
+  const doc = new jsPDF();
+  const page = { n: 1 };
+  let y = 18;
+
+  doc.setFontSize(16);
+  doc.setTextColor(26, 60, 110);
+  doc.text('AIMSCS — Analytics Report', 14, y);
+  y += 8;
+  doc.setFontSize(10);
+  doc.setTextColor(80);
+  doc.text(`${data.scopeLabel} · ${new Date().toLocaleString('en-IN')}`, 14, y);
+  y += 10;
+
+  doc.setFontSize(12);
+  doc.setTextColor(26, 60, 110);
+  doc.text('KPIs', 14, y);
+  y += 6;
+  doc.setFontSize(10);
+  doc.setTextColor(0);
+  const kpiLines = [
+    `Students: ${data.kpis.totalStudents} · Avg attendance: ${data.kpis.avgAttendancePct}% · At risk: ${data.kpis.atRiskCount}`,
+    `Avg grade: ${data.kpis.avgGradePct}% · Quiz attempts: ${data.kpis.quizAttempts} · Avg quiz: ${data.kpis.avgQuizScore}%`,
+    `Enrollments: ${data.kpis.totalEnrollments} · Submissions: ${data.kpis.submissions}`,
+  ];
+  for (const line of kpiLines) {
+    doc.text(line, 14, y);
+    y += 5;
+  }
+  y += 4;
+
+  if (data.weeklyAttendanceTrend.length > 0) {
+    y = ensureSpace(doc, y, 20, page);
+    doc.setFontSize(11);
+    doc.setTextColor(26, 60, 110);
+    doc.text('Weekly attendance trend', 14, y);
+    y += 6;
+    doc.setFontSize(9);
+    doc.setTextColor(0);
+    for (const w of data.weeklyAttendanceTrend) {
+      y = ensureSpace(doc, y, 5, page);
+      doc.text(`${w.week}: ${w.rate}% (P${w.present}/A${w.absent}/L${w.late})`, 14, y);
+      y += 5;
+    }
+    y += 3;
+  }
+
+  if (data.departmentAnalytics.length > 0) {
+    y = ensureSpace(doc, y, 20, page);
+    doc.setFontSize(11);
+    doc.setTextColor(26, 60, 110);
+    doc.text('Department breakdown', 14, y);
+    y += 6;
+    doc.setFontSize(9);
+    doc.setTextColor(0);
+    for (const d of data.departmentAnalytics) {
+      y = ensureSpace(doc, y, 5, page);
+      doc.text(`${d.department}: ${d.students} students · avg ${d.avgAttendance}% · at risk ${d.atRisk}`, 14, y);
+      y += 5;
+    }
+    y += 3;
+  }
+
+  if (data.atRiskStudents.length > 0) {
+    y = ensureSpace(doc, y, 20, page);
+    doc.setFontSize(11);
+    doc.setTextColor(26, 60, 110);
+    doc.text('At-risk students', 14, y);
+    y += 6;
+    doc.setFontSize(9);
+    doc.setTextColor(0);
+    for (const s of data.atRiskStudents.slice(0, 25)) {
+      y = ensureSpace(doc, y, 5, page);
+      doc.text(
+        `${s.name} (${s.employeeId ?? '—'}) · ${s.department ?? '—'} · ${s.stats.percentage}% / ${s.stats.total} sessions`,
+        14,
+        y,
+      );
+      y += 5;
+    }
+    y += 3;
+  }
+
+  if (data.lmsEngagement.topCourses.length > 0) {
+    y = ensureSpace(doc, y, 20, page);
+    doc.setFontSize(11);
+    doc.setTextColor(26, 60, 110);
+    doc.text('Top courses', 14, y);
+    y += 6;
+    doc.setFontSize(9);
+    doc.setTextColor(0);
+    for (const c of data.lmsEngagement.topCourses) {
+      y = ensureSpace(doc, y, 5, page);
+      doc.text(`${c.code} — ${c.name}: ${c.enrollments} enrolled · avg grade ${c.avgGrade ?? '—'}%`, 14, y);
+      y += 5;
+    }
+  }
+
+  addFooter(doc, page.n);
+  const scopeSlug = data.analyticsScope.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+  downloadPdfBlob(`analytics-${scopeSlug}-${new Date().toISOString().slice(0, 10)}.pdf`, doc);
+}

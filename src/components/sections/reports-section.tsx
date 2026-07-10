@@ -12,6 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { exportStaffReportCsv, exportStudentReportCsv } from '@/lib/report-export';
+import { exportStaffReportPdf, exportStudentReportPdf } from '@/lib/report-pdf';
 import { Button } from '@/components/ui/button';
 import {
   BarChart3, Users, BookOpen, ShieldAlert, TrendingUp, TrendingDown,
@@ -143,6 +144,14 @@ function StudentReportView({ data }: { data: StudentReportData }) {
             onClick={() => exportStudentReportCsv(data)}
           >
             <Download className="h-3.5 w-3.5" /> Export CSV
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => exportStudentReportPdf(data)}
+          >
+            <FileText className="h-3.5 w-3.5" /> Export PDF
           </Button>
           <Badge className={cn('text-[10px]', riskBadge.className)}>{riskBadge.label}</Badge>
           <Badge variant="outline" className="gap-1"><Calendar className="h-3 w-3" /> Academic Year 2025-26</Badge>
@@ -919,6 +928,22 @@ function StaffAnalyticsView({ data }: { data: StaffReportData }) {
             })}
           >
             <Download className="h-3.5 w-3.5" /> Export CSV
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => exportStaffReportPdf({
+              scopeLabel: data.scopeLabel,
+              analyticsScope: data.analyticsScope,
+              kpis: data.kpis,
+              weeklyAttendanceTrend: data.weeklyAttendanceTrend,
+              departmentAnalytics: data.departmentAnalytics,
+              atRiskStudents: data.atRiskStudents,
+              lmsEngagement: { topCourses: data.lmsEngagement.topCourses },
+            })}
+          >
+            <FileText className="h-3.5 w-3.5" /> Export PDF
           </Button>
           <Badge className="bg-[#1A3C6E] text-white">{scopeLabel}</Badge>
           <Badge variant="outline" className="gap-1"><Calendar className="h-3 w-3" /> AY 2025-26</Badge>

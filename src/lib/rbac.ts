@@ -36,7 +36,7 @@ export {
 
 let cachedMatrix: Record<Role, Section[]> | null = null;
 let cacheTime = 0;
-const CACHE_MS = 30_000;
+const CACHE_MS = 120_000;
 
 const userOverrideCache = new Map<string, { data: UserRbacOverrideInput | null; time: number }>();
 

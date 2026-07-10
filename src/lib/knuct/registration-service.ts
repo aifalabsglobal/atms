@@ -181,6 +181,7 @@ export async function approveRegistrationRequest(params: {
     : undefined;
 
   if (request.walletSource === 'pending_create' || !privShareEnc) {
+    // Live Knuct can take 10–60s — must stay outside any DB transaction.
     const bundle = await createKnuctWalletBundle();
     const liveDidTaken = await db.knuctWallet.findFirst({ where: { did: bundle.did }, select: { id: true } });
     if (liveDidTaken) throw new Error('Generated DID collision — try approving again.');
@@ -201,47 +202,41 @@ export async function approveRegistrationRequest(params: {
     if (dept) department = dept.name;
   }
 
-  const user = await db.$transaction(async (tx) => {
-    const created = await tx.user.create({
-      data: {
-        email: request.email,
-        name: request.name,
-        role: assignedRole,
-        department,
-        departmentId,
-        phone: request.phone,
-        employeeId: request.employeeId,
-        status: 'active',
-        passwordHash: '$2a$10$placeholder',
+  const user = await db.user.create({
+    data: {
+      email: request.email,
+      name: request.name,
+      role: assignedRole,
+      department,
+      departmentId,
+      phone: request.phone,
+      employeeId: request.employeeId,
+      status: 'active',
+      passwordHash: '$2a$10$placeholder',
+      knuctWallet: {
+        create: {
+          did,
+          privShareEnc: privShareEnc ? Buffer.from(privShareEnc) : undefined,
+          status: 'active',
+        },
       },
-    });
+    },
+  });
 
-    await tx.knuctWallet.create({
-      data: {
-        userId: created.id,
-        did,
-        privShareEnc: privShareEnc ? Buffer.from(privShareEnc) : undefined,
-        status: 'active',
-      },
-    });
-
-    await tx.knuctRegistrationRequest.update({
-      where: { id: request.id },
-      data: {
-        status: 'approved',
-        did,
-        reviewedById: params.reviewerId,
-        reviewedAt: new Date(),
-        approvedUserId: created.id,
-        requestedRole: assignedRole,
-        department,
-        departmentId,
-        walletSource: privShareEnc ? 'created' : request.walletSource,
-        privShareEnc: privShareEnc ? Buffer.from(privShareEnc) : undefined,
-      },
-    });
-
-    return created;
+  await db.knuctRegistrationRequest.update({
+    where: { id: request.id },
+    data: {
+      status: 'approved',
+      did,
+      reviewedById: params.reviewerId,
+      reviewedAt: new Date(),
+      approvedUserId: user.id,
+      requestedRole: assignedRole,
+      department,
+      departmentId,
+      walletSource: privShareEnc ? 'created' : request.walletSource,
+      privShareEnc: privShareEnc ? Buffer.from(privShareEnc) : undefined,
+    },
   });
 
   await logAudit({

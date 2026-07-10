@@ -40,6 +40,9 @@ export default function LoginPage() {
   const [scriptCopied, setScriptCopied] = useState(false);
   const [scriptOpen, setScriptOpen] = useState(false);
   const [knuctLoading, setKnuctLoading] = useState(false);
+  const [mfaRequired, setMfaRequired] = useState(false);
+  const [mfaCode, setMfaCode] = useState('');
+  const [googleSso, setGoogleSso] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -52,16 +55,47 @@ export default function LoginPage() {
       setError('Invalid email or password. On a fresh deploy, seed the database (npm run db:seed).');
     } else if (authError === 'Configuration') {
       setError('Auth is misconfigured. Set NEXTAUTH_URL to your Vercel domain and a strong NEXTAUTH_SECRET.');
+    } else if (authError === 'GoogleAccountNotLinked') {
+      setError('No AIMSCS account matches that Google email. Ask an admin to create your user first.');
+    } else if (authError === 'MFA_INVALID') {
+      setError('Invalid authenticator code. Try again.');
+      setMfaRequired(true);
     }
+
+    fetch('/api/auth/methods')
+      .then((r) => r.json())
+      .then((d) => setGoogleSso(d.google === true))
+      .catch(() => setGoogleSso(false));
   }, []);
 
-  const signInAs = async (targetEmail: string, targetPassword = DEMO_PASSWORD) => {
+  const signInAs = async (targetEmail: string, targetPassword = DEMO_PASSWORD, code?: string) => {
     setLoadingEmail(targetEmail);
     setError('');
     try {
+      if (!code) {
+        const pre = await fetch('/api/auth/preflight', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: targetEmail, password: targetPassword }),
+        });
+        const preData = await pre.json().catch(() => ({}));
+        if (pre.status === 401 || preData.ok === false) {
+          setError('Invalid email or password. Use vice.chancellor@aimscs.ac.in / demo123 after seeding (npm run db:seed).');
+          return;
+        }
+        if (preData.mfaRequired) {
+          setEmail(targetEmail);
+          setPassword(targetPassword);
+          setMfaRequired(true);
+          setMfaCode('');
+          return;
+        }
+      }
+
       const result = await signIn('credentials', {
         email: targetEmail,
         password: targetPassword,
+        mfaCode: code || undefined,
         callbackUrl: '/',
         redirect: false,
       });
@@ -72,8 +106,21 @@ export default function LoginPage() {
         return;
       }
 
+      if (result?.error === 'MFA_REQUIRED') {
+        setMfaRequired(true);
+        return;
+      }
+      if (result?.error === 'MFA_INVALID') {
+        setError('Invalid authenticator code. Try again.');
+        setMfaRequired(true);
+        return;
+      }
       if (result?.error === 'CredentialsSignin') {
-        setError('Invalid email or password. Use vice.chancellor@aimscs.ac.in / demo123 after seeding (npm run db:seed).');
+        setError(
+          mfaRequired
+            ? 'Invalid authenticator code or password.'
+            : 'Invalid email or password. Use vice.chancellor@aimscs.ac.in / demo123 after seeding (npm run db:seed).',
+        );
       } else if (result?.error === 'DatabaseConnectionError') {
         setError('Database is waking up — wait a few seconds and try again.');
       } else if (result?.error) {
@@ -113,7 +160,7 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await signInAs(email, password);
+    await signInAs(email, password, mfaRequired ? mfaCode : undefined);
   };
 
   const handleShare = async () => {
@@ -195,13 +242,51 @@ export default function LoginPage() {
                         type="password"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        disabled={loading}
+                        disabled={loading || mfaRequired}
                         required
                       />
                     </div>
+                    {mfaRequired && (
+                      <div className="space-y-2">
+                        <Label htmlFor="mfa">Authenticator code</Label>
+                        <Input
+                          id="mfa"
+                          inputMode="numeric"
+                          autoComplete="one-time-code"
+                          className="font-mono tracking-widest"
+                          maxLength={6}
+                          value={mfaCode}
+                          onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                          disabled={loading}
+                          required
+                          placeholder="000000"
+                        />
+                        <button
+                          type="button"
+                          className="text-[10px] text-muted-foreground hover:underline"
+                          onClick={() => {
+                            setMfaRequired(false);
+                            setMfaCode('');
+                          }}
+                        >
+                          Back to password
+                        </button>
+                      </div>
+                    )}
                     <Button type="submit" className="w-full bg-[#1A3C6E] hover:bg-[#1A3C6E]/90" disabled={loading}>
-                      {loadingEmail === email ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Sign in'}
+                      {loadingEmail === email ? <Loader2 className="h-4 w-4 animate-spin" /> : mfaRequired ? 'Verify & sign in' : 'Sign in'}
                     </Button>
+                    {googleSso && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full"
+                        disabled={loading}
+                        onClick={() => void signIn('google', { callbackUrl: '/' })}
+                      >
+                        Continue with Google
+                      </Button>
+                    )}
                   </form>
 
                   <div className="space-y-4">

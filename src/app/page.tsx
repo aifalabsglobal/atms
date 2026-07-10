@@ -1,5 +1,6 @@
 'use client';
 
+import dynamic from 'next/dynamic';
 import { useAppStore, ROLE_LABELS, ROLE_COLORS, useEffectiveSections, type Role, type Section } from '@/lib/store';
 import { BRAND } from '@/lib/branding';
 import { BrandLogo } from '@/components/brand-logo';
@@ -28,19 +29,28 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { signOut, useSession } from 'next-auth/react';
 import { DEMO_ACCOUNTS } from '@/lib/demo-accounts';
 
-import DashboardSection from '@/components/sections/dashboard-section';
-import AttendanceSection from '@/components/sections/attendance-section';
-import LmsSection from '@/components/sections/lms-section';
-import UsersSection from '@/components/sections/users-section';
-import ViolationsSection from '@/components/sections/violations-section';
-import ReportsSection from '@/components/sections/reports-section';
-import GeofencesSection from '@/components/sections/geofences-section';
-import SettingsSection from '@/components/sections/settings-section';
-import MastersSection from '@/components/sections/masters-section';
-import CalendarSection from '@/components/sections/calendar-section';
 import { RoleSwitcherMenu } from '@/components/role-switcher-menu';
 import { GlobalSearch } from '@/components/global-search';
 import { DemoBanner } from '@/components/demo-banner';
+
+function SectionFallback() {
+  return (
+    <div className="flex items-center justify-center py-24">
+      <Loader2 className="h-6 w-6 animate-spin text-[#1A3C6E]" />
+    </div>
+  );
+}
+
+const DashboardSection = dynamic(() => import('@/components/sections/dashboard-section'), { loading: SectionFallback });
+const AttendanceSection = dynamic(() => import('@/components/sections/attendance-section'), { loading: SectionFallback });
+const LmsSection = dynamic(() => import('@/components/sections/lms-section'), { loading: SectionFallback });
+const UsersSection = dynamic(() => import('@/components/sections/users-section'), { loading: SectionFallback });
+const ViolationsSection = dynamic(() => import('@/components/sections/violations-section'), { loading: SectionFallback });
+const ReportsSection = dynamic(() => import('@/components/sections/reports-section'), { loading: SectionFallback });
+const GeofencesSection = dynamic(() => import('@/components/sections/geofences-section'), { loading: SectionFallback });
+const SettingsSection = dynamic(() => import('@/components/sections/settings-section'), { loading: SectionFallback });
+const MastersSection = dynamic(() => import('@/components/sections/masters-section'), { loading: SectionFallback });
+const CalendarSection = dynamic(() => import('@/components/sections/calendar-section'), { loading: SectionFallback });
 
 const allNavItems: { id: Section; label: string; icon: React.ElementType }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },

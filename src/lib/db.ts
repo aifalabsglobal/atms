@@ -8,6 +8,9 @@ function isConnectionError(error: unknown): boolean {
   const code = (error as { code?: string }).code;
   if (code && CONNECTION_ERROR_CODES.has(code)) return true;
   const message = String((error as { message?: string }).message ?? '');
+  if (/Transaction already closed|expired transaction|Transaction API error/i.test(message)) {
+    return false;
+  }
   return /connection pool|ECONNREFUSED|Can't reach database server|connect timeout|Timed out fetching/i.test(
     message,
   );
@@ -21,6 +24,10 @@ function createPrismaClient() {
   ensureEnv();
   const client = new PrismaClient({
     log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+    transactionOptions: {
+      maxWait: 15_000,
+      timeout: 60_000,
+    },
   });
 
   return client.$extends({

@@ -4,6 +4,7 @@ import { resolveStudentId, getCampusScope, CAMPUS_READ_ROLES } from '@/lib/auth-
 import type { Role } from '@/lib/store';
 import { requireLmsRead, requireLmsWrite, auditLms } from '@/lib/lms-helpers';
 import { semesterCodeToNumber } from '@/lib/masters-validation';
+import { rateLimitByUser } from '@/lib/api-rate-limit';
 
 export async function GET(request: Request) {
   try {
@@ -80,6 +81,9 @@ export async function POST(request: Request) {
   try {
     const { error, session } = await requireLmsWrite();
     if (error || !session) return error;
+
+    const limited = await rateLimitByUser(request, session.user.id, 'lms-courses-write', 20, 60_000);
+    if (limited) return limited;
 
     const body = await request.json();
     const { programId, subjectId, code, name, credits, semester, type, description, instructorId, syllabus } = body;

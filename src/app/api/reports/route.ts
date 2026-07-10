@@ -11,11 +11,15 @@ import {
   scopeLabel,
 } from '@/lib/reports-analytics';
 import { getAttendanceThresholds } from '@/lib/system-config';
+import { rateLimitByUser } from '@/lib/api-rate-limit';
 
 export async function GET(request: Request) {
   try {
     const { error, session } = await requireSection('reports');
     if (error || !session) return error;
+
+    const limited = await rateLimitByUser(request, session.user.id, 'reports', 40, 60_000);
+    if (limited) return limited;
 
     const thresholds = await getAttendanceThresholds();
 

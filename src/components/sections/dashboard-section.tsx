@@ -1514,8 +1514,8 @@ export default function DashboardSection() {
       return r.json();
     }),
     enabled: !!currentUser,
-    staleTime: 2 * 60 * 1000,
-    refetchInterval: 2 * 60 * 1000,
+    staleTime: 3 * 60 * 1000,
+    refetchInterval: 3 * 60 * 1000,
   });
 
   if (!currentUser) return <DashboardSkeleton />;

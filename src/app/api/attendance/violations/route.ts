@@ -1,3 +1,4 @@
+import { rateLimitByUser } from '@/lib/api-rate-limit';
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { getCampusScope, requireSection } from '@/lib/auth-helpers';
@@ -60,6 +61,9 @@ export async function PUT(request: Request) {
   try {
     const { error, session } = await requireSection('violations');
     if (error || !session) return error;
+
+    const limited = await rateLimitByUser(request, session.user.id, 'violation-review', 30, 60_000);
+    if (limited) return limited;
 
     const body = await request.json();
     const { id, reviewStatus, reviewNotes } = body;

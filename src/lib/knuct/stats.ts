@@ -100,7 +100,7 @@ export async function getKnuctDashboardStats(): Promise<KnuctDashboardStats> {
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
 
-  const [total, active, failed, pending, userCount, anchorsToday, anchorGroups, recentAnchors] =
+  const [total, active, failed, pending, userCount, anchorsToday, anchorGroups, recentAnchors, credentials] =
     await Promise.all([
       db.knuctWallet.count(),
       db.knuctWallet.count({ where: { status: 'active' } }),
@@ -118,11 +118,11 @@ export async function getKnuctDashboardStats(): Promise<KnuctDashboardStats> {
         take: 10,
         select: { resourceType: true, resourceId: true, payloadHash: true, createdAt: true },
       }),
+      getCredentialStats(),
     ]);
 
   const didCoveragePct = userCount > 0 ? Math.round((active / userCount) * 100) : 0;
   const byModule = Object.fromEntries(anchorGroups.map((g) => [g.resourceType, g._count]));
-  const credentials = await getCredentialStats();
 
   return {
     enabled: isKnuctLiveEnabled(),

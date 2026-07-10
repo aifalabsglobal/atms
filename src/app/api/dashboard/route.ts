@@ -12,13 +12,15 @@ import {
 } from '@/lib/reports-analytics';
 import { getKnuctDashboardStats } from '@/lib/knuct';
 import { getAttendanceThresholds } from '@/lib/system-config';
+import { getCachedJson, setCachedJson } from '@/lib/api-cache';
 
 async function buildStudentDashboard(studentId: string, thresholds: Awaited<ReturnType<typeof getAttendanceThresholds>>) {
-  const [present, absent, late, total, enrollments, records, activeSessionsList] = await Promise.all([
-    db.attendanceRecord.count({ where: { studentId, status: 'present' } }),
-    db.attendanceRecord.count({ where: { studentId, status: 'absent' } }),
-    db.attendanceRecord.count({ where: { studentId, status: 'late' } }),
-    db.attendanceRecord.count({ where: { studentId } }),
+  const [statusGroups, enrollments, records, activeSessionsList] = await Promise.all([
+    db.attendanceRecord.groupBy({
+      by: ['status'],
+      where: { studentId },
+      _count: { _all: true },
+    }),
     db.courseEnrollment.count({ where: { studentId, status: 'enrolled' } }),
     db.attendanceRecord.findMany({
       where: { studentId },
@@ -47,6 +49,18 @@ async function buildStudentDashboard(studentId: string, thresholds: Awaited<Retu
       },
     }),
   ]);
+
+  let present = 0;
+  let absent = 0;
+  let late = 0;
+  let total = 0;
+  for (const row of statusGroups) {
+    const n = row._count._all;
+    total += n;
+    if (row.status === 'present') present = n;
+    else if (row.status === 'absent') absent = n;
+    else if (row.status === 'late') late = n;
+  }
 
   const overallAttendance = total > 0 ? Math.round((present / total) * 100) : 0;
 
@@ -130,6 +144,9 @@ export async function GET() {
     if (error || !session) return error;
 
     const role = session.user.role as Role;
+    const cacheKey = `dashboard:${session.user.id}:${role}`;
+    const cached = getCachedJson<Record<string, unknown>>(cacheKey);
+    if (cached) return NextResponse.json(cached);
 
     if (role === 'student' || role === 'parent') {
       const thresholds = await getAttendanceThresholds();
@@ -144,9 +161,10 @@ export async function GET() {
           where: { id: studentId },
           select: { id: true, name: true, department: true, employeeId: true },
         });
-        return NextResponse.json({ ...studentData, scope: 'parent', ward });
+        const payload = { ...studentData, scope: 'parent', ward };
+        return NextResponse.json(setCachedJson(cacheKey, payload, 45_000));
       }
-      return NextResponse.json(studentData);
+      return NextResponse.json(setCachedJson(cacheKey, studentData, 45_000));
     }
 
     if (role === 'visitor') {
@@ -208,16 +226,17 @@ export async function GET() {
       completedAgg,
       courses,
       captureMethodGroups,
-      recentSessions,
       recentRecords,
       activeSessionsList,
-      violations,
+      violationTypeGroups,
+      violationSeverityGroups,
       deptStudentsRaw,
       studentReport,
       trendSessionsRaw,
       gradeSamples,
       quizAgg,
       submissionCount,
+      knuct,
     ] = await Promise.all([
       db.user.count({ where: studentWhere }),
       db.user.count({ where: facultyWhere }),
@@ -244,12 +263,6 @@ export async function GET() {
         where: sessionWhere,
         _count: { _all: true },
       }),
-      db.attendanceSession.findMany({
-        where: { ...sessionWhere, status: 'completed' },
-        orderBy: { createdAt: 'desc' },
-        take: 7,
-        select: { sessionDate: true, presentCount: true, absentCount: true, lateCount: true },
-      }),
       db.attendanceRecord.findMany({
         where: scope.level === 'all' ? {} : { session: { courseId: { in: scope.courseIds } } },
         take: 10,
@@ -268,10 +281,17 @@ export async function GET() {
           geofence: { select: { name: true } },
           timetableSlot: { select: { roomNumber: true, building: true } },
         },
+        take: 15,
       }),
-      db.attendanceViolation.findMany({
+      db.attendanceViolation.groupBy({
+        by: ['type'],
         where: violationWhere,
-        select: { type: true, severity: true, reviewStatus: true },
+        _count: { _all: true },
+      }),
+      db.attendanceViolation.groupBy({
+        by: ['severity'],
+        where: violationWhere,
+        _count: { _all: true },
       }),
       scope.level === 'all'
         ? db.user.groupBy({
@@ -280,7 +300,7 @@ export async function GET() {
             _count: { _all: true },
           })
         : Promise.resolve([]),
-      buildStudentAttendanceStats(studentWhere, scope.level === 'all' ? 60 : 40),
+      buildStudentAttendanceStats(studentWhere, scope.level === 'all' ? 30 : 20),
       db.attendanceSession.findMany({
         where: { ...sessionWhere, status: 'completed' },
         select: {
@@ -291,7 +311,7 @@ export async function GET() {
           expectedCount: true,
         },
         orderBy: { sessionDate: 'desc' },
-        take: 60,
+        take: 40,
       }),
       db.gradeBook.findMany({
         where:
@@ -301,7 +321,7 @@ export async function GET() {
               ? { student: { departmentId: scope.departmentId } }
               : { courseId: courseFilter },
         select: { score: true, maxScore: true },
-        take: 800,
+        take: 200,
       }),
       db.quizAttempt.aggregate({
         where: scope.level === 'all' ? {} : { courseId: courseFilter },
@@ -311,6 +331,7 @@ export async function GET() {
       db.submission.count({
         where: scope.level === 'all' ? {} : { assignment: { courseId: courseFilter } },
       }),
+      role === 'super_admin' ? getKnuctDashboardStats() : Promise.resolve(undefined),
     ]);
 
     const totalPresent = completedAgg._sum.presentCount ?? 0;
@@ -330,10 +351,8 @@ export async function GET() {
 
     const violationByType: Record<string, number> = {};
     const violationBySeverity: Record<string, number> = {};
-    violations.forEach((v) => {
-      violationByType[v.type] = (violationByType[v.type] || 0) + 1;
-      violationBySeverity[v.severity] = (violationBySeverity[v.severity] || 0) + 1;
-    });
+    violationTypeGroups.forEach((v) => { violationByType[v.type] = v._count._all; });
+    violationSeverityGroups.forEach((v) => { violationBySeverity[v.severity] = v._count._all; });
 
     let deptAttendance: { department: string; students: number }[] = [];
     if (scope.level === 'department') {
@@ -375,9 +394,7 @@ export async function GET() {
 
     const scopeKey = scope.level === 'all' ? 'campus' : scope.level === 'department' ? 'department' : 'instructor';
 
-    const knuct = role === 'super_admin' ? await getKnuctDashboardStats() : undefined;
-
-    return NextResponse.json({
+    const payload = {
       scope: scopeKey,
       thresholds,
       scopeLabel: scopeLabelText,
@@ -397,7 +414,9 @@ export async function GET() {
       },
       courseAttendance, captureMethods, weeklyTrend, recentActivity: recentRecords, activeSessionsList,
       deptAttendance, violationByType, violationBySeverity,
-    });
+    };
+
+    return NextResponse.json(setCachedJson(cacheKey, payload, 45_000));
   } catch (error) {
     console.error('Dashboard API error:', error);
     return NextResponse.json({ error: 'Failed to load dashboard data' }, { status: 500 });

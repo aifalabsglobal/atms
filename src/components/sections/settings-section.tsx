@@ -21,6 +21,7 @@ import {
 import { cn } from '@/lib/utils';
 import { KnuctDIDAuthPanel } from '@/components/knuct/did-auth-panel';
 import { KnuctCredentialsPanel } from '@/components/knuct/knuct-credentials-panel';
+import { MfaSettingsPanel } from '@/components/settings/mfa-settings-panel';
 import { UserAccountsPanel } from '@/components/users/user-accounts-panel';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAppStore, ROLE_LABELS, useRoleSections, useSectionAccess, type Role, type Section, type SectionContext } from '@/lib/store';
@@ -42,6 +43,7 @@ type SystemConfigResponse = {
     database: { provider: string };
     auth: { method: string };
     geofencing: { algorithm: string };
+    sms: { configured: boolean };
   };
 };
 
@@ -387,6 +389,12 @@ function ConfigurationPanel({ isSuperAdmin }: { isSuperAdmin: boolean }) {
         : 'Configure RESEND_API_KEY or SMTP_* in .env',
       icon: Bell,
       status: runtime.email.status === 'configured' ? 'active' as const : 'demo' as const,
+    },
+    {
+      label: 'SMS',
+      value: runtime.sms?.configured ? 'Twilio configured' : 'Optional TWILIO_* in .env',
+      icon: Bell,
+      status: runtime.sms?.configured ? 'active' as const : 'planned' as const,
     },
     {
       label: 'Rate Limiting',
@@ -1007,6 +1015,7 @@ export default function SettingsSection() {
         {/* System Configuration */}
         <TabsContent value="config" className="space-y-4">
           <ConfigurationPanel isSuperAdmin={isSuperAdmin} />
+          <MfaSettingsPanel />
         </TabsContent>
 
         {/* RBAC Permission Matrix */}
