@@ -17,6 +17,9 @@ import type {
   SetSettingOptions,
 } from './types';
 import { isDemoAuthAllowed } from '@/lib/demo-mode';
+import { emailStatus } from '@/lib/email';
+import { isSmsConfigured } from '@/lib/sms';
+import { isS3ObjectStorageConfigured } from '@/lib/object-storage';
 
 const GLOBAL_SCOPE: SettingScope = 'global';
 const EMPTY_SCOPE_ID = '';
@@ -27,12 +30,22 @@ function cacheKeyEffective(key: string, userId?: string, departmentId?: string) 
 
 function readEnvOverride(def: ReturnType<typeof requireSettingDefinition>): unknown | undefined {
   if (!def.envOnly && !def.envKey) return undefined;
-  const envName = def.envKey;
-  if (!envName) return undefined;
 
   if (def.key === 'flags.demo_auth_visible') {
     return isDemoAuthAllowed();
   }
+  if (def.key === 'runtime.storage_configured') {
+    return isS3ObjectStorageConfigured();
+  }
+  if (def.key === 'runtime.email_configured') {
+    return emailStatus() === 'configured';
+  }
+  if (def.key === 'runtime.sms_configured') {
+    return isSmsConfigured();
+  }
+
+  const envName = def.envKey;
+  if (!envName) return undefined;
 
   const raw = process.env[envName];
   if (raw === undefined || raw === '') return undefined;

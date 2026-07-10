@@ -39,3 +39,4 @@ export {
 
 export { settingsCacheInvalidate } from './cache';
 export { resolveEffectiveValue } from './resolve';
+export { getLmsSettings, DEFAULT_LMS_SETTINGS, type LmsSettings } from './lms-config';

@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { resolveStudentId, getCampusScope, buildCourseIdFilter, CAMPUS_READ_ROLES } from '@/lib/auth-helpers';
 import type { Role } from '@/lib/store';
 import { requireLmsRead, requireLmsWrite, assertInstructorOwnsCourse, auditLms } from '@/lib/lms-helpers';
+import { getLmsSettings } from '@/lib/settings/lms-config';
 
 export async function GET(request: Request) {
   try {
@@ -125,16 +126,18 @@ export async function POST(request: Request) {
     const scopeErr = await assertInstructorOwnsCourse(session, courseId);
     if (scopeErr) return scopeErr;
 
+    const lms = await getLmsSettings();
+
     const assignment = await db.assignment.create({
       data: {
         courseId,
         title,
         description: description || null,
-        maxScore: maxScore ?? 100,
+        maxScore: maxScore ?? lms.defaultAssignmentMaxScore,
         dueDate: new Date(dueDate),
         type: type || 'individual',
-        allowLate: allowLate !== false,
-        latePenalty: latePenalty ?? 0,
+        allowLate: allowLate !== undefined ? allowLate !== false : lms.defaultAllowLateSubmissions,
+        latePenalty: latePenalty ?? lms.defaultLatePenaltyPct,
         status: status || 'published',
       },
       include: { course: { select: { name: true, code: true } } },

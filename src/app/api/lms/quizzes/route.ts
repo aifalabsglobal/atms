@@ -4,6 +4,7 @@ import { resolveStudentId, getCampusScope, buildCourseIdFilter, CAMPUS_READ_ROLE
 import type { Role } from '@/lib/store';
 import { parseCodingMeta, sanitizeCodingMeta } from '@/lib/coding-types';
 import { requireLmsRead } from '@/lib/lms-helpers';
+import { getLmsSettings } from '@/lib/settings/lms-config';
 
 export async function GET(request: Request) {
   try {
@@ -151,6 +152,7 @@ export async function POST(request: Request) {
     const scopeErr = await assertInstructorOwnsCourse(session, courseId);
     if (scopeErr) return scopeErr;
 
+    const lms = await getLmsSettings();
     const serializedMeta = isCoding ? JSON.stringify(codingMeta) : options
       ? (typeof options === 'string' ? options : JSON.stringify(options))
       : null;
@@ -162,7 +164,7 @@ export async function POST(request: Request) {
         type: type || 'mcq',
         options: serializedMeta,
         correctAnswer: isCoding ? null : correctAnswer.trim(),
-        points: points ?? (isCoding ? 10 : 1),
+        points: points ?? (isCoding ? lms.quizDefaultPointsCoding : lms.quizDefaultPointsMcq),
         difficulty: difficulty || 'medium',
         explanation: explanation || null,
       },

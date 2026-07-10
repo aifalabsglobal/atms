@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { resolveStudentId } from '@/lib/auth-helpers';
 import { requireLmsRead, requireLmsWrite, assertInstructorOwnsCourse, auditLms } from '@/lib/lms-helpers';
 import { enqueueAnchor } from '@/lib/knuct/anchor-service';
+import { getLmsSettings } from '@/lib/settings/lms-config';
 
 export async function GET(request: Request) {
   try {
@@ -169,6 +170,7 @@ export async function PUT(request: Request) {
     });
 
     if (score !== undefined) {
+      const lms = await getLmsSettings();
       const existingGrade = await db.gradeBook.findFirst({
         where: {
           courseId: existing.assignment.courseId,
@@ -201,7 +203,7 @@ export async function PUT(request: Request) {
             componentId: existing.assignmentId,
             score,
             maxScore: existing.assignment.maxScore,
-            weightage: 25,
+            weightage: lms.assignmentGradeWeightPct,
             gradedBy: session.user.id,
           },
         });

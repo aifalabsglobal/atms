@@ -163,7 +163,7 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
       if (search.trim()) params.set('search', search.trim());
       return fetchJson<{ settings: EffectiveSetting[] }>(`/api/settings?${params}`);
     },
-    enabled: category !== 'favorites' && category !== 'recent' && category !== 'runtime',
+    enabled: category !== 'favorites' && category !== 'recent',
   });
 
   const { data: runtimeMeta } = useQuery({
@@ -180,7 +180,7 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
         sms: { configured: boolean };
       };
     }>('/api/settings/config'),
-    enabled: category === 'runtime',
+    enabled: category === 'runtime' || category === 'integrations',
   });
 
   const { data: favData } = useQuery({
@@ -438,12 +438,12 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
           </div>
 
           <div className="grid gap-3 lg:grid-cols-[1fr_1.2fr]">
-            {category === 'runtime' ? (
+            {category === 'runtime' && (
               <Card className="lg:col-span-2">
                 <CardHeader className="py-3">
                   <CardTitle className="text-sm">Runtime / environment status</CardTitle>
                   <CardDescription className="text-xs">
-                    Read-only. Secrets stay in environment variables and are not stored in settings.
+                    Read-only snapshot. Secrets stay in environment variables.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -472,7 +472,7 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
                   )}
                 </CardContent>
               </Card>
-            ) : (
+            )}
             <>
             <Card>
               <CardHeader className="py-3">
@@ -634,7 +634,6 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
               </CardContent>
             </Card>
             </>
-            )}
           </div>
         </div>
       </div>

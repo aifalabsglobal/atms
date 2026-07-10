@@ -6,6 +6,7 @@ import { judgeSubmission } from '@/lib/coding-judge';
 import { parseCodingMeta } from '@/lib/coding-types';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { getClientIp } from '@/lib/audit';
+import { getLmsSettings } from '@/lib/settings/lms-config';
 
 export const runtime = 'nodejs';
 
@@ -14,9 +15,14 @@ export async function POST(request: Request) {
     const { error, session } = await requireLmsRead();
     if (error || !session) return error;
 
+    const lms = await getLmsSettings();
+    if (!lms.codingEnabled) {
+      return NextResponse.json({ error: 'Coding quizzes are disabled by administration' }, { status: 403 });
+    }
+
     const limited = await enforceRateLimit(
       `coding-run:${session.user.id}:${getClientIp(request) ?? 'anon'}`,
-      40,
+      lms.codingRunRateLimitPerMin,
       60_000
     );
     if (limited) return limited;
@@ -30,6 +36,10 @@ export async function POST(request: Request) {
 
     if (!questionId || !code?.trim()) {
       return NextResponse.json({ error: 'questionId and code are required' }, { status: 400 });
+    }
+
+    if (language === 'python' && !lms.codingPythonEnabled) {
+      return NextResponse.json({ error: 'Python judging is disabled by administration' }, { status: 400 });
     }
 
     const question = await db.quizQuestion.findUnique({ where: { id: questionId } });

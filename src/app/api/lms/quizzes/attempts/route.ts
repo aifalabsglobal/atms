@@ -2,11 +2,14 @@ import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { resolveStudentId } from '@/lib/auth-helpers';
 import { requireLmsRead, auditLms } from '@/lib/lms-helpers';
+import { getLmsSettings } from '@/lib/settings/lms-config';
 
 export async function POST(request: Request) {
   try {
     const { error, session } = await requireLmsRead();
     if (error || !session) return error;
+
+    const lms = await getLmsSettings();
 
     const { studentId, error: studentError } = await resolveStudentId(session, null);
     if (studentError) return studentError;
@@ -89,7 +92,7 @@ export async function POST(request: Request) {
           component: 'quiz',
           score: percentage,
           maxScore: 100,
-          weightage: 15,
+          weightage: lms.quizGradeWeightPct,
         },
       });
     }

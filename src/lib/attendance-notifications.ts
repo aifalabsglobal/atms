@@ -83,6 +83,15 @@ export async function maybeNotifyLowAttendance(studentId: string): Promise<void>
       const { sendLowAttendanceEmail } = await import('@/lib/email');
       await sendLowAttendanceEmail(student.email, student.name, pct, config.attendance.eligibilityPct);
     }
+  }
+
+  const { getGlobalBoolean } = await import('@/lib/settings');
+  const smsEnabled = await getGlobalBoolean('notifications.low_attendance_sms', false);
+  if (smsEnabled) {
+    const student = await db.user.findUnique({
+      where: { id: studentId },
+      select: { phone: true, name: true },
+    });
     if (student?.phone) {
       const { sendSms } = await import('@/lib/sms');
       await sendSms(

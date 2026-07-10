@@ -17,6 +17,8 @@ export type SettingCategory =
   | 'policies'
   | 'geofence'
   | 'notifications'
+  | 'lms'
+  | 'integrations'
   | 'rbac'
   | 'flags'
   | 'runtime';

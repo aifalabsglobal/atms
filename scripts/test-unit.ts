@@ -86,8 +86,12 @@ try {
 
   const cats = listSettingCategories();
   assert('categories include attendance', cats.some((c) => c.id === 'attendance' && c.keys.length > 0));
-  assert('phase1 definitions registered', listSettingDefinitions().length >= 15);
+  assert('categories include lms', cats.some((c) => c.id === 'lms' && c.keys.length >= 10));
+  assert('categories include integrations', cats.some((c) => c.id === 'integrations' && c.keys.length >= 5));
+  assert('phase2 definitions registered', listSettingDefinitions().length >= 35);
   assert('rbac.matrix registered', !!getSettingDefinition('rbac.matrix'));
+  assert('lms.coding_enabled registered', getSettingDefinition('lms.coding_enabled')?.valueType === 'boolean');
+  assert('runtime.storage_configured env-only', !!getSettingDefinition('runtime.storage_configured')?.envOnly);
 
   // Resolution order: env → user → department → organization → global → default
   const layers = [
