@@ -62,7 +62,7 @@ const allNavItems: { id: Section; label: string; icon: React.ElementType }[] = [
   { id: 'reports', label: 'Reports', icon: BarChart3 },
   { id: 'geofences', label: 'Geofences', icon: MapPin },
   { id: 'calendar', label: 'Calendar', icon: CalendarDays },
-  { id: 'settings', label: 'Settings', icon: Settings },
+  { id: 'settings', label: 'Administration', icon: Settings },
 ];
 
 function LoadingScreen({ message }: { message?: string }) {
@@ -268,7 +268,7 @@ function AppContent() {
                 {isDemoUser && <RoleSwitcherMenu />}
                 {canAccessSettings && (
                   <DropdownMenuItem onClick={() => setActiveSection('settings')}>
-                    <Settings className="mr-2 h-4 w-4" /> Settings
+                    <Settings className="mr-2 h-4 w-4" /> Administration
                   </DropdownMenuItem>
                 )}
                 {(isDemoUser || canAccessSettings) && <DropdownMenuSeparator />}

@@ -16,6 +16,11 @@ import {
   isOverrideEmpty,
   type UserRbacOverrideInput,
 } from '@/lib/rbac-defaults';
+import {
+  loadRbacMatrixViaSettings,
+  saveRbacMatrixViaSettings,
+} from '@/lib/settings/adapters/rbac';
+import { ensureSettingsMigrated } from '@/lib/settings/migrate-from-legacy';
 
 export {
   DEFAULT_ROLE_SECTIONS,
@@ -39,6 +44,14 @@ let cacheTime = 0;
 const CACHE_MS = 120_000;
 
 const userOverrideCache = new Map<string, { data: UserRbacOverrideInput | null; time: number }>();
+let migratePromise: Promise<void> | null = null;
+
+function ensureMigratedOnce() {
+  if (!migratePromise) {
+    migratePromise = ensureSettingsMigrated().catch(() => undefined);
+  }
+  return migratePromise;
+}
 
 export function invalidateRbacCache() {
   cachedMatrix = null;
@@ -55,9 +68,9 @@ export async function getRbacMatrix(): Promise<Record<Role, Section[]>> {
   if (cachedMatrix && Date.now() - cacheTime < CACHE_MS) {
     return cachedMatrix;
   }
+  await ensureMigratedOnce();
   try {
-    const row = await db.rbacConfig.findUnique({ where: { id: 'default' } });
-    cachedMatrix = row ? parseRbacMatrix(row.matrix) : cloneDefaultMatrix();
+    cachedMatrix = await loadRbacMatrixViaSettings();
   } catch {
     cachedMatrix = cloneDefaultMatrix();
   }
@@ -70,13 +83,12 @@ export async function saveRbacMatrix(
   updatedBy: string,
 ): Promise<Record<Role, Section[]>> {
   const guarded = applyRbacGuards(matrix);
-  await db.rbacConfig.upsert({
-    where: { id: 'default' },
-    create: { id: 'default', matrix: guarded, updatedBy },
-    update: { matrix: guarded, updatedBy },
-  });
+  await ensureMigratedOnce();
+  const saved = await saveRbacMatrixViaSettings(guarded, updatedBy);
   invalidateRbacCache();
-  return guarded;
+  cachedMatrix = saved;
+  cacheTime = Date.now();
+  return saved;
 }
 
 export async function resetRbacMatrix(updatedBy: string): Promise<Record<Role, Section[]>> {

@@ -2,7 +2,7 @@
 import { spawnSync } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { ensureDirectDatabaseUrl } from './lib/neon-direct-url.mjs';
+import { ensureDirectDatabaseUrl, preferNeonIpv4 } from './lib/neon-direct-url.mjs';
 
 /** Load .env into process.env when running outside Prisma CLI. */
 function loadDotEnv() {
@@ -28,6 +28,8 @@ const direct = ensureDirectDatabaseUrl();
 if (direct && direct !== process.env.DATABASE_URL) {
   console.log('[migrate] Using DIRECT_DATABASE_URL (Neon direct) for advisory locks');
 }
+
+await preferNeonIpv4();
 
 const result = spawnSync('npx', ['prisma', 'migrate', 'deploy'], {
   stdio: 'inherit',

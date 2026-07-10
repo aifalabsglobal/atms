@@ -1,4 +1,3 @@
-import { db } from '@/lib/db';
 import { emailStatus } from '@/lib/email';
 import { isFaceVerificationEnabled } from '@/lib/face-verification';
 import { getRateLimitBackend } from '@/lib/rate-limit';
@@ -14,6 +13,11 @@ import {
   type AttendanceThresholds,
   type SystemConfigSettings,
 } from '@/lib/system-config-defaults';
+import {
+  loadSystemConfigViaSettings,
+  saveSystemConfigViaSettings,
+} from '@/lib/settings/adapters/system-config';
+import { ensureSettingsMigrated } from '@/lib/settings/migrate-from-legacy';
 
 export {
   DEFAULT_SYSTEM_CONFIG,
@@ -51,6 +55,14 @@ let cachedSettings: SystemConfigSettings | null = null;
 let cacheMeta: { updatedAt: string | null; updatedBy: string | null } | null = null;
 let cacheTime = 0;
 const CACHE_MS = 120_000;
+let migratePromise: Promise<void> | null = null;
+
+function ensureMigratedOnce() {
+  if (!migratePromise) {
+    migratePromise = ensureSettingsMigrated().catch(() => undefined);
+  }
+  return migratePromise;
+}
 
 export function invalidateSystemConfigCache() {
   cachedSettings = null;
@@ -66,12 +78,13 @@ export async function getSystemConfig(): Promise<SystemConfigSettings> {
   if (cachedSettings && Date.now() - cacheTime < CACHE_MS) {
     return cachedSettings;
   }
+  await ensureMigratedOnce();
   try {
-    const row = await db.systemConfig.findUnique({ where: { id: 'default' } });
-    cachedSettings = row ? parseSystemConfig(row.settings) : cloneDefaultSystemConfig();
-    cacheMeta = row
-      ? { updatedAt: row.updatedAt.toISOString(), updatedBy: row.updatedBy }
-      : { updatedAt: null, updatedBy: null };
+    cachedSettings = await loadSystemConfigViaSettings();
+    cacheMeta = {
+      updatedAt: new Date().toISOString(),
+      updatedBy: null,
+    };
   } catch {
     cachedSettings = cloneDefaultSystemConfig();
     cacheMeta = { updatedAt: null, updatedBy: null };
@@ -111,24 +124,17 @@ export async function saveSystemConfig(
     throw new Error(validated.error);
   }
 
-  await db.systemConfig.upsert({
-    where: { id: 'default' },
-    create: { id: 'default', settings: validated.settings, updatedBy },
-    update: { settings: validated.settings, updatedBy },
-  });
+  await ensureMigratedOnce();
+  const saved = await saveSystemConfigViaSettings(validated.settings, updatedBy);
   invalidateSystemConfigCache();
-  return getSystemConfig();
+  cachedSettings = saved;
+  cacheMeta = { updatedAt: new Date().toISOString(), updatedBy };
+  cacheTime = Date.now();
+  return saved;
 }
 
 export async function resetSystemConfig(updatedBy: string): Promise<SystemConfigSettings> {
-  const defaults = cloneDefaultSystemConfig();
-  await db.systemConfig.upsert({
-    where: { id: 'default' },
-    create: { id: 'default', settings: defaults, updatedBy },
-    update: { settings: defaults, updatedBy },
-  });
-  invalidateSystemConfigCache();
-  return getSystemConfig();
+  return saveSystemConfig(cloneDefaultSystemConfig(), updatedBy);
 }
 
 function buildRuntimeStatus(settings: SystemConfigSettings): SystemRuntimeStatus {

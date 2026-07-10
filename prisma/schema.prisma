@@ -606,6 +606,58 @@ model AuditLog {
   createdAt DateTime @default(now())
 }
 
+// --- Centralized Settings Framework ---
+model SettingValue {
+  id        String   @id @default(cuid())
+  key       String
+  scope     String   @default("global") // global | organization | department | user
+  scopeId   String   @default("")
+  value     Json
+  version   Int      @default(1)
+  updatedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([key, scope, scopeId])
+  @@index([key])
+  @@index([scope, scopeId])
+}
+
+model SettingHistory {
+  id        String   @id @default(cuid())
+  key       String
+  scope     String   @default("global")
+  scopeId   String   @default("")
+  value     Json
+  version   Int
+  updatedBy String?
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@index([key, scope, scopeId, version])
+  @@index([createdAt])
+}
+
+model SettingFavorite {
+  id        String   @id @default(cuid())
+  userId    String
+  key       String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, key])
+  @@index([userId])
+}
+
+model SettingRecent {
+  id         String   @id @default(cuid())
+  userId     String
+  key        String
+  accessedAt DateTime @default(now())
+
+  @@unique([userId, key])
+  @@index([userId, accessedAt])
+}
+
 model Notification {
   id        String   @id @default(cuid())
   userId    String

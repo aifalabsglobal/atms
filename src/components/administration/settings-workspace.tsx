@@ -1,0 +1,643 @@
+'use client';
+
+import { useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  Search, Star, Clock, ChevronRight, RotateCcw, Download, Upload,
+  History, Loader2, Save, Shield,
+} from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
+
+type EffectiveSetting = {
+  key: string;
+  value: unknown;
+  source: string;
+  version?: number;
+  updatedAt?: string | null;
+  definition: {
+    key: string;
+    category: string;
+    displayName: string;
+    description: string;
+    valueType: string;
+    defaultValue: unknown;
+    editable?: boolean;
+    envOnly?: boolean;
+    validation?: { allowedValues?: (string | number | boolean)[]; min?: number; max?: number };
+  };
+};
+
+type Category = { id: string; label: string; keys: string[] };
+
+async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, init);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data as T;
+}
+
+function SettingEditor({
+  setting,
+  draft,
+  onChange,
+  disabled,
+}: {
+  setting: EffectiveSetting;
+  draft: unknown;
+  onChange: (v: unknown) => void;
+  disabled?: boolean;
+}) {
+  const def = setting.definition;
+  const type = def.valueType;
+
+  if (type === 'boolean') {
+    return (
+      <div className="flex items-center gap-3">
+        <Switch
+          checked={Boolean(draft)}
+          disabled={disabled}
+          onCheckedChange={(c) => onChange(c)}
+        />
+        <span className="text-xs text-muted-foreground">{draft ? 'On' : 'Off'}</span>
+      </div>
+    );
+  }
+
+  if (type === 'enum' && def.validation?.allowedValues) {
+    return (
+      <Select
+        value={String(draft ?? '')}
+        disabled={disabled}
+        onValueChange={(v) => onChange(v)}
+      >
+        <SelectTrigger className="h-9 max-w-xs">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {def.validation.allowedValues.map((v) => (
+            <SelectItem key={String(v)} value={String(v)}>{String(v)}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    );
+  }
+
+  if (type === 'number' || type === 'decimal') {
+    return (
+      <Input
+        type="number"
+        className="h-9 max-w-xs"
+        disabled={disabled}
+        value={typeof draft === 'number' ? draft : ''}
+        min={def.validation?.min}
+        max={def.validation?.max}
+        onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))}
+      />
+    );
+  }
+
+  if (type === 'json') {
+    return (
+      <Textarea
+        className="font-mono text-xs min-h-[160px]"
+        disabled={disabled}
+        value={typeof draft === 'string' ? draft : JSON.stringify(draft, null, 2)}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    );
+  }
+
+  return (
+    <Input
+      className="h-9 max-w-md"
+      disabled={disabled}
+      type={type === 'secret' ? 'password' : 'text'}
+      value={String(draft ?? '')}
+      onChange={(e) => onChange(e.target.value)}
+    />
+  );
+}
+
+function parseDraft(setting: EffectiveSetting, draft: unknown): unknown {
+  if (setting.definition.valueType === 'json' && typeof draft === 'string') {
+    return JSON.parse(draft);
+  }
+  if (setting.definition.valueType === 'number' || setting.definition.valueType === 'decimal') {
+    if (draft === '' || draft === null || draft === undefined) throw new Error('Number required');
+    return Number(draft);
+  }
+  return draft;
+}
+
+export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [category, setCategory] = useState<string>('general');
+  const [search, setSearch] = useState('');
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, unknown>>({});
+  const [showHistory, setShowHistory] = useState(false);
+
+  const { data: catData } = useQuery({
+    queryKey: ['settings-categories'],
+    queryFn: () => fetchJson<{ categories: Category[] }>('/api/settings/categories'),
+  });
+
+  const { data: listData, isLoading } = useQuery({
+    queryKey: ['settings-list', category, search],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (category && category !== 'favorites' && category !== 'recent') params.set('category', category);
+      if (search.trim()) params.set('search', search.trim());
+      return fetchJson<{ settings: EffectiveSetting[] }>(`/api/settings?${params}`);
+    },
+    enabled: category !== 'favorites' && category !== 'recent' && category !== 'runtime',
+  });
+
+  const { data: runtimeMeta } = useQuery({
+    queryKey: ['system-config-runtime'],
+    queryFn: () => fetchJson<{
+      runtime: {
+        faceVerification: { enabled: boolean; apiConfigured: boolean; mode: string };
+        knuct: { liveEnabled: boolean; anchorsEnabled: boolean; chainPublish: boolean };
+        email: { status: string; provider: string | null };
+        rateLimit: { backend: string };
+        database: { provider: string };
+        auth: { method: string };
+        geofencing: { algorithm: string };
+        sms: { configured: boolean };
+      };
+    }>('/api/settings/config'),
+    enabled: category === 'runtime',
+  });
+
+  const { data: favData } = useQuery({
+    queryKey: ['settings-favorites'],
+    queryFn: () => fetchJson<{ settings: EffectiveSetting[] }>('/api/settings/favorites'),
+  });
+
+  const { data: recentData } = useQuery({
+    queryKey: ['settings-recent'],
+    queryFn: () => fetchJson<{ settings: EffectiveSetting[] }>('/api/settings/recent'),
+  });
+
+  const { data: historyData, isLoading: historyLoading } = useQuery({
+    queryKey: ['settings-history', selectedKey],
+    queryFn: () => fetchJson<{ history: { id: string; version: number; value: unknown; createdAt: string; reason: string | null }[] }>(
+      `/api/settings/history?key=${encodeURIComponent(selectedKey!)}`,
+    ),
+    enabled: showHistory && !!selectedKey,
+  });
+
+  const settings = useMemo(() => {
+    if (category === 'favorites') return favData?.settings ?? [];
+    if (category === 'recent') return recentData?.settings ?? [];
+    return listData?.settings ?? [];
+  }, [category, favData, recentData, listData]);
+
+  const selected = settings.find((s) => s.key === selectedKey) ?? settings[0] ?? null;
+  const activeKey = selected?.key ?? null;
+
+  const draftValue = activeKey
+    ? (activeKey in drafts ? drafts[activeKey] : selected?.value)
+    : undefined;
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (!selected) throw new Error('No setting selected');
+      const value = parseDraft(selected, draftValue);
+      return fetchJson<{ setting: EffectiveSetting }>(`/api/settings/${encodeURIComponent(selected.key)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value }),
+      });
+    },
+    onSuccess: (data) => {
+      toast({ title: 'Setting saved', description: data.setting.key });
+      setDrafts((d) => {
+        const next = { ...d };
+        delete next[data.setting.key];
+        return next;
+      });
+      queryClient.invalidateQueries({ queryKey: ['settings-list'] });
+      queryClient.invalidateQueries({ queryKey: ['system-config'] });
+      queryClient.invalidateQueries({ queryKey: ['rbac-config'] });
+    },
+    onError: (err: Error) => toast({ title: 'Save failed', description: err.message, variant: 'destructive' }),
+  });
+
+  const resetMutation = useMutation({
+    mutationFn: async (key: string) =>
+      fetchJson('/api/settings/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key }),
+      }),
+    onSuccess: () => {
+      toast({ title: 'Reset to default' });
+      queryClient.invalidateQueries({ queryKey: ['settings-list'] });
+      queryClient.invalidateQueries({ queryKey: ['system-config'] });
+    },
+    onError: (err: Error) => toast({ title: 'Reset failed', description: err.message, variant: 'destructive' }),
+  });
+
+  const favMutation = useMutation({
+    mutationFn: async ({ key, add }: { key: string; add: boolean }) =>
+      fetchJson('/api/settings/favorites', {
+        method: add ? 'POST' : 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key }),
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['settings-favorites'] }),
+  });
+
+  const rollbackMutation = useMutation({
+    mutationFn: async ({ key, version }: { key: string; version: number }) =>
+      fetchJson('/api/settings/rollback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, version }),
+      }),
+    onSuccess: () => {
+      toast({ title: 'Rolled back' });
+      queryClient.invalidateQueries({ queryKey: ['settings-list'] });
+      queryClient.invalidateQueries({ queryKey: ['settings-history'] });
+      queryClient.invalidateQueries({ queryKey: ['system-config'] });
+    },
+    onError: (err: Error) => toast({ title: 'Rollback failed', description: err.message, variant: 'destructive' }),
+  });
+
+  const exportMutation = useMutation({
+    mutationFn: async () => fetchJson<{ settings: Record<string, unknown>; exportedAt: string }>('/api/settings/export'),
+    onSuccess: (data) => {
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `aimscs-settings-${data.exportedAt.slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    },
+  });
+
+  const importMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const text = await file.text();
+      const json = JSON.parse(text);
+      return fetchJson('/api/settings/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(json),
+      });
+    },
+    onSuccess: () => {
+      toast({ title: 'Settings imported' });
+      queryClient.invalidateQueries({ queryKey: ['settings-list'] });
+      queryClient.invalidateQueries({ queryKey: ['system-config'] });
+      queryClient.invalidateQueries({ queryKey: ['rbac-config'] });
+    },
+    onError: (err: Error) => toast({ title: 'Import failed', description: err.message, variant: 'destructive' }),
+  });
+
+  const favKeys = new Set((favData?.settings ?? []).map((s) => s.key));
+  const categories = catData?.categories ?? [];
+  const editable = isSuperAdmin && selected && !selected.definition.envOnly && selected.definition.editable !== false;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold text-[#1A3C6E] flex items-center gap-2">
+            <Shield className="h-5 w-5" /> Platform settings
+          </h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Centralized configuration — changes apply at runtime without restart
+          </p>
+        </div>
+        {isSuperAdmin && (
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => exportMutation.mutate()} disabled={exportMutation.isPending}>
+              <Download className="h-3.5 w-3.5" /> Export
+            </Button>
+            <label>
+              <input
+                type="file"
+                accept="application/json"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) importMutation.mutate(f);
+                  e.target.value = '';
+                }}
+              />
+              <Button size="sm" variant="outline" className="gap-1.5" asChild disabled={importMutation.isPending}>
+                <span><Upload className="h-3.5 w-3.5" /> Import</span>
+              </Button>
+            </label>
+          </div>
+        )}
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[240px_1fr]">
+        <Card className="h-fit">
+          <CardHeader className="py-3 px-3">
+            <div className="relative">
+              <Search className="absolute left-2 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                className="h-8 pl-7 text-xs"
+                placeholder="Search settings…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+          </CardHeader>
+          <CardContent className="px-2 pb-3 pt-0">
+            <nav className="space-y-0.5">
+              <button
+                type="button"
+                className={cn(
+                  'w-full text-left text-xs px-2 py-1.5 rounded-md flex items-center gap-2',
+                  category === 'favorites' ? 'bg-[#1A3C6E] text-white' : 'hover:bg-muted',
+                )}
+                onClick={() => setCategory('favorites')}
+              >
+                <Star className="h-3 w-3" /> Favorites
+              </button>
+              <button
+                type="button"
+                className={cn(
+                  'w-full text-left text-xs px-2 py-1.5 rounded-md flex items-center gap-2',
+                  category === 'recent' ? 'bg-[#1A3C6E] text-white' : 'hover:bg-muted',
+                )}
+                onClick={() => setCategory('recent')}
+              >
+                <Clock className="h-3 w-3" /> Recent
+              </button>
+              <Separator className="my-2" />
+              {categories.filter((c) => c.id !== 'runtime').map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className={cn(
+                    'w-full text-left text-xs px-2 py-1.5 rounded-md',
+                    category === c.id ? 'bg-[#1A3C6E] text-white' : 'hover:bg-muted',
+                  )}
+                  onClick={() => {
+                    setCategory(c.id);
+                    setSelectedKey(null);
+                    setShowHistory(false);
+                  }}
+                >
+                  {c.label}
+                  <span className="opacity-60 ml-1">({c.keys.length})</span>
+                </button>
+              ))}
+              <button
+                type="button"
+                className={cn(
+                  'w-full text-left text-xs px-2 py-1.5 rounded-md',
+                  category === 'runtime' ? 'bg-[#1A3C6E] text-white' : 'hover:bg-muted',
+                )}
+                onClick={() => {
+                  setCategory('runtime');
+                  setSelectedKey(null);
+                  setShowHistory(false);
+                }}
+              >
+                Runtime / environment
+              </button>
+            </nav>
+          </CardContent>
+        </Card>
+
+        <div className="space-y-3">
+          <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            <span>Administration</span>
+            <ChevronRight className="h-3 w-3" />
+            <span>Settings</span>
+            <ChevronRight className="h-3 w-3" />
+            <span className="text-foreground font-medium capitalize">{category}</span>
+            {selected && (
+              <>
+                <ChevronRight className="h-3 w-3" />
+                <span className="text-foreground font-mono">{selected.key}</span>
+              </>
+            )}
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-[1fr_1.2fr]">
+            {category === 'runtime' ? (
+              <Card className="lg:col-span-2">
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm">Runtime / environment status</CardTitle>
+                  <CardDescription className="text-xs">
+                    Read-only. Secrets stay in environment variables and are not stored in settings.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {!runtimeMeta?.runtime ? (
+                    <Skeleton className="h-24 w-full" />
+                  ) : (
+                    <dl className="grid gap-3 sm:grid-cols-2 text-xs">
+                      {[
+                        ['Face verification', `${runtimeMeta.runtime.faceVerification.mode} (api: ${runtimeMeta.runtime.faceVerification.apiConfigured ? 'yes' : 'no'})`],
+                        ['Knuct live', runtimeMeta.runtime.knuct.liveEnabled ? 'on' : 'off'],
+                        ['Knuct anchors', runtimeMeta.runtime.knuct.anchorsEnabled ? 'on' : 'off'],
+                        ['Chain publish', runtimeMeta.runtime.knuct.chainPublish ? 'on' : 'off'],
+                        ['Email', `${runtimeMeta.runtime.email.status}${runtimeMeta.runtime.email.provider ? ` · ${runtimeMeta.runtime.email.provider}` : ''}`],
+                        ['SMS', runtimeMeta.runtime.sms.configured ? 'configured' : 'not configured'],
+                        ['Rate limit', runtimeMeta.runtime.rateLimit.backend],
+                        ['Database', runtimeMeta.runtime.database.provider],
+                        ['Auth', runtimeMeta.runtime.auth.method],
+                        ['Geofencing', runtimeMeta.runtime.geofencing.algorithm],
+                      ].map(([label, value]) => (
+                        <div key={label} className="rounded-md border px-3 py-2">
+                          <dt className="text-muted-foreground">{label}</dt>
+                          <dd className="font-medium mt-0.5">{value}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  )}
+                </CardContent>
+              </Card>
+            ) : (
+            <>
+            <Card>
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">Settings</CardTitle>
+                <CardDescription className="text-xs">{settings.length} keys</CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="h-[420px]">
+                  {isLoading && category !== 'favorites' && category !== 'recent' ? (
+                    <div className="p-3 space-y-2">
+                      {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+                    </div>
+                  ) : settings.length === 0 ? (
+                    <p className="p-4 text-xs text-muted-foreground">No settings in this view.</p>
+                  ) : (
+                    <ul className="divide-y">
+                      {settings.map((s) => (
+                        <li key={s.key}>
+                          <button
+                            type="button"
+                            className={cn(
+                              'w-full text-left px-3 py-2.5 hover:bg-muted/50 transition-colors',
+                              activeKey === s.key && 'bg-muted',
+                            )}
+                            onClick={() => {
+                              setSelectedKey(s.key);
+                              setShowHistory(false);
+                            }}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="text-xs font-medium truncate">{s.definition.displayName}</p>
+                                <p className="text-[10px] font-mono text-muted-foreground truncate">{s.key}</p>
+                              </div>
+                              <Badge variant="outline" className="text-[9px] shrink-0">{s.source}</Badge>
+                            </div>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </ScrollArea>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="py-3">
+                {selected ? (
+                  <>
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <CardTitle className="text-sm">{selected.definition.displayName}</CardTitle>
+                        <CardDescription className="text-xs mt-1">{selected.definition.description}</CardDescription>
+                      </div>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8"
+                        onClick={() => favMutation.mutate({ key: selected.key, add: !favKeys.has(selected.key) })}
+                      >
+                        <Star className={cn('h-4 w-4', favKeys.has(selected.key) && 'fill-amber-400 text-amber-500')} />
+                      </Button>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      <Badge variant="outline" className="text-[10px] font-mono">{selected.key}</Badge>
+                      <Badge variant="outline" className="text-[10px]">{selected.definition.valueType}</Badge>
+                      {selected.definition.envOnly && <Badge className="text-[10px] bg-amber-100 text-amber-800">env only</Badge>}
+                    </div>
+                  </>
+                ) : (
+                  <CardTitle className="text-sm">Select a setting</CardTitle>
+                )}
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {!selected ? (
+                  <p className="text-xs text-muted-foreground">Choose a key from the list.</p>
+                ) : (
+                  <>
+                    <div className="space-y-2">
+                      <Label className="text-xs">Value</Label>
+                      <SettingEditor
+                        setting={selected}
+                        draft={draftValue}
+                        disabled={!editable}
+                        onChange={(v) => setDrafts((d) => ({ ...d, [selected.key]: v }))}
+                      />
+                      <p className="text-[10px] text-muted-foreground">
+                        Default: <code className="font-mono">{JSON.stringify(selected.definition.defaultValue)}</code>
+                        {selected.version != null && ` · v${selected.version}`}
+                      </p>
+                    </div>
+
+                    {isSuperAdmin && (
+                      <div className="flex flex-wrap gap-2 pt-2 border-t">
+                        <Button
+                          size="sm"
+                          className="gap-1.5 bg-[#1A3C6E] hover:bg-[#1A3C6E]/90"
+                          disabled={!editable || saveMutation.isPending}
+                          onClick={() => saveMutation.mutate()}
+                        >
+                          {saveMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                          Save
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1.5"
+                          disabled={!editable || resetMutation.isPending}
+                          onClick={() => resetMutation.mutate(selected.key)}
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" /> Reset
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="gap-1.5"
+                          onClick={() => setShowHistory((h) => !h)}
+                        >
+                          <History className="h-3.5 w-3.5" /> History
+                        </Button>
+                      </div>
+                    )}
+
+                    {showHistory && (
+                      <div className="rounded-lg border p-3 space-y-2">
+                        <p className="text-xs font-medium">Version history</p>
+                        {historyLoading ? (
+                          <Skeleton className="h-16 w-full" />
+                        ) : (historyData?.history?.length ?? 0) === 0 ? (
+                          <p className="text-[10px] text-muted-foreground">No history yet.</p>
+                        ) : (
+                          <ul className="space-y-2 max-h-48 overflow-y-auto">
+                            {historyData!.history.map((h) => (
+                              <li key={h.id} className="flex items-start justify-between gap-2 text-[10px]">
+                                <div className="min-w-0">
+                                  <p className="font-mono">v{h.version} · {h.reason ?? 'change'}</p>
+                                  <p className="text-muted-foreground truncate">{new Date(h.createdAt).toLocaleString()}</p>
+                                  <p className="font-mono truncate opacity-70">{JSON.stringify(h.value)}</p>
+                                </div>
+                                {isSuperAdmin && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-7 text-[10px]"
+                                    disabled={rollbackMutation.isPending}
+                                    onClick={() => rollbackMutation.mutate({ key: selected.key, version: h.version })}
+                                  >
+                                    Restore
+                                  </Button>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </CardContent>
+            </Card>
+            </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

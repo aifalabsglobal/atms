@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils';
 import { KnuctDIDAuthPanel } from '@/components/knuct/did-auth-panel';
 import { KnuctCredentialsPanel } from '@/components/knuct/knuct-credentials-panel';
 import { MfaSettingsPanel } from '@/components/settings/mfa-settings-panel';
+import { SettingsWorkspace } from '@/components/administration/settings-workspace';
 import { UserAccountsPanel } from '@/components/users/user-accounts-panel';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAppStore, ROLE_LABELS, useRoleSections, useSectionAccess, type Role, type Section, type SectionContext } from '@/lib/store';
@@ -67,7 +68,7 @@ const navModules: { section: Section; name: string }[] = [
   { section: 'reports', name: 'Reports' },
   { section: 'geofences', name: 'Geofences' },
   { section: 'calendar', name: 'Calendar' },
-  { section: 'settings', name: 'Settings' },
+  { section: 'settings', name: 'Administration' },
 ];
 
 const statusBadge: Record<'active' | 'demo' | 'planned' | 'disabled', { label: string; className: string }> = {
@@ -987,11 +988,11 @@ export default function SettingsSection() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-[#1A3C6E]">System Settings</h1>
+        <h1 className="text-2xl font-bold text-[#1A3C6E]">Administration</h1>
         <p className="text-sm text-muted-foreground mt-1">
           {isSuperAdmin
-            ? 'Configure system policy, users, roles, integrations, and every campus module.'
-            : 'Configure system parameters, view RBAC matrix, and manage integrations'}
+            ? 'Platform settings, users, roles, integrations, and campus modules.'
+            : 'System settings, RBAC matrix, and integrations'}
         </p>
       </div>
 
@@ -1004,7 +1005,7 @@ export default function SettingsSection() {
             isSuperAdmin ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6' : showSettingsAdminTabs ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5' : 'grid-cols-3',
           )}
         >
-          <TabsTrigger value="config">Configuration</TabsTrigger>
+          <TabsTrigger value="config">Settings</TabsTrigger>
           <TabsTrigger value="rbac">RBAC Matrix</TabsTrigger>
           {isSuperAdmin && <TabsTrigger value="users">User Accounts</TabsTrigger>}
           {showSettingsAdminTabs && <TabsTrigger value="knuct">Knuct</TabsTrigger>}
@@ -1014,7 +1015,7 @@ export default function SettingsSection() {
 
         {/* System Configuration */}
         <TabsContent value="config" className="space-y-4">
-          <ConfigurationPanel isSuperAdmin={isSuperAdmin} />
+          <SettingsWorkspace isSuperAdmin={isSuperAdmin} />
           <MfaSettingsPanel />
         </TabsContent>
 
