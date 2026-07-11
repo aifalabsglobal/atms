@@ -1,13 +1,10 @@
 import type { StudentExportData, StaffExportData } from '@/lib/report-export';
 import { BRAND } from '@/lib/branding';
+import type { ReportDocumentBrand } from '@/lib/report-brand';
+import { reportIdentityLines } from '@/lib/report-brand';
 import { jsPDF } from 'jspdf';
 
-export type ReportPdfBrand = {
-  appName?: string;
-  companyName?: string;
-  locale?: string;
-  brandingPrimaryColor?: string;
-};
+export type ReportPdfBrand = ReportDocumentBrand;
 
 function brandLabel(brand?: ReportPdfBrand) {
   return brand?.appName?.trim() || BRAND.name;
@@ -19,9 +16,17 @@ function downloadPdfBlob(filename: string, doc: jsPDF) {
 
 function addFooter(doc: jsPDF, page: number, brand?: ReportPdfBrand) {
   const h = doc.internal.pageSize.getHeight();
+  const w = doc.internal.pageSize.getWidth();
   doc.setFontSize(8);
   doc.setTextColor(120);
-  doc.text(`${brandLabel(brand)} · page ${page}`, 14, h - 8);
+  const left = brandLabel(brand);
+  const rightBits = [brand?.campusCode, brand?.aisheCode ? `AISHE ${brand.aisheCode}` : '']
+    .filter(Boolean)
+    .join(' · ');
+  doc.text(`${left} · page ${page}`, 14, h - 8);
+  if (rightBits) {
+    doc.text(rightBits, w - 14, h - 8, { align: 'right' });
+  }
   doc.setTextColor(0);
 }
 
@@ -48,22 +53,54 @@ function brandRgb(brand?: ReportPdfBrand): [number, number, number] {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
-export function exportStudentReportPdf(data: StudentExportData, brand?: ReportPdfBrand) {
-  const doc = new jsPDF();
-  const page = { n: 1 };
-  let y = 18;
+/** Letterhead: institute identity under General name + Organization campus fields. */
+function addReportHeader(
+  doc: jsPDF,
+  brand: ReportPdfBrand | undefined,
+  title: string,
+  subtitle?: string,
+): number {
+  const [br, bg, bb] = brandRgb(brand);
   const name = brandLabel(brand);
   const locale = brand?.locale || 'en-IN';
-  const [br, bg, bb] = brandRgb(brand);
+  let y = 16;
 
   doc.setFontSize(16);
   doc.setTextColor(br, bg, bb);
-  doc.text(`${name} — Student Report`, 14, y);
-  y += 8;
-  doc.setFontSize(10);
+  doc.text(`${name} — ${title}`, 14, y);
+  y += 7;
+
+  doc.setFontSize(9);
+  doc.setTextColor(70);
+  for (const line of reportIdentityLines(brand ?? { appName: name, companyName: '', locale, brandingPrimaryColor: '' })) {
+    // Skip duplicating app name as company when identical
+    if (line === name) continue;
+    const wrapped = doc.splitTextToSize(line, 180);
+    doc.text(wrapped, 14, y);
+    y += wrapped.length * 4.2;
+  }
+
   doc.setTextColor(80);
-  doc.text(`Generated ${new Date().toLocaleString(locale)}`, 14, y);
-  y += 10;
+  doc.text(
+    [subtitle, `Generated ${new Date().toLocaleString(locale)}`].filter(Boolean).join(' · '),
+    14,
+    y,
+  );
+  y += 6;
+
+  doc.setDrawColor(br, bg, bb);
+  doc.setLineWidth(0.3);
+  doc.line(14, y, 196, y);
+  y += 8;
+  doc.setTextColor(0);
+  return y;
+}
+
+export function exportStudentReportPdf(data: StudentExportData, brand?: ReportPdfBrand) {
+  const doc = new jsPDF();
+  const page = { n: 1 };
+  let y = addReportHeader(doc, brand, 'Student Report');
+  const [br, bg, bb] = brandRgb(brand);
 
   doc.setTextColor(0);
   doc.setFontSize(12);
@@ -74,10 +111,6 @@ export function exportStudentReportPdf(data: StudentExportData, brand?: ReportPd
   y += 5;
   doc.text(`ID: ${data.student.employeeId ?? '—'} · Dept: ${data.student.department ?? '—'}`, 14, y);
   y += 5;
-  if (brand?.companyName) {
-    doc.text(brand.companyName, 14, y);
-    y += 5;
-  }
   if (data.riskStatus) {
     doc.text(`Risk: ${data.riskStatus}`, 14, y);
     y += 8;
@@ -160,19 +193,8 @@ export function exportStudentReportPdf(data: StudentExportData, brand?: ReportPd
 export function exportStaffReportPdf(data: StaffExportData, brand?: ReportPdfBrand) {
   const doc = new jsPDF();
   const page = { n: 1 };
-  let y = 18;
-  const name = brandLabel(brand);
-  const locale = brand?.locale || 'en-IN';
+  let y = addReportHeader(doc, brand, 'Analytics Report', data.scopeLabel);
   const [br, bg, bb] = brandRgb(brand);
-
-  doc.setFontSize(16);
-  doc.setTextColor(br, bg, bb);
-  doc.text(`${name} — Analytics Report`, 14, y);
-  y += 8;
-  doc.setFontSize(10);
-  doc.setTextColor(80);
-  doc.text(`${data.scopeLabel} · ${new Date().toLocaleString(locale)}`, 14, y);
-  y += 10;
 
   doc.setFontSize(12);
   doc.setTextColor(br, bg, bb);

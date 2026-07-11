@@ -6,6 +6,8 @@ import { importJntuSubjects, resolveDepartmentId } from '@/lib/jntu-import';
 import { publishSubjectToLms } from '@/lib/masters-sync';
 import type { JntuImportSubject } from '@/data/jntu-r22-cse-catalog';
 import { db } from '@/lib/db';
+import { assertSubjectPublishGates } from '@/lib/masters-academic-gates';
+import { getOrgSettings } from '@/lib/settings/org-config';
 
 const CATALOGS = {
   'r22-cse': JNTU_R22_CSE_CATALOG,
@@ -88,10 +90,41 @@ export async function POST(request: Request) {
     const publishErrors: string[] = [];
 
     if (publishToLms && !dryRun && summary.importedCodes.length > 0) {
+      const org = await getOrgSettings();
+      if (org.requireActiveAcademicYear || org.requireSemesterForPublish) {
+        // Preflight: ensure at least the org gates can pass for typical subjects
+        const sample = await db.subject.findFirst({
+          where: { code: summary.importedCodes[0] },
+          select: { id: true },
+        });
+        if (sample) {
+          const gate = await assertSubjectPublishGates(sample.id);
+          if (!gate.ok) {
+            return NextResponse.json(
+              {
+                ...summary,
+                dryRun,
+                catalog: catalog || 'custom',
+                total: rows.length,
+                publishedCourses: 0,
+                publishErrors: [gate.error],
+                error: gate.error,
+              },
+              { status: gate.status },
+            );
+          }
+        }
+      }
+
       for (const code of summary.importedCodes) {
         try {
           const subject = await db.subject.findUnique({ where: { code } });
           if (subject) {
+            const gate = await assertSubjectPublishGates(subject.id);
+            if (!gate.ok) {
+              publishErrors.push(`${code}: ${gate.error}`);
+              continue;
+            }
             await publishSubjectToLms(subject.id, programId);
             publishedCourses++;
           }

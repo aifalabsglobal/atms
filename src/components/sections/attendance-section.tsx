@@ -5,7 +5,16 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { useCampusFormat } from '@/hooks/use-campus-format';
 import { useListPageSize } from '@/hooks/use-list-page-size';
+import { useOrgSettings, useActiveAcademicYear } from '@/hooks/use-org-settings';
 import { DEFAULT_BRAND_PRIMARY } from '@/lib/brand-color';
+import { DEFAULT_ORG_SETTINGS } from '@/lib/settings/org-defaults';
+import {
+  buildPeriodSchedule,
+  defaultTimetableDayOfWeek,
+  formatTimetableDefaultsPreview,
+  suggestFirstPeriodTimes,
+  timetableDayOptions,
+} from '@/lib/settings/timetable-defaults';
 import {
   ScanLine, Plus, PenLine, ScanFace, MapPin, QrCode,
   Fingerprint, Radio, CalendarIcon, ChevronLeft, ChevronRight,
@@ -929,7 +938,7 @@ function SessionDetailDialog({
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 
-const TIMETABLE_DAYS = [
+const TIMETABLE_DAY_LABELS = [
   { value: '1', label: 'Monday' },
   { value: '2', label: 'Tuesday' },
   { value: '3', label: 'Wednesday' },
@@ -958,17 +967,26 @@ interface TimetableSlotRecord {
 function FacultyTimetableEditor() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { data: orgSettings } = useOrgSettings();
+  const { data: activeAcademicYear } = useActiveAcademicYear();
+  const org = orgSettings ?? DEFAULT_ORG_SETTINGS;
+  const dayOptions = useMemo(() => timetableDayOptions(org), [orgSettings]);
+  const periodHint = useMemo(() => formatTimetableDefaultsPreview(org), [orgSettings]);
+  const periodBands = useMemo(() => buildPeriodSchedule(org), [orgSettings]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editItem, setEditItem] = useState<TimetableSlotRecord | null>(null);
-  const [form, setForm] = useState({
-    courseId: '',
-    dayOfWeek: '1',
-    startTime: '09:00',
-    endTime: '10:00',
-    roomNumber: '',
-    building: '',
-    academicYear: '2025-2026',
-    isActive: true,
+  const [form, setForm] = useState(() => {
+    const times = suggestFirstPeriodTimes(DEFAULT_ORG_SETTINGS);
+    return {
+      courseId: '',
+      dayOfWeek: defaultTimetableDayOfWeek(DEFAULT_ORG_SETTINGS),
+      startTime: times.startTime,
+      endTime: times.endTime,
+      roomNumber: '',
+      building: '',
+      academicYear: '',
+      isActive: true,
+    };
   });
 
   const { data: coursesData } = useQuery({
@@ -1029,15 +1047,16 @@ function FacultyTimetableEditor() {
   });
 
   const openNew = () => {
+    const times = suggestFirstPeriodTimes(org);
     setEditItem(null);
     setForm({
       courseId: courses[0]?.id || '',
-      dayOfWeek: '1',
-      startTime: '09:00',
-      endTime: '10:00',
+      dayOfWeek: defaultTimetableDayOfWeek(org),
+      startTime: times.startTime,
+      endTime: times.endTime,
       roomNumber: '',
       building: '',
-      academicYear: '2025-2026',
+      academicYear: activeAcademicYear?.name ?? activeAcademicYear?.code ?? '',
       isActive: true,
     });
     setDialogOpen(true);
@@ -1079,7 +1098,7 @@ function FacultyTimetableEditor() {
     else saveMut.mutate(payload);
   };
 
-  const dayLabel = (d: number) => TIMETABLE_DAYS.find(x => x.value === String(d))?.label ?? DAY_LABELS[d];
+  const dayLabel = (d: number) => TIMETABLE_DAY_LABELS.find(x => x.value === String(d))?.label ?? DAY_LABELS[d];
 
   const sortedSlots = [...slots].sort((a, b) =>
     a.dayOfWeek !== b.dayOfWeek ? a.dayOfWeek - b.dayOfWeek : a.startTime.localeCompare(b.startTime),
@@ -1097,6 +1116,7 @@ function FacultyTimetableEditor() {
             <CardDescription>
               Configure when your courses meet each week — used for today&apos;s class list and attendance sessions
             </CardDescription>
+            <p className="text-xs text-muted-foreground mt-1">{periodHint}</p>
           </div>
           <Button
             size="sm"
@@ -1190,7 +1210,9 @@ function FacultyTimetableEditor() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>{editItem ? 'Edit timetable slot' : 'Add timetable slot'}</DialogTitle>
-            <DialogDescription>Define a recurring weekly class period for one of your courses</DialogDescription>
+            <DialogDescription>
+              {editItem ? 'Update this weekly class period' : `Defaults from Organization: ${periodHint}`}
+            </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-3 py-2">
             <div className="col-span-2">
@@ -1209,7 +1231,7 @@ function FacultyTimetableEditor() {
               <Select value={form.dayOfWeek} onValueChange={v => setForm(f => ({ ...f, dayOfWeek: v }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {TIMETABLE_DAYS.map(d => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}
+                  {dayOptions.map(d => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -1219,6 +1241,25 @@ function FacultyTimetableEditor() {
             </div>
             <div><Label>Start *</Label><Input type="time" value={form.startTime} onChange={e => setForm(f => ({ ...f, startTime: e.target.value }))} /></div>
             <div><Label>End *</Label><Input type="time" value={form.endTime} onChange={e => setForm(f => ({ ...f, endTime: e.target.value }))} /></div>
+            {!editItem && periodBands.length > 0 && (
+              <div className="col-span-2">
+                <Label className="text-xs text-muted-foreground">Suggested periods</Label>
+                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                  {periodBands.map((band) => (
+                    <Button
+                      key={band.period}
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-[10px]"
+                      onClick={() => setForm((f) => ({ ...f, startTime: band.startTime, endTime: band.endTime }))}
+                    >
+                      P{band.period} {band.startTime}–{band.endTime}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div><Label>Building</Label><Input value={form.building} onChange={e => setForm(f => ({ ...f, building: e.target.value }))} placeholder="CSE Block" /></div>
             <div><Label>Room</Label><Input value={form.roomNumber} onChange={e => setForm(f => ({ ...f, roomNumber: e.target.value }))} placeholder="CSE-301" /></div>
             <div className="col-span-2">
@@ -1404,6 +1445,7 @@ function AdminSessionsView() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { formatDate } = useCampusFormat();
+  const { data: orgSettings } = useOrgSettings();
   const pageSize = useListPageSize(20);
   const { sectionContext, setSectionContext } = useAppStore();
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -1417,7 +1459,7 @@ function AdminSessionsView() {
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [detailSessionId, setDetailSessionId] = useState<string | null>(null);
   const [newSession, setNewSession] = useState({
-    courseId: '', sessionDate: '', startTime: '09:00', endTime: '10:30',
+    courseId: '', sessionDate: '', startTime: '08:00', endTime: '08:50',
     captureMethod: 'manual', geofenceId: '', timetableSlotId: '' as string,
   });
 
@@ -1480,6 +1522,16 @@ function AdminSessionsView() {
   const hasActiveFilters = statusFilter !== 'all' || courseFilter !== 'all' || methodFilter !== 'all' || dateFilter !== undefined;
 
   useEffect(() => {
+    if (!orgSettings) return;
+    const times = suggestFirstPeriodTimes(orgSettings);
+    setNewSession((prev) => {
+      if (prev.timetableSlotId || prev.courseId || prev.sessionDate) return prev;
+      if (prev.startTime === times.startTime && prev.endTime === times.endTime) return prev;
+      return { ...prev, startTime: times.startTime, endTime: times.endTime };
+    });
+  }, [orgSettings]);
+
+  useEffect(() => {
     if (!sectionContext?.attendanceSessionId) return;
     setDetailSessionId(sectionContext.attendanceSessionId);
     setDetailDialogOpen(true);
@@ -1506,8 +1558,9 @@ function AdminSessionsView() {
       queryClient.invalidateQueries({ queryKey: ['timetable-slot-picker'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       setDialogOpen(false);
+      const times = suggestFirstPeriodTimes(orgSettings ?? DEFAULT_ORG_SETTINGS);
       setNewSession({
-        courseId: '', sessionDate: '', startTime: '09:00', endTime: '10:30',
+        courseId: '', sessionDate: '', startTime: times.startTime, endTime: times.endTime,
         captureMethod: 'manual', geofenceId: '', timetableSlotId: '',
       });
       toast({ title: 'Session Created', description: 'Attendance session created successfully.' });
@@ -1557,6 +1610,39 @@ function AdminSessionsView() {
 
   return (
     <div className="space-y-4">
+      {(orgSettings?.holidayBlockAttendance || orgSettings?.enforceDayHours) && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+          <ShieldCheck className="h-3.5 w-3.5 shrink-0 text-brand" />
+          <span className="font-medium text-foreground">Organization attendance rules</span>
+          {orgSettings.holidayBlockAttendance && (
+            <Badge variant="secondary" className="text-[10px]">
+              Holidays & non-working days blocked
+            </Badge>
+          )}
+          {orgSettings.holidayBlockAttendance && (
+            <Badge variant="outline" className="text-[10px]">
+              Exam days: {orgSettings.examDayAttendance}
+            </Badge>
+          )}
+          {orgSettings.holidayBlockAttendance && (
+            <Badge variant="outline" className="text-[10px]">
+              Compensatory days allowed
+            </Badge>
+          )}
+          <Badge variant="outline" className="text-[10px]">
+            Saturday:{' '}
+            {orgSettings.saturdayMode === 'half'
+              ? `half → ${orgSettings.halfDayEndTime}`
+              : orgSettings.saturdayMode}
+          </Badge>
+          {orgSettings.enforceDayHours && (
+            <Badge variant="secondary" className="text-[10px]">
+              Campus hours {orgSettings.dayStartTime}–{orgSettings.dayEndTime}
+            </Badge>
+          )}
+        </div>
+      )}
+
       <FacultyScheduleCard
         onStartSlot={startFromTimetableSlot}
         onQuickStart={quickStartFromSlot}

@@ -20,59 +20,39 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useCampusFormat } from '@/hooks/use-campus-format';
+import { useOrgSettings, useActiveAcademicYear } from '@/hooks/use-org-settings';
 import { DEFAULT_BRAND_PRIMARY } from '@/lib/brand-color';
+import {
+  buildSemesterRanges,
+  resolveAcademicRange,
+} from '@/lib/settings/academic-year-range';
 import {
   CalendarDays, Clock, MapPin, User, GraduationCap,
   ChevronLeft, ChevronRight, AlertCircle, PartyPopper, BookOpen, Plus, Loader2, Trash2,
-  List, Pencil,
+  List, Pencil, AlertTriangle, RotateCcw,
 } from 'lucide-react';
 import { useState, useMemo, useEffect, useRef } from 'react';
 import type { Role } from '@/lib/store';
 import { cn } from '@/lib/utils';
+import { PUBLIC_CALENDAR_EVENT_TYPES } from '@/lib/calendar-event-types';
 
 const NAVY = DEFAULT_BRAND_PRIMARY;
-const AY_START = '2025-07-01';
-const AY_END = '2026-06-30';
+const WEEKDAY_HEADERS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 
 type SemesterFilter = 'all' | 'odd' | 'even';
-
-const SEMESTER_RANGES: Record<Exclude<SemesterFilter, 'all'>, {
-  start: string;
-  end: string;
-  label: string;
-  shortLabel: string;
-  jumpYear: number;
-  jumpMonth: number;
-}> = {
-  odd: {
-    start: '2025-07-01',
-    end: '2025-12-15',
-    label: 'I Sem (Odd)',
-    shortLabel: 'Jul–Dec 2025',
-    jumpYear: 2025,
-    jumpMonth: 8,
-  },
-  even: {
-    start: '2025-12-01',
-    end: '2026-06-30',
-    label: 'II Sem (Even)',
-    shortLabel: 'Dec 2025–Jun 2026',
-    jumpYear: 2026,
-    jumpMonth: 1,
-  },
-};
 
 const EVENT_TYPE_CONFIG: Record<string, { label: string; color: string; icon: React.ElementType }> = {
   academic: { label: 'Academic', color: '#22c55e', icon: GraduationCap },
   exam: { label: 'Examination', color: '#ef4444', icon: BookOpen },
   holiday: { label: 'Holiday', color: '#f59e0b', icon: PartyPopper },
+  compensatory: { label: 'Compensatory', color: '#0d9488', icon: RotateCcw },
   event: { label: 'Event', color: '#8b5cf6', icon: PartyPopper },
   deadline: { label: 'Deadline', color: '#ec4899', icon: AlertCircle },
   personal: { label: 'Personal', color: '#6366f1', icon: User },
   class: { label: 'Class', color: '#06b6d4', icon: Clock },
 };
 
-const FORM_EVENT_TYPES = ['academic', 'exam', 'holiday', 'event', 'deadline', 'class'] as const;
+const FORM_EVENT_TYPES = PUBLIC_CALENDAR_EVENT_TYPES;
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -243,6 +223,18 @@ function EventCard({
 export default function CalendarSection() {
   const { currentUser } = useAppStore();
   const { formatDate } = useCampusFormat();
+  const { data: orgSettings } = useOrgSettings();
+  const { data: activeAcademicYear } = useActiveAcademicYear();
+  const weekStartsOn = Math.min(6, Math.max(0, orgSettings?.weekStartsOn ?? 1));
+  const requireActiveYear = orgSettings?.requireActiveAcademicYear ?? true;
+  const academicRange = useMemo(
+    () => resolveAcademicRange(activeAcademicYear ?? null),
+    [activeAcademicYear],
+  );
+  const semesterRanges = useMemo(
+    () => buildSemesterRanges(academicRange.startDate, academicRange.endDate),
+    [academicRange.startDate, academicRange.endDate],
+  );
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -261,11 +253,17 @@ export default function CalendarSection() {
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth();
   const todayStr = dateStr(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
+  const weekdayHeaders = useMemo(
+    () => Array.from({ length: 7 }, (_, i) => WEEKDAY_HEADERS[(weekStartsOn + i) % 7]!),
+    [weekStartsOn],
+  );
 
   const { data: eventsData, isLoading, isError } = useQuery({
-    queryKey: ['calendar-events', AY_START, AY_END],
+    queryKey: ['calendar-events', academicRange.startDate, academicRange.endDate],
     queryFn: () =>
-      fetch(`/api/calendar?startDate=${AY_START}&endDate=${AY_END}&limit=500`).then((r) => {
+      fetch(
+        `/api/calendar?startDate=${academicRange.startDate}&endDate=${academicRange.endDate}&limit=500`,
+      ).then((r) => {
         if (!r.ok) throw new Error('Failed to load calendar');
         return r.json();
       }),
@@ -332,14 +330,14 @@ export default function CalendarSection() {
   const filteredEvents = useMemo(() => {
     let events = allEvents;
     if (semesterFilter !== 'all') {
-      const range = SEMESTER_RANGES[semesterFilter];
+      const range = semesterRanges[semesterFilter];
       events = events.filter((e) => eventInRange(e, range.start, range.end));
     }
     if (selectedType) {
       events = events.filter((e) => e.type === selectedType);
     }
     return events;
-  }, [allEvents, selectedType, semesterFilter]);
+  }, [allEvents, selectedType, semesterFilter, semesterRanges]);
 
   const semesterEvents = useMemo(() => {
     if (semesterFilter === 'all') return [];
@@ -363,26 +361,33 @@ export default function CalendarSection() {
     const counts: Record<string, number> = {};
     const base = semesterFilter === 'all'
       ? allEvents
-      : allEvents.filter((e) => eventInRange(e, SEMESTER_RANGES[semesterFilter].start, SEMESTER_RANGES[semesterFilter].end));
+      : allEvents.filter((e) => eventInRange(e, semesterRanges[semesterFilter].start, semesterRanges[semesterFilter].end));
     base.forEach((e) => {
       counts[e.type] = (counts[e.type] || 0) + 1;
     });
     return counts;
-  }, [allEvents, semesterFilter]);
+  }, [allEvents, semesterFilter, semesterRanges]);
 
   const handleSemesterChange = (value: SemesterFilter) => {
     setSemesterFilter(value);
     if (value !== 'all') {
-      const range = SEMESTER_RANGES[value];
+      const range = semesterRanges[value];
       setCurrentDate(new Date(range.jumpYear, range.jumpMonth, 1));
     }
   };
 
   const aySubtitle = useMemo(() => {
-    const ay = allEvents.find((e) => e.academicYear)?.academicYear;
-    if (ay) return `${ay.name} · ${ay.regulation} Regulation`;
-    return 'AY 2025-2026 · R22 Regulation';
-  }, [allEvents]);
+    if (activeAcademicYear) {
+      const reg = activeAcademicYear.regulation ? ` · ${activeAcademicYear.regulation} Regulation` : '';
+      return `${activeAcademicYear.name}${reg}`;
+    }
+    const fromEvent = allEvents.find((e) => e.academicYear)?.academicYear;
+    if (fromEvent) {
+      const reg = fromEvent.regulation ? ` · ${fromEvent.regulation} Regulation` : '';
+      return `${fromEvent.name}${reg}`;
+    }
+    return `${academicRange.name}${academicRange.regulation ? ` · ${academicRange.regulation} Regulation` : ''} (fallback)`;
+  }, [activeAcademicYear, allEvents, academicRange.name, academicRange.regulation]);
 
   // Jump to a useful month when the current one is empty on first load
   useEffect(() => {
@@ -448,7 +453,8 @@ export default function CalendarSection() {
     if (editEvent) {
       updateMutation.mutate({ id: editEvent.id, ...payload });
     } else {
-      const academicYearId = allEvents.find((e) => e.academicYear?.id)?.academicYear?.id;
+      const academicYearId =
+        academicRange.id ?? allEvents.find((e) => e.academicYear?.id)?.academicYear?.id;
       createMutation.mutate({
         userId: currentUser.id,
         ...(academicYearId ? { academicYearId } : {}),
@@ -461,8 +467,9 @@ export default function CalendarSection() {
 
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
   const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay();
+  const leadingBlanks = (firstDayOfMonth - weekStartsOn + 7) % 7;
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
-  const blanks = Array.from({ length: firstDayOfMonth }, (_, i) => i);
+  const blanks = Array.from({ length: leadingBlanks }, (_, i) => i);
 
   const getEventsForDay = (day: number) => {
     const ds = dateStr(currentYear, currentMonth, day);
@@ -500,6 +507,18 @@ export default function CalendarSection() {
         )}
       </div>
 
+      {requireActiveYear && !activeAcademicYear && (
+        <div className="flex items-start gap-2 rounded-md border border-amber-300/80 bg-amber-50 px-3 py-2.5 text-xs text-amber-950 dark:bg-amber-950/30 dark:text-amber-100 dark:border-amber-700/60">
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
+          <div>
+            <p className="font-medium">No active academic year — set one in Masters</p>
+            <p className="mt-0.5 text-amber-800/90 dark:text-amber-200/80">
+              Calendar is using a fallback date range ({academicRange.startDate} → {academicRange.endDate}). Mark an academic year Active in Masters for the live campus year.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Semester filter */}
       <div className="flex flex-wrap gap-2">
         <Button
@@ -518,7 +537,7 @@ export default function CalendarSection() {
           style={semesterFilter === 'odd' ? { backgroundColor: NAVY } : {}}
           onClick={() => handleSemesterChange('odd')}
         >
-          I Sem (Odd) · {SEMESTER_RANGES.odd.shortLabel}
+          I Sem (Odd) · {semesterRanges.odd.shortLabel}
         </Button>
         <Button
           size="sm"
@@ -527,7 +546,7 @@ export default function CalendarSection() {
           style={semesterFilter === 'even' ? { backgroundColor: NAVY } : {}}
           onClick={() => handleSemesterChange('even')}
         >
-          II Sem (Even) · {SEMESTER_RANGES.even.shortLabel}
+          II Sem (Even) · {semesterRanges.even.shortLabel}
         </Button>
       </div>
 
@@ -620,7 +639,7 @@ export default function CalendarSection() {
                   ) : (
                     <>
                       <div className="grid grid-cols-7 gap-1 mb-1">
-                        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                        {weekdayHeaders.map((day) => (
                           <div key={day} className="text-center text-[11px] font-medium text-muted-foreground py-1">
                             {day}
                           </div>
@@ -687,12 +706,12 @@ export default function CalendarSection() {
                   <CardTitle className="text-base">
                     {semesterFilter === 'all'
                       ? `${MONTHS[currentMonth]} ${currentYear} — Agenda`
-                      : `${SEMESTER_RANGES[semesterFilter].label} — Full Agenda`}
+                      : `${semesterRanges[semesterFilter].label} — Full Agenda`}
                   </CardTitle>
                   <CardDescription>
                     {semesterFilter === 'all'
                       ? `${monthEvents.length} event${monthEvents.length !== 1 ? 's' : ''}`
-                      : `${semesterEvents.length} events · ${SEMESTER_RANGES[semesterFilter].shortLabel}`}
+                      : `${semesterEvents.length} events · ${semesterRanges[semesterFilter].shortLabel}`}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -740,12 +759,12 @@ export default function CalendarSection() {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">
-                {semesterFilter === 'all' ? 'This Month' : SEMESTER_RANGES[semesterFilter].label}
+                {semesterFilter === 'all' ? 'This Month' : semesterRanges[semesterFilter].label}
               </CardTitle>
               <CardDescription>
                 {semesterFilter === 'all'
                   ? `${monthEvents.length} in ${MONTHS[currentMonth]}`
-                  : `${semesterEvents.length} events · ${SEMESTER_RANGES[semesterFilter].shortLabel}`}
+                  : `${semesterEvents.length} events · ${semesterRanges[semesterFilter].shortLabel}`}
               </CardDescription>
             </CardHeader>
             <CardContent>

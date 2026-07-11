@@ -13,6 +13,8 @@ import {
 } from '@/lib/timetable-helpers';
 import type { Role } from '@/lib/store';
 import { auditMasterMutation } from '@/lib/masters-helpers';
+import { getOrgSettings } from '@/lib/settings/org-config';
+import { assertSemesterUnderActiveYear } from '@/lib/masters-academic-gates';
 
 const TIMETABLE_WRITE_ROLES: Role[] = ['super_admin', 'admin', 'hod', 'faculty', 'lab_assistant'];
 
@@ -100,6 +102,14 @@ export async function POST(request: Request) {
       }
     }
 
+    const orgCreate = await getOrgSettings();
+    if (orgCreate.requireSemesterForPublish) {
+      const semGate = await assertSemesterUnderActiveYear(validated.semesterId);
+      if (!semGate.ok) {
+        return NextResponse.json({ error: semGate.error }, { status: semGate.status });
+      }
+    }
+
     const overlapErr = await findOverlappingSlot(
       validated.courseId,
       validated.dayOfWeek,
@@ -175,6 +185,14 @@ export async function PUT(request: Request) {
       const semester = await db.semester.findUnique({ where: { id: validated.semesterId }, select: { id: true } });
       if (!semester) {
         return NextResponse.json({ error: 'Semester not found' }, { status: 404 });
+      }
+    }
+
+    const orgUpdate = await getOrgSettings();
+    if (orgUpdate.requireSemesterForPublish) {
+      const semGate = await assertSemesterUnderActiveYear(validated.semesterId);
+      if (!semGate.ok) {
+        return NextResponse.json({ error: semGate.error }, { status: semGate.status });
       }
     }
 

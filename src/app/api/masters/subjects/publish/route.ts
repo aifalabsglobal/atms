@@ -1,8 +1,8 @@
-import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { requireMastersWrite, auditMasterMutation } from '@/lib/masters-helpers';
 import { publishSubjectToLms } from '@/lib/masters-sync';
 import { enqueueAnchor } from '@/lib/knuct/anchor-service';
+import { assertSubjectPublishGates } from '@/lib/masters-academic-gates';
 
 export async function POST(request: Request) {
   try {
@@ -14,6 +14,11 @@ export async function POST(request: Request) {
 
     if (!subjectId || !programId) {
       return NextResponse.json({ error: 'subjectId and programId are required' }, { status: 400 });
+    }
+
+    const gate = await assertSubjectPublishGates(subjectId);
+    if (!gate.ok) {
+      return NextResponse.json({ error: gate.error }, { status: gate.status });
     }
 
     const { course, created } = await publishSubjectToLms(subjectId, programId, instructorId);

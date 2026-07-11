@@ -1,12 +1,39 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
-import { requireMastersRead, requireMastersWrite, auditMasterMutation, mastersError, applyAcademicYearDepartmentScope } from '@/lib/masters-helpers';
+import {
+  requireMastersRead,
+  requireMastersWrite,
+  auditMasterMutation,
+  mastersError,
+  applyAcademicYearDepartmentScope,
+} from '@/lib/masters-helpers';
+import { getOrgSettings } from '@/lib/settings/org-config';
+import type { Role } from '@/lib/store';
 
 async function enforceSingleActiveYear(excludeId?: string) {
   await db.academicYear.updateMany({
     where: { status: 'active', ...(excludeId ? { NOT: { id: excludeId } } : {}) },
     data: { status: 'completed' },
   });
+}
+
+async function maybeEnforceSingleActiveYear(excludeId?: string) {
+  const org = await getOrgSettings();
+  if (!org.allowMultipleActiveYears) {
+    await enforceSingleActiveYear(excludeId);
+  }
+}
+
+function isCompletedLocked(
+  org: { lockCompletedAcademicYears: boolean },
+  status: string,
+  role: string,
+): boolean {
+  return (
+    org.lockCompletedAcademicYears &&
+    status === 'completed' &&
+    role !== 'super_admin'
+  );
 }
 
 export async function GET(request: Request) {
@@ -54,6 +81,7 @@ export async function POST(request: Request) {
     const { error, session } = await requireMastersWrite();
     if (error || !session) return error;
 
+    const org = await getOrgSettings();
     const body = await request.json();
     const { name, code, startDate, endDate, status, regulation, isActive } = body;
 
@@ -67,7 +95,12 @@ export async function POST(request: Request) {
     if (existingCode) return mastersError('Academic year with this code already exists', 409);
 
     const nextStatus = status || 'upcoming';
-    if (nextStatus === 'active') await enforceSingleActiveYear();
+    if (nextStatus === 'active') await maybeEnforceSingleActiveYear();
+
+    const nextRegulation =
+      typeof regulation === 'string' && regulation.trim()
+        ? regulation.trim()
+        : org.defaultRegulation;
 
     const academicYear = await db.academicYear.create({
       data: {
@@ -76,7 +109,7 @@ export async function POST(request: Request) {
         startDate,
         endDate,
         status: nextStatus,
-        regulation,
+        regulation: nextRegulation,
         isActive: isActive !== undefined ? isActive : true,
       },
     });
@@ -102,6 +135,15 @@ export async function PUT(request: Request) {
     const existing = await db.academicYear.findUnique({ where: { id } });
     if (!existing) return mastersError('Academic year not found', 404);
 
+    const org = await getOrgSettings();
+    const role = session.user.role as Role;
+    if (isCompletedLocked(org, existing.status, role)) {
+      return mastersError(
+        'Completed academic years are locked. Ask a Super Admin to change status or unlock.',
+        403,
+      );
+    }
+
     const body = await request.json();
     const { name, code, startDate, endDate, status, regulation, isActive } = body;
 
@@ -114,7 +156,7 @@ export async function PUT(request: Request) {
       if (existingCode) return mastersError('Academic year with this code already exists', 409);
     }
 
-    if (status === 'active') await enforceSingleActiveYear(id);
+    if (status === 'active') await maybeEnforceSingleActiveYear(id);
 
     const academicYear = await db.academicYear.update({
       where: { id },
@@ -152,6 +194,15 @@ export async function DELETE(request: Request) {
       include: { _count: { select: { semesters: true, calendarEvents: true } } },
     });
     if (!existing) return mastersError('Academic year not found', 404);
+
+    const org = await getOrgSettings();
+    const role = session.user.role as Role;
+    if (isCompletedLocked(org, existing.status, role)) {
+      return mastersError(
+        'Completed academic years are locked and cannot be deleted. Ask a Super Admin.',
+        403,
+      );
+    }
 
     if (existing._count.semesters > 0) {
       return mastersError(

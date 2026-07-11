@@ -1,3 +1,7 @@
+import type { ReportDocumentBrand } from '@/lib/report-brand';
+import { reportIdentityLines } from '@/lib/report-brand';
+import { BRAND } from '@/lib/branding';
+
 function escapeCsv(value: string | number | null | undefined): string {
   if (value == null) return '';
   const s = String(value);
@@ -19,6 +23,24 @@ export function downloadCsv(filename: string, rows: (string | number | null | un
   URL.revokeObjectURL(url);
 }
 
+function csvLetterhead(
+  brand: ReportDocumentBrand | undefined,
+  title: string,
+): (string | number | null | undefined)[][] {
+  const appName = brand?.appName?.trim() || BRAND.name;
+  const locale = brand?.locale || 'en-IN';
+  const rows: (string | number | null | undefined)[][] = [[`${appName} — ${title}`]];
+  for (const line of reportIdentityLines(
+    brand ?? { appName, companyName: '', locale, brandingPrimaryColor: '' },
+  )) {
+    if (line === appName) continue;
+    rows.push([line]);
+  }
+  rows.push(['Generated', new Date().toLocaleString(locale)]);
+  rows.push([]);
+  return rows;
+}
+
 export type StudentExportData = {
   student: { name: string; email: string; employeeId: string | null; department: string | null };
   riskStatus?: string;
@@ -28,7 +50,14 @@ export type StudentExportData = {
     absentCount: number;
     lateCount: number;
     totalSessions: number;
-    courseAttendance: { course: { code: string; name: string }; present: number; absent: number; late: number; total: number; percentage: number }[];
+    courseAttendance: {
+      course: { code: string; name: string };
+      present: number;
+      absent: number;
+      late: number;
+      total: number;
+      percentage: number;
+    }[];
     weeklyTrend?: { week: string; rate: number; present: number; absent: number; late: number }[];
   };
   assignments: { total: number; graded: number; avgScore: number | null };
@@ -52,16 +81,24 @@ export type StaffExportData = {
   };
   weeklyAttendanceTrend: { week: string; rate: number; present: number; absent: number; late: number }[];
   departmentAnalytics: { department: string; students: number; avgAttendance: number; atRisk: number }[];
-  atRiskStudents: { name: string; employeeId: string | null; department: string | null; stats: { percentage: number; total: number } }[];
-  studentAttendanceReport?: { name: string; employeeId: string | null; department: string | null; stats: { present: number; absent: number; late: number; total: number; percentage: number } }[];
+  atRiskStudents: {
+    name: string;
+    employeeId: string | null;
+    department: string | null;
+    stats: { percentage: number; total: number };
+  }[];
+  studentAttendanceReport?: {
+    name: string;
+    employeeId: string | null;
+    department: string | null;
+    stats: { present: number; absent: number; late: number; total: number; percentage: number };
+  }[];
   lmsEngagement: { topCourses: { code: string; name: string; enrollments: number; avgGrade: number | null }[] };
 };
 
-export function exportStudentReportCsv(data: StudentExportData) {
+export function exportStudentReportCsv(data: StudentExportData, brand?: ReportDocumentBrand) {
   const rows: (string | number | null | undefined)[][] = [
-    ['AIMSCS — Student Report'],
-    ['Generated', new Date().toLocaleString('en-IN')],
-    [],
+    ...csvLetterhead(brand, 'Student Report'),
     ['Student', data.student.name],
     ['Email', data.student.email],
     ['ID', data.student.employeeId],
@@ -112,11 +149,10 @@ export function exportStudentReportCsv(data: StudentExportData) {
   downloadCsv(`student-report-${slug}-${new Date().toISOString().slice(0, 10)}.csv`, rows);
 }
 
-export function exportStaffReportCsv(data: StaffExportData) {
+export function exportStaffReportCsv(data: StaffExportData, brand?: ReportDocumentBrand) {
   const rows: (string | number | null | undefined)[][] = [
-    ['AIMSCS — Analytics Report'],
+    ...csvLetterhead(brand, 'Analytics Report'),
     ['Scope', data.scopeLabel],
-    ['Generated', new Date().toLocaleString('en-IN')],
     [],
     ['KPIs'],
     ['Students', data.kpis.totalStudents],

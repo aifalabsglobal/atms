@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -21,6 +22,39 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { formatCampusCurrency, formatCampusDateTime } from '@/lib/datetime-format';
 import { KnuctCampusDetailsCard } from '@/components/administration/knuct-campus-details';
+import { formatTimetableDefaultsPreview } from '@/lib/settings/timetable-defaults';
+import { formatCampusIdentityPreview } from '@/lib/report-brand';
+import { DEFAULT_ORG_SETTINGS } from '@/lib/settings/org-defaults';
+import { DEFAULT_GENERAL_SETTINGS } from '@/lib/settings/general-defaults';
+
+const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
+const WEEKDAY_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
+
+function parseWorkingDaysDraft(draft: unknown): number[] {
+  if (Array.isArray(draft)) {
+    return draft
+      .map((d) => (typeof d === 'number' ? d : Number(d)))
+      .filter((d) => Number.isInteger(d) && d >= 0 && d <= 6);
+  }
+  if (typeof draft === 'string') {
+    try {
+      return parseWorkingDaysDraft(JSON.parse(draft));
+    } catch {
+      return [1, 2, 3, 4, 5];
+    }
+  }
+  return [1, 2, 3, 4, 5];
+}
+
+/** Compact range like Mon–Fri when contiguous, else Mon, Wed, Fri */
+function formatWorkingDaysLabel(days: number[]): string {
+  if (days.length === 0) return 'none';
+  const sorted = [...new Set(days)].sort((a, b) => a - b);
+  if (sorted.length === 1) return WEEKDAY_SHORT[sorted[0]];
+  const contiguous = sorted.every((d, i) => i === 0 || d === sorted[i - 1]! + 1);
+  if (contiguous) return `${WEEKDAY_SHORT[sorted[0]!]}–${WEEKDAY_SHORT[sorted[sorted.length - 1]!]}`;
+  return sorted.map((d) => WEEKDAY_SHORT[d]).join(', ');
+}
 
 type EffectiveSetting = {
   key: string;
@@ -137,6 +171,61 @@ function SettingEditor({
           onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))}
         />
         {hint && <p className="text-[10px] text-muted-foreground">{hint}</p>}
+      </div>
+    );
+  }
+
+  if (def.key === 'organization.day_start_time' || def.key === 'organization.day_end_time' || def.key === 'organization.half_day_end_time') {
+    const fallback =
+      def.key === 'organization.day_end_time'
+        ? '17:00'
+        : def.key === 'organization.half_day_end_time'
+          ? '13:00'
+          : '08:00';
+    const value = String(draft ?? fallback);
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          type="time"
+          className="h-9 max-w-[10rem]"
+          disabled={disabled}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <span className="text-[10px] text-muted-foreground font-mono">{value || 'HH:mm'}</span>
+      </div>
+    );
+  }
+
+  if (def.key === 'organization.working_days') {
+    const selected = new Set(parseWorkingDaysDraft(draft));
+    return (
+      <div className="flex flex-wrap gap-2">
+        {WEEKDAY_SHORT.map((label, day) => {
+          const checked = selected.has(day);
+          return (
+            <label
+              key={label}
+              className={cn(
+                'flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-xs cursor-pointer',
+                checked ? 'bg-muted border-foreground/20' : 'bg-background',
+                disabled && 'opacity-50 pointer-events-none',
+              )}
+            >
+              <Checkbox
+                checked={checked}
+                disabled={disabled}
+                onCheckedChange={(c) => {
+                  const next = new Set(selected);
+                  if (c) next.add(day);
+                  else next.delete(day);
+                  onChange([...next].sort((a, b) => a - b));
+                }}
+              />
+              {label}
+            </label>
+          );
+        })}
       </div>
     );
   }
@@ -273,8 +362,132 @@ function parseDraft(setting: EffectiveSetting, draft: unknown): unknown {
   return draft;
 }
 
-function SettingLivePreview({ settingKey, draft }: { settingKey: string; draft: unknown }) {
+function SettingLivePreview({
+  settingKey,
+  draft,
+  relatedDrafts,
+}: {
+  settingKey: string;
+  draft: unknown;
+  relatedDrafts?: Record<string, unknown>;
+}) {
   const sample = new Date('2026-07-11T14:30:00');
+  if (
+    settingKey === 'organization.week_starts_on' ||
+    settingKey === 'organization.working_days' ||
+    settingKey === 'organization.holiday_block_attendance' ||
+    settingKey === 'organization.day_start_time' ||
+    settingKey === 'organization.day_end_time' ||
+    settingKey === 'organization.half_day_end_time' ||
+    settingKey === 'organization.saturday_mode' ||
+    settingKey === 'organization.enforce_day_hours'
+  ) {
+    const weekStart =
+      settingKey === 'organization.week_starts_on'
+        ? Number(draft ?? 1)
+        : Number(relatedDrafts?.['organization.week_starts_on'] ?? 1);
+    const workingDays =
+      settingKey === 'organization.working_days'
+        ? parseWorkingDaysDraft(draft)
+        : parseWorkingDaysDraft(relatedDrafts?.['organization.working_days'] ?? [1, 2, 3, 4, 5]);
+    const dayStart =
+      settingKey === 'organization.day_start_time'
+        ? String(draft ?? '08:00')
+        : String(relatedDrafts?.['organization.day_start_time'] ?? '08:00');
+    const dayEnd =
+      settingKey === 'organization.day_end_time'
+        ? String(draft ?? '17:00')
+        : String(relatedDrafts?.['organization.day_end_time'] ?? '17:00');
+    const halfEnd =
+      settingKey === 'organization.half_day_end_time'
+        ? String(draft ?? '13:00')
+        : String(relatedDrafts?.['organization.half_day_end_time'] ?? '13:00');
+    const saturdayMode =
+      settingKey === 'organization.saturday_mode'
+        ? String(draft ?? 'off')
+        : String(relatedDrafts?.['organization.saturday_mode'] ?? 'off');
+    const saturdayLabel =
+      saturdayMode === 'full'
+        ? 'Sat full'
+        : saturdayMode === 'half'
+          ? `Sat half→${halfEnd}`
+          : saturdayMode === 'alternate'
+            ? 'Sat alternate'
+            : 'Sat off';
+    const weekLabel = WEEKDAY_FULL[Math.min(6, Math.max(0, Math.round(weekStart)))] ?? 'Monday';
+    return (
+      <p className="text-[11px] rounded-md border bg-muted/40 px-2.5 py-1.5 text-muted-foreground">
+        Campus day:{' '}
+        <span className="font-medium text-foreground">
+          {dayStart}–{dayEnd}
+        </span>
+        {' · '}
+        <span className="font-medium text-foreground">{formatWorkingDaysLabel(workingDays)}</span>
+        {' · '}
+        <span className="font-medium text-foreground">{saturdayLabel}</span>
+        {' · '}
+        Week starts <span className="font-medium text-foreground">{weekLabel}</span>
+      </p>
+    );
+  }
+  if (
+    settingKey === 'organization.period_minutes' ||
+    settingKey === 'organization.break_minutes' ||
+    settingKey === 'organization.periods_per_day'
+  ) {
+    const periodMinutes =
+      settingKey === 'organization.period_minutes'
+        ? Number(draft ?? DEFAULT_ORG_SETTINGS.periodMinutes)
+        : Number(relatedDrafts?.['organization.period_minutes'] ?? DEFAULT_ORG_SETTINGS.periodMinutes);
+    const breakMinutes =
+      settingKey === 'organization.break_minutes'
+        ? Number(draft ?? DEFAULT_ORG_SETTINGS.breakMinutes)
+        : Number(relatedDrafts?.['organization.break_minutes'] ?? DEFAULT_ORG_SETTINGS.breakMinutes);
+    const periodsPerDay =
+      settingKey === 'organization.periods_per_day'
+        ? Number(draft ?? DEFAULT_ORG_SETTINGS.periodsPerDay)
+        : Number(relatedDrafts?.['organization.periods_per_day'] ?? DEFAULT_ORG_SETTINGS.periodsPerDay);
+    const dayStart = String(relatedDrafts?.['organization.day_start_time'] ?? DEFAULT_ORG_SETTINGS.dayStartTime);
+    const preview = formatTimetableDefaultsPreview({
+      periodMinutes,
+      breakMinutes,
+      periodsPerDay,
+      dayStartTime: dayStart,
+    });
+    return (
+      <p className="text-[11px] rounded-md border bg-muted/40 px-2.5 py-1.5 text-muted-foreground">
+        Schedule: <span className="font-medium text-foreground">{preview}</span>
+      </p>
+    );
+  }
+  if (
+    settingKey === 'organization.campus_code' ||
+    settingKey === 'organization.aishe_code' ||
+    settingKey === 'organization.campus_address' ||
+    settingKey === 'organization.campus_phone' ||
+    settingKey === 'organization.principal_title'
+  ) {
+    const pick = (key: string, fallback: string) =>
+      String(
+        (settingKey === key ? draft : relatedDrafts?.[key]) ?? fallback,
+      ).trim();
+    const preview = formatCampusIdentityPreview(
+      {
+        campusCode: pick('organization.campus_code', DEFAULT_ORG_SETTINGS.campusCode),
+        aisheCode: pick('organization.aishe_code', DEFAULT_ORG_SETTINGS.aisheCode),
+        campusAddress: pick('organization.campus_address', DEFAULT_ORG_SETTINGS.campusAddress),
+        campusPhone: pick('organization.campus_phone', DEFAULT_ORG_SETTINGS.campusPhone),
+        principalTitle: pick('organization.principal_title', DEFAULT_ORG_SETTINGS.principalTitle),
+      },
+      String(relatedDrafts?.['general.company_name'] ?? DEFAULT_GENERAL_SETTINGS.companyName).trim() ||
+        DEFAULT_GENERAL_SETTINGS.companyName,
+    );
+    return (
+      <p className="text-[11px] rounded-md border bg-muted/40 px-2.5 py-1.5 text-muted-foreground">
+        Letterhead: <span className="font-medium text-foreground">{preview}</span>
+      </p>
+    );
+  }
   if (settingKey === 'general.date_format' || settingKey === 'general.time_format' || settingKey === 'general.timezone' || settingKey === 'general.locale') {
     const dateFormat = settingKey === 'general.date_format' ? String(draft ?? 'dd/MM/yyyy') : 'dd/MM/yyyy';
     const timeFormat = settingKey === 'general.time_format' ? (draft === '24h' ? '24h' : '12h') : '12h';
@@ -725,12 +938,18 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
             <Card>
               <CardHeader className="py-3">
                 <CardTitle className="text-sm">
-                  {category === 'general' ? 'Campus & experience' : 'Settings'}
+                  {category === 'general'
+                    ? 'Campus & experience'
+                    : category === 'organization'
+                      ? 'Campus calendar, identity & academic rules'
+                      : 'Settings'}
                 </CardTitle>
                 <CardDescription className="text-xs">
                   {category === 'general'
                     ? 'Branding, regional formats, home screen, and access'
-                    : `${settings.length} option${settings.length === 1 ? '' : 's'}`}
+                    : category === 'organization'
+                      ? 'Week start, working days, campus identity for reports, and academic-year requirements'
+                      : `${settings.length} option${settings.length === 1 ? '' : 's'}`}
                 </CardDescription>
               </CardHeader>
               <CardContent className="p-0">
@@ -891,7 +1110,58 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
                         disabled={!editable}
                         onChange={(v) => setDrafts((d) => ({ ...d, [selected.key]: v }))}
                       />
-                      <SettingLivePreview settingKey={selected.key} draft={draftValue} />
+                      <SettingLivePreview
+                        settingKey={selected.key}
+                        draft={draftValue}
+                        relatedDrafts={{
+                          'organization.week_starts_on':
+                            drafts['organization.week_starts_on'] ??
+                            settings.find((s) => s.key === 'organization.week_starts_on')?.value,
+                          'organization.working_days':
+                            drafts['organization.working_days'] ??
+                            settings.find((s) => s.key === 'organization.working_days')?.value,
+                          'organization.day_start_time':
+                            drafts['organization.day_start_time'] ??
+                            settings.find((s) => s.key === 'organization.day_start_time')?.value,
+                          'organization.day_end_time':
+                            drafts['organization.day_end_time'] ??
+                            settings.find((s) => s.key === 'organization.day_end_time')?.value,
+                          'organization.half_day_end_time':
+                            drafts['organization.half_day_end_time'] ??
+                            settings.find((s) => s.key === 'organization.half_day_end_time')?.value,
+                          'organization.saturday_mode':
+                            drafts['organization.saturday_mode'] ??
+                            settings.find((s) => s.key === 'organization.saturday_mode')?.value,
+                          'organization.period_minutes':
+                            drafts['organization.period_minutes'] ??
+                            settings.find((s) => s.key === 'organization.period_minutes')?.value,
+                          'organization.break_minutes':
+                            drafts['organization.break_minutes'] ??
+                            settings.find((s) => s.key === 'organization.break_minutes')?.value,
+                          'organization.periods_per_day':
+                            drafts['organization.periods_per_day'] ??
+                            settings.find((s) => s.key === 'organization.periods_per_day')?.value,
+                          'organization.campus_code':
+                            drafts['organization.campus_code'] ??
+                            settings.find((s) => s.key === 'organization.campus_code')?.value,
+                          'organization.aishe_code':
+                            drafts['organization.aishe_code'] ??
+                            settings.find((s) => s.key === 'organization.aishe_code')?.value,
+                          'organization.campus_address':
+                            drafts['organization.campus_address'] ??
+                            settings.find((s) => s.key === 'organization.campus_address')?.value,
+                          'organization.campus_phone':
+                            drafts['organization.campus_phone'] ??
+                            settings.find((s) => s.key === 'organization.campus_phone')?.value,
+                          'organization.principal_title':
+                            drafts['organization.principal_title'] ??
+                            settings.find((s) => s.key === 'organization.principal_title')?.value,
+                          'general.company_name':
+                            drafts['general.company_name'] ??
+                            settings.find((s) => s.key === 'general.company_name')?.value ??
+                            DEFAULT_GENERAL_SETTINGS.companyName,
+                        }}
+                      />
                       <p className="text-[10px] text-muted-foreground">
                         Effective source: <code className="font-mono">{selected.source}</code>
                         {' · '}Default:{' '}

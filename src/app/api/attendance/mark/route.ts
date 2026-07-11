@@ -94,25 +94,36 @@ export async function POST(request: Request) {
 
     const systemConfig = await getSystemConfig();
 
-    const { getOrgSettings } = await import('@/lib/settings/org-config');
+    const { getOrgSettings, isOutsideCampusDayHours, getEffectiveDayEndTimeInZone } = await import(
+      '@/lib/settings/org-config'
+    );
+    const { evaluateAttendanceDay } = await import('@/lib/settings/attendance-day');
     const org = await getOrgSettings();
     if (org.holidayBlockAttendance) {
-      const sessionDay = new Date(`${attendanceSession.sessionDate}T12:00:00`);
-      const dayKey = attendanceSession.sessionDate;
-      const holiday = await db.calendarEvent.findFirst({
-        where: {
-          type: 'holiday',
-          startDate: { lte: dayKey },
-          OR: [{ endDate: null }, { endDate: { gte: dayKey } }],
-        },
-        select: { id: true, title: true },
-      });
-      if (holiday || !org.workingDays.includes(sessionDay.getDay())) {
+      const dayResult = await evaluateAttendanceDay(attendanceSession.sessionDate, org);
+      if (!dayResult.allowed) {
+        return NextResponse.json(
+          { error: dayResult.error || 'Attendance is blocked for this day (Organization settings).' },
+          { status: 403 },
+        );
+      }
+    }
+
+    const isSelfMark = SELF_MARK_METHODS.includes(method as (typeof SELF_MARK_METHODS)[number]);
+    if (org.enforceDayHours && isSelfMark) {
+      const { getGeneralSettings } = await import('@/lib/settings/general-config');
+      const general = await getGeneralSettings();
+      const timeZone = general.timezone || 'Asia/Kolkata';
+      const now = new Date();
+      if (isOutsideCampusDayHours(now, org, timeZone)) {
+        const effectiveEnd = getEffectiveDayEndTimeInZone(now, org, timeZone);
+        const halfNote =
+          org.saturdayMode === 'half' && effectiveEnd === org.halfDayEndTime
+            ? ' (half-day Saturday)'
+            : '';
         return NextResponse.json(
           {
-            error: holiday
-              ? `Attendance is blocked on holiday: ${holiday.title}`
-              : 'Attendance is blocked on non-working days (Organization settings).',
+            error: `Self-mark is only allowed during campus hours (${org.dayStartTime}–${effectiveEnd}${halfNote}, ${timeZone}).`,
           },
           { status: 403 },
         );

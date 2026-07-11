@@ -17,12 +17,21 @@ import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import {
   Building2, GraduationCap, BookOpen, Calendar, Database,
-  Plus, Pencil, Trash2, Loader2, Layers, Search, Rocket, Upload, Clock
+  Plus, Pencil, Trash2, Loader2, Layers, Search, Rocket, Upload, Clock, AlertTriangle,
 } from 'lucide-react';
 import { PublishSubjectDialog } from '@/components/lms/lms-dialogs';
-import { useState, useEffect } from 'react';
+import { useOrgSettings, useActiveAcademicYear } from '@/hooks/use-org-settings';
+import { useState, useEffect, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { DEFAULT_BRAND_PRIMARY } from '@/lib/brand-color';
+import { DEFAULT_ORG_SETTINGS } from '@/lib/settings/org-defaults';
+import {
+  defaultTimetableDayOfWeek,
+  formatTimetableDefaultsPreview,
+  suggestFirstPeriodTimes,
+  timetableDayOptions,
+  buildPeriodSchedule,
+} from '@/lib/settings/timetable-defaults';
 
 const NAVY = DEFAULT_BRAND_PRIMARY;
 
@@ -45,6 +54,10 @@ function useMasterMutation(key: string, method: string, path: string) {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [key] });
+      if (key === 'masters-academic-years') {
+        qc.invalidateQueries({ queryKey: ['platform-settings'] });
+        qc.invalidateQueries({ queryKey: ['calendar-events'] });
+      }
       toast({ title: 'Success', description: `${key.replace('masters-', '').replace(/-/g, ' ')} saved successfully` });
     },
     onError: (err: Error) => {
@@ -203,28 +216,133 @@ function DepartmentsTab({ departments, readOnly }: { departments: any[]; readOnl
 
 // ─── Academic Years Tab ──────────────────────────────────────────────────────
 
-function AcademicYearsTab({ academicYears, readOnly }: { academicYears: any[]; readOnly?: boolean }) {
+function AcademicYearsTab({
+  academicYears,
+  readOnly,
+  isSuperAdmin,
+}: {
+  academicYears: any[];
+  readOnly?: boolean;
+  isSuperAdmin?: boolean;
+}) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
-  const [form, setForm] = useState({ name: '', code: '', startDate: '', endDate: '', regulation: '', status: 'upcoming' });
+  const { data: orgSettings } = useOrgSettings();
+  const defaultRegulation = orgSettings?.defaultRegulation ?? DEFAULT_ORG_SETTINGS.defaultRegulation;
+  const lockCompleted = orgSettings?.lockCompletedAcademicYears ?? true;
+  const autoPromote = orgSettings?.autoPromoteAcademicYear ?? false;
+  const requireActive = orgSettings?.requireActiveAcademicYear ?? true;
+  const hasActiveYear = academicYears.some((ay: any) => ay.status === 'active');
+  const [form, setForm] = useState({
+    name: '',
+    code: '',
+    startDate: '',
+    endDate: '',
+    regulation: defaultRegulation,
+    status: 'upcoming',
+  });
 
   const createMut = useMasterMutation('masters-academic-years', 'POST', '/api/masters/academic-years');
   const updateMut = useMasterMutation('masters-academic-years', 'PUT', '/api/masters/academic-years');
   const deleteMut = useMasterMutation('masters-academic-years', 'DELETE', '/api/masters/academic-years');
 
-  const openNew = () => { setEditItem(null); setForm({ name: '', code: '', startDate: '', endDate: '', regulation: '', status: 'upcoming' }); setDialogOpen(true); };
-  const openEdit = (item: any) => { setEditItem(item); setForm({ name: item.name, code: item.code, startDate: item.startDate, endDate: item.endDate, regulation: item.regulation || '', status: item.status }); setDialogOpen(true); };
+  const isYearLocked = (ay: { status: string }) =>
+    lockCompleted && ay.status === 'completed' && !isSuperAdmin;
+
+  const openNew = () => {
+    setEditItem(null);
+    setForm({
+      name: '',
+      code: '',
+      startDate: '',
+      endDate: '',
+      regulation: defaultRegulation,
+      status: 'upcoming',
+    });
+    setDialogOpen(true);
+  };
+  const openEdit = (item: any) => {
+    if (isYearLocked(item)) {
+      toast({
+        title: 'Completed year locked',
+        description: 'Ask a Super Admin to edit completed academic years.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setEditItem(item);
+    setForm({
+      name: item.name,
+      code: item.code,
+      startDate: item.startDate,
+      endDate: item.endDate,
+      regulation: item.regulation || defaultRegulation,
+      status: item.status,
+    });
+    setDialogOpen(true);
+  };
   const handleSubmit = () => {
     if (editItem) updateMut.mutate({ id: editItem.id, ...form }, { onSuccess: () => setDialogOpen(false) });
     else createMut.mutate(form, { onSuccess: () => setDialogOpen(false) });
   };
 
+  const runPromote = async () => {
+    try {
+      const res = await fetch('/api/cron/academic-year-promote', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Promotion failed');
+      qc.invalidateQueries({ queryKey: ['masters-academic-years'] });
+      qc.invalidateQueries({ queryKey: ['platform-settings'] });
+      toast({
+        title: data.promoted?.length ? 'Academic year promoted' : 'No promotion needed',
+        description: data.message,
+      });
+    } catch (e) {
+      toast({
+        title: 'Promotion failed',
+        description: e instanceof Error ? e.message : 'Unknown error',
+        variant: 'destructive',
+      });
+    }
+  };
+
   return (
     <>
+      {requireActive && !hasActiveYear && (
+        <div className="mb-3 flex items-start gap-2 rounded-md border border-amber-300/80 bg-amber-50 px-3 py-2.5 text-xs text-amber-950 dark:bg-amber-950/30 dark:text-amber-100 dark:border-amber-700/60">
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-amber-600" />
+          <div>
+            <p className="font-medium">No active academic year — set one in Masters</p>
+            <p className="mt-0.5 text-amber-800/90 dark:text-amber-200/80">
+              Campus rules require an academic year marked Active. Edit a year and set status to Active (or add a new one).
+            </p>
+          </div>
+        </div>
+      )}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <div><CardTitle className="text-lg">Academic Years</CardTitle><CardDescription>Academic year configurations with regulation info</CardDescription></div>
-          {!readOnly && <Button size="sm" onClick={openNew} className="gap-1.5" style={{ backgroundColor: NAVY }}><Plus className="h-4 w-4" /> Add Academic Year</Button>}
+          <div>
+            <CardTitle className="text-lg">Academic Years</CardTitle>
+            <CardDescription>
+              Academic year configurations with regulation info
+              {lockCompleted ? ' · completed years locked' : ''}
+              {autoPromote ? ' · auto-promote On' : ''}
+            </CardDescription>
+          </div>
+          <div className="flex gap-2">
+            {isSuperAdmin && autoPromote && (
+              <Button size="sm" variant="outline" onClick={runPromote} className="gap-1.5 text-xs">
+                Run promote now
+              </Button>
+            )}
+            {!readOnly && (
+              <Button size="sm" onClick={openNew} className="gap-1.5" style={{ backgroundColor: NAVY }}>
+                <Plus className="h-4 w-4" /> Add Academic Year
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           <ScrollArea className="max-h-96">
@@ -233,25 +351,43 @@ function AcademicYearsTab({ academicYears, readOnly }: { academicYears: any[]; r
                 <TableRow><TableHead>Name</TableHead><TableHead>Code</TableHead><TableHead>Regulation</TableHead><TableHead>Start</TableHead><TableHead>End</TableHead><TableHead>Semesters</TableHead><TableHead>Status</TableHead>{!readOnly && <TableHead className="w-20">Actions</TableHead>}</TableRow>
               </TableHeader>
               <TableBody>
-                {academicYears.map((ay: any) => (
-                  <TableRow key={ay.id}>
+                {academicYears.map((ay: any) => {
+                  const locked = isYearLocked(ay);
+                  return (
+                  <TableRow key={ay.id} className={locked ? 'opacity-70' : undefined}>
                     <TableCell className="font-medium">{ay.name}</TableCell>
                     <TableCell className="font-mono text-sm">{ay.code}</TableCell>
                     <TableCell><Badge className="bg-brand text-white text-xs">{ay.regulation || 'N/A'}</Badge></TableCell>
                     <TableCell className="text-sm">{ay.startDate}</TableCell>
                     <TableCell className="text-sm">{ay.endDate}</TableCell>
                     <TableCell><Badge variant="secondary">{ay._count?.semesters || 0}</Badge></TableCell>
-                    <TableCell><Badge variant={ay.status === 'active' ? 'default' : ay.status === 'upcoming' ? 'secondary' : 'outline'} className="text-xs">{ay.status}</Badge></TableCell>
+                    <TableCell>
+                      <Badge variant={ay.status === 'active' ? 'default' : ay.status === 'upcoming' ? 'secondary' : 'outline'} className="text-xs">
+                        {ay.status}{locked ? ' · locked' : ''}
+                      </Badge>
+                    </TableCell>
                     {!readOnly && (
                       <TableCell>
                         <div className="flex items-center gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(ay)}><Pencil className="h-3.5 w-3.5" /></Button>
-                          <DeleteConfirm onConfirm={() => deleteMut.mutate({ id: ay.id })} isLoading={deleteMut.isPending} />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8"
+                            disabled={locked}
+                            title={locked ? 'Completed years are locked' : 'Edit'}
+                            onClick={() => openEdit(ay)}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          {!locked && (
+                            <DeleteConfirm onConfirm={() => deleteMut.mutate({ id: ay.id })} isLoading={deleteMut.isPending} />
+                          )}
                         </div>
                       </TableCell>
                     )}
                   </TableRow>
-                ))}
+                );
+                })}
               </TableBody>
             </Table>
           </ScrollArea>
@@ -263,7 +399,7 @@ function AcademicYearsTab({ academicYears, readOnly }: { academicYears: any[]; r
           <div><Label>Code</Label><Input value={form.code} onChange={e => setForm(f => ({ ...f, code: e.target.value }))} placeholder="AY2627" /></div>
           <div><Label>Start Date</Label><Input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))} /></div>
           <div><Label>End Date</Label><Input type="date" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} /></div>
-          <div><Label>Regulation</Label><Input value={form.regulation} onChange={e => setForm(f => ({ ...f, regulation: e.target.value }))} placeholder="R22" /></div>
+          <div><Label>Regulation</Label><Input value={form.regulation} onChange={e => setForm(f => ({ ...f, regulation: e.target.value }))} placeholder={defaultRegulation} /></div>
           <div><Label>Status</Label>
             <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v }))}>
               <SelectTrigger><SelectValue /></SelectTrigger>
@@ -584,9 +720,27 @@ function JntuImportDialog({ open, onOpenChange, departments, programs }: {
 
 // ─── Subjects Tab ────────────────────────────────────────────────────────────
 
-function SubjectsTab({ subjects, departments, semesters, programs, readOnly }: { subjects: any[]; departments: any[]; semesters: any[]; programs: { id: string; code: string; name: string; departmentId: string }[]; readOnly?: boolean }) {
+function SubjectsTab({
+  subjects,
+  departments,
+  semesters,
+  programs,
+  academicYears,
+  readOnly,
+}: {
+  subjects: any[];
+  departments: any[];
+  semesters: any[];
+  programs: { id: string; code: string; name: string; departmentId: string }[];
+  academicYears: any[];
+  readOnly?: boolean;
+}) {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const { data: orgSettings } = useOrgSettings();
+  const requireActive = orgSettings?.requireActiveAcademicYear ?? true;
+  const requireSemester = orgSettings?.requireSemesterForPublish ?? false;
+  const hasActiveYear = academicYears.some((ay: any) => ay.status === 'active');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
@@ -597,6 +751,39 @@ function SubjectsTab({ subjects, departments, semesters, programs, readOnly }: {
 
   const createMut = useMasterMutation('masters-subjects', 'POST', '/api/masters/subjects');
   const deleteMut = useMasterMutation('masters-subjects', 'DELETE', '/api/masters/subjects');
+
+  const openPublish = (s: any) => {
+    if (requireActive && !hasActiveYear) {
+      toast({
+        title: 'No active academic year',
+        description: 'Set an academic year to Active in Masters before publishing subjects to LMS.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (requireSemester) {
+      if (!s.semesterId) {
+        toast({
+          title: 'Semester required',
+          description: 'Link this subject to a semester under the active academic year before publishing.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      const sem = semesters.find((x: any) => x.id === s.semesterId);
+      const ay = academicYears.find((x: any) => x.id === sem?.academicYearId);
+      if (!ay || ay.status !== 'active') {
+        toast({
+          title: 'Active-year semester required',
+          description: 'Subject semester must belong to the active academic year.',
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+    setPublishSubject(s);
+    setPublishOpen(true);
+  };
 
   const openNew = () => { setEditItem(null); setForm({ code: '', name: '', departmentId: departments[0]?.id || '', semesterId: semesters[0]?.id || '', credits: '3', lectureHours: '3', tutorialHours: '0', labHours: '0', type: 'core', category: '', syllabus: '', textbooks: '', referenceBooks: '' }); setDialogOpen(true); };
   const openEdit = (item: any) => { setEditItem(item); setForm({ code: item.code, name: item.name, departmentId: item.departmentId, semesterId: item.semesterId || '', credits: String(item.credits), lectureHours: String(item.lectureHours), tutorialHours: String(item.tutorialHours), labHours: String(item.labHours), type: item.type, category: item.category || '', syllabus: item.syllabus || '', textbooks: item.textbooks || '', referenceBooks: item.referenceBooks || '' }); setDialogOpen(true); };
@@ -672,7 +859,7 @@ function SubjectsTab({ subjects, departments, semesters, programs, readOnly }: {
                     {!readOnly && (
                       <TableCell>
                         <div className="flex items-center gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8" title="Publish to LMS" onClick={() => { setPublishSubject(s); setPublishOpen(true); }}>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" title="Publish to LMS" onClick={() => openPublish(s)}>
                             <Rocket className="h-3.5 w-3.5 text-brand" />
                           </Button>
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(s)}><Pencil className="h-3.5 w-3.5" /></Button>
@@ -807,7 +994,7 @@ function ProgramsTab({ programs, departments, readOnly }: { programs: any[]; dep
   );
 }
 
-const TIMETABLE_DAYS = [
+const TIMETABLE_DAY_LABELS = [
   { value: '0', label: 'Sunday' },
   { value: '1', label: 'Monday' },
   { value: '2', label: 'Tuesday' },
@@ -818,11 +1005,34 @@ const TIMETABLE_DAYS = [
 ];
 
 function TimetableTab({ semesters, readOnly }: { semesters: any[]; readOnly?: boolean }) {
+  const { data: orgSettings } = useOrgSettings();
+  const { data: activeAcademicYear } = useActiveAcademicYear();
+  const dayOptions = useMemo(() => timetableDayOptions(orgSettings ?? DEFAULT_ORG_SETTINGS), [orgSettings]);
+  const periodHint = useMemo(
+    () => formatTimetableDefaultsPreview(orgSettings ?? DEFAULT_ORG_SETTINGS),
+    [orgSettings],
+  );
+  const periodBands = useMemo(() => buildPeriodSchedule(orgSettings ?? DEFAULT_ORG_SETTINGS), [orgSettings]);
+  const firstPeriod = useMemo(
+    () => suggestFirstPeriodTimes(orgSettings ?? DEFAULT_ORG_SETTINGS),
+    [orgSettings],
+  );
+  const defaultDay = defaultTimetableDayOfWeek(orgSettings ?? DEFAULT_ORG_SETTINGS);
+  const defaultAy = activeAcademicYear?.name ?? activeAcademicYear?.code ?? '';
+
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
   const [form, setForm] = useState({
-    courseId: '', semesterId: '', dayOfWeek: '1', startTime: '09:00', endTime: '10:00',
-    roomNumber: '', building: '', semester: '', academicYear: '2025-2026', isActive: true,
+    courseId: '',
+    semesterId: '',
+    dayOfWeek: defaultDay,
+    startTime: firstPeriod.startTime,
+    endTime: firstPeriod.endTime,
+    roomNumber: '',
+    building: '',
+    semester: '',
+    academicYear: defaultAy,
+    isActive: true,
   });
 
   const { data: coursesData } = useQuery({
@@ -842,10 +1052,19 @@ function TimetableTab({ semesters, readOnly }: { semesters: any[]; readOnly?: bo
   const deleteMut = useMasterMutation('masters-timetable-slots', 'DELETE', '/api/masters/timetable-slots');
 
   const openNew = () => {
+    const times = suggestFirstPeriodTimes(orgSettings ?? DEFAULT_ORG_SETTINGS);
     setEditItem(null);
     setForm({
-      courseId: courses[0]?.id || '', semesterId: '', dayOfWeek: '1', startTime: '09:00', endTime: '10:00',
-      roomNumber: '', building: '', semester: '', academicYear: '2025-2026', isActive: true,
+      courseId: courses[0]?.id || '',
+      semesterId: '',
+      dayOfWeek: defaultTimetableDayOfWeek(orgSettings ?? DEFAULT_ORG_SETTINGS),
+      startTime: times.startTime,
+      endTime: times.endTime,
+      roomNumber: '',
+      building: '',
+      semester: '',
+      academicYear: activeAcademicYear?.name ?? activeAcademicYear?.code ?? '',
+      isActive: true,
     });
     setDialogOpen(true);
   };
@@ -884,7 +1103,7 @@ function TimetableTab({ semesters, readOnly }: { semesters: any[]; readOnly?: bo
     else createMut.mutate(payload, { onSuccess: () => setDialogOpen(false) });
   };
 
-  const dayLabel = (d: number) => TIMETABLE_DAYS.find(x => x.value === String(d))?.label ?? String(d);
+  const dayLabel = (d: number) => TIMETABLE_DAY_LABELS.find(x => x.value === String(d))?.label ?? String(d);
 
   return (
     <>
@@ -892,9 +1111,15 @@ function TimetableTab({ semesters, readOnly }: { semesters: any[]; readOnly?: bo
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
           <div>
             <CardTitle className="text-lg">Timetable Slots</CardTitle>
-            <CardDescription>Weekly class schedule linked to courses — faculty configure theirs under Attendance → Weekly Timetable</CardDescription>
+            <CardDescription>
+              Weekly class schedule linked to courses — faculty configure theirs under Attendance → Weekly Timetable
+              {(orgSettings?.requireSemesterForPublish ?? false)
+                ? ' · semester under active year required'
+                : ''}
+            </CardDescription>
+            <p className="text-xs text-muted-foreground mt-1">{periodHint}</p>
             {!slotsLoading && slotsData?.total != null && (
-              <p className="text-xs text-muted-foreground mt-1">{slotsData.total} slot{slotsData.total !== 1 ? 's' : ''} total</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{slotsData.total} slot{slotsData.total !== 1 ? 's' : ''} total</p>
             )}
           </div>
           {!readOnly && (
@@ -960,7 +1185,7 @@ function TimetableTab({ semesters, readOnly }: { semesters: any[]; readOnly?: bo
       </Card>
       <FormDialog
         title={editItem ? 'Edit Timetable Slot' : 'Add Timetable Slot'}
-        description="Define when a course meets each week"
+        description={editItem ? 'Update when this course meets' : `Defaults from Organization: ${periodHint}`}
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         onSubmit={handleSubmit}
@@ -983,7 +1208,7 @@ function TimetableTab({ semesters, readOnly }: { semesters: any[]; readOnly?: bo
             <Select value={form.dayOfWeek} onValueChange={v => setForm(f => ({ ...f, dayOfWeek: v }))}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {TIMETABLE_DAYS.map(d => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}
+                {dayOptions.map(d => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -1001,6 +1226,25 @@ function TimetableTab({ semesters, readOnly }: { semesters: any[]; readOnly?: bo
           </div>
           <div><Label>Start time *</Label><Input type="time" value={form.startTime} onChange={e => setForm(f => ({ ...f, startTime: e.target.value }))} /></div>
           <div><Label>End time *</Label><Input type="time" value={form.endTime} onChange={e => setForm(f => ({ ...f, endTime: e.target.value }))} /></div>
+          {!editItem && periodBands.length > 0 && (
+            <div className="col-span-2">
+              <Label className="text-xs text-muted-foreground">Suggested periods</Label>
+              <div className="flex flex-wrap gap-1.5 mt-1.5">
+                {periodBands.map((band) => (
+                  <Button
+                    key={band.period}
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-[10px]"
+                    onClick={() => setForm((f) => ({ ...f, startTime: band.startTime, endTime: band.endTime }))}
+                  >
+                    P{band.period} {band.startTime}–{band.endTime}
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
           <div><Label>Building</Label><Input value={form.building} onChange={e => setForm(f => ({ ...f, building: e.target.value }))} placeholder="CSE Block" /></div>
           <div><Label>Room</Label><Input value={form.roomNumber} onChange={e => setForm(f => ({ ...f, roomNumber: e.target.value }))} placeholder="CSE-301" /></div>
           <div><Label>Semester label</Label><Input value={form.semester} onChange={e => setForm(f => ({ ...f, semester: e.target.value }))} placeholder="I-I" /></div>
@@ -1041,6 +1285,7 @@ export default function MastersSection() {
 
   const mastersReadOnly = useIsMastersReadOnly();
   const timetableReadOnly = !useCanManageTimetable();
+  const isSuperAdmin = currentUser?.role === 'super_admin';
 
   if (!currentUser) return null;
 
@@ -1094,9 +1339,9 @@ export default function MastersSection() {
           <TabsTrigger value="timetable" className="text-xs sm:text-sm gap-1"><Clock className="h-3 w-3 hidden sm:inline" />Timetable</TabsTrigger>
         </TabsList>
         <TabsContent value="departments" className="mt-4"><DepartmentsTab departments={departments} readOnly={mastersReadOnly} /></TabsContent>
-        <TabsContent value="academic-years" className="mt-4"><AcademicYearsTab academicYears={academicYears} readOnly={mastersReadOnly} /></TabsContent>
+        <TabsContent value="academic-years" className="mt-4"><AcademicYearsTab academicYears={academicYears} readOnly={mastersReadOnly} isSuperAdmin={isSuperAdmin} /></TabsContent>
         <TabsContent value="semesters" className="mt-4"><SemestersTab semesters={semesters} academicYears={academicYears} readOnly={mastersReadOnly} /></TabsContent>
-        <TabsContent value="subjects" className="mt-4"><SubjectsTab subjects={subjects} departments={departments} semesters={semesters} programs={programs} readOnly={mastersReadOnly} /></TabsContent>
+        <TabsContent value="subjects" className="mt-4"><SubjectsTab subjects={subjects} departments={departments} semesters={semesters} programs={programs} academicYears={academicYears} readOnly={mastersReadOnly} /></TabsContent>
         <TabsContent value="programs" className="mt-4"><ProgramsTab programs={programs} departments={departments} readOnly={mastersReadOnly} /></TabsContent>
         <TabsContent value="timetable" className="mt-4"><TimetableTab semesters={semesters} readOnly={timetableReadOnly} /></TabsContent>
       </Tabs>

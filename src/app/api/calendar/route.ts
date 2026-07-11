@@ -5,7 +5,9 @@ import { logAudit, getClientIp } from '@/lib/audit';
 import { enqueueAnchor } from '@/lib/knuct/anchor-service';
 import type { Role } from '@/lib/store';
 
-const PUBLIC_EVENT_TYPES = ['academic', 'exam', 'holiday', 'event', 'deadline', 'class'];
+import { PUBLIC_CALENDAR_EVENT_TYPES } from '@/lib/calendar-event-types';
+
+const PUBLIC_EVENT_TYPES: string[] = [...PUBLIC_CALENDAR_EVENT_TYPES];
 
 export async function GET(request: Request) {
   try {

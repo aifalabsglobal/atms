@@ -2,5 +2,11 @@
   "buildCommand": "npm run vercel-build",
   "installCommand": "npm ci",
   "framework": "nextjs",
-  "regions": ["bom1"]
+  "regions": ["bom1"],
+  "crons": [
+    {
+      "path": "/api/cron/academic-year-promote",
+      "schedule": "0 1 * * *"
+    }
+  ]
 }

@@ -13,10 +13,13 @@ import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { exportStaffReportCsv, exportStudentReportCsv } from '@/lib/report-export';
 import { exportStaffReportPdf, exportStudentReportPdf } from '@/lib/report-pdf';
-import { usePlatformSettings } from '@/hooks/use-platform-settings';
+import { buildReportBrand } from '@/lib/report-brand';
+import { usePlatformSettings, useOrgSettings, useActiveAcademicYear } from '@/hooks/use-platform-settings';
 import { DEFAULT_GENERAL_SETTINGS } from '@/lib/settings/general-defaults';
+import { DEFAULT_ORG_SETTINGS } from '@/lib/settings/org-defaults';
 import { DEFAULT_BRAND_PRIMARY } from '@/lib/brand-color';
 import { Button } from '@/components/ui/button';
+import { useMemo } from 'react';
 import {
   BarChart3, Users, BookOpen, ShieldAlert, TrendingUp, TrendingDown,
   FileText, Calendar, Clock, CheckCircle2, AlertTriangle, XCircle,
@@ -92,13 +95,14 @@ interface StudentReportData {
 
 function StudentReportView({ data }: { data: StudentReportData }) {
   const { data: platform } = usePlatformSettings();
+  const { data: organization } = useOrgSettings();
+  const { data: activeAcademicYear } = useActiveAcademicYear();
   const general = platform ?? DEFAULT_GENERAL_SETTINGS;
-  const pdfBrand = {
-    appName: general.appName,
-    companyName: general.companyName,
-    locale: general.locale,
-    brandingPrimaryColor: general.brandingPrimaryColor,
-  };
+  const reportBrand = useMemo(
+    () => buildReportBrand(general, organization ?? DEFAULT_ORG_SETTINGS, activeAcademicYear),
+    [general, organization, activeAcademicYear],
+  );
+  const ayBadge = reportBrand.academicYearLabel ?? 'Academic year';
   const { student, enrolledCourses, attendance, assignments, quizzes, grades, violations, riskStatus } = data;
   const thresholds = data.thresholds ?? FALLBACK_THRESHOLDS;
   const isWardView = !!data.isParent;
@@ -152,7 +156,7 @@ function StudentReportView({ data }: { data: StudentReportData }) {
             variant="outline"
             size="sm"
             className="gap-1.5"
-            onClick={() => exportStudentReportCsv(data)}
+            onClick={() => exportStudentReportCsv(data, reportBrand)}
           >
             <Download className="h-3.5 w-3.5" /> Export CSV
           </Button>
@@ -160,12 +164,12 @@ function StudentReportView({ data }: { data: StudentReportData }) {
             variant="outline"
             size="sm"
             className="gap-1.5"
-            onClick={() => exportStudentReportPdf(data, pdfBrand)}
+            onClick={() => exportStudentReportPdf(data, reportBrand)}
           >
             <FileText className="h-3.5 w-3.5" /> Export PDF
           </Button>
           <Badge className={cn('text-[10px]', riskBadge.className)}>{riskBadge.label}</Badge>
-          <Badge variant="outline" className="gap-1"><Calendar className="h-3 w-3" /> Academic Year 2025-26</Badge>
+          <Badge variant="outline" className="gap-1"><Calendar className="h-3 w-3" /> {ayBadge}</Badge>
           <Badge variant="outline" className="gap-1"><BookOpen className="h-3 w-3" /> {enrolledCourses.length} Courses</Badge>
         </div>
       </div>
@@ -883,13 +887,14 @@ interface StaffReportData {
 
 function StaffAnalyticsView({ data }: { data: StaffReportData }) {
   const { data: platform } = usePlatformSettings();
+  const { data: organization } = useOrgSettings();
+  const { data: activeAcademicYear } = useActiveAcademicYear();
   const general = platform ?? DEFAULT_GENERAL_SETTINGS;
-  const pdfBrand = {
-    appName: general.appName,
-    companyName: general.companyName,
-    locale: general.locale,
-    brandingPrimaryColor: general.brandingPrimaryColor,
-  };
+  const reportBrand = useMemo(
+    () => buildReportBrand(general, organization ?? DEFAULT_ORG_SETTINGS, activeAcademicYear),
+    [general, organization, activeAcademicYear],
+  );
+  const ayBadge = reportBrand.academicYearLabel ?? 'Academic year';
   const thresholds = data.thresholds ?? FALLBACK_THRESHOLDS;
   const {
     kpis, weeklyAttendanceTrend, departmentAnalytics, atRiskStudents, topPerformers,
@@ -944,7 +949,7 @@ function StaffAnalyticsView({ data }: { data: StaffReportData }) {
               atRiskStudents: data.atRiskStudents,
               studentAttendanceReport: data.studentAttendanceReport,
               lmsEngagement: { topCourses: data.lmsEngagement.topCourses },
-            })}
+            }, reportBrand)}
           >
             <Download className="h-3.5 w-3.5" /> Export CSV
           </Button>
@@ -960,12 +965,12 @@ function StaffAnalyticsView({ data }: { data: StaffReportData }) {
               departmentAnalytics: data.departmentAnalytics,
               atRiskStudents: data.atRiskStudents,
               lmsEngagement: { topCourses: data.lmsEngagement.topCourses },
-            }, pdfBrand)}
+            }, reportBrand)}
           >
             <FileText className="h-3.5 w-3.5" /> Export PDF
           </Button>
           <Badge className="bg-brand text-white">{scopeLabel}</Badge>
-          <Badge variant="outline" className="gap-1"><Calendar className="h-3 w-3" /> AY 2025-26</Badge>
+          <Badge variant="outline" className="gap-1"><Calendar className="h-3 w-3" /> {ayBadge}</Badge>
         </div>
       </div>
 
