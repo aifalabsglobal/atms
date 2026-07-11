@@ -11,7 +11,7 @@ import {
   LayoutDashboard, ScanLine, BookOpen, Users, ShieldAlert,
   BarChart3, MapPin, Settings, Menu, X, Bell, ChevronDown,
   LogOut, Moon, Sun, Search, Shield, UserCircle,
-  Database, CalendarDays, Loader2,
+  CalendarDays, Loader2,
 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
@@ -51,12 +51,10 @@ const ViolationsSection = dynamic(() => import('@/components/sections/violations
 const ReportsSection = dynamic(() => import('@/components/sections/reports-section'), { loading: SectionFallback });
 const GeofencesSection = dynamic(() => import('@/components/sections/geofences-section'), { loading: SectionFallback });
 const SettingsSection = dynamic(() => import('@/components/sections/settings-section'), { loading: SectionFallback });
-const MastersSection = dynamic(() => import('@/components/sections/masters-section'), { loading: SectionFallback });
 const CalendarSection = dynamic(() => import('@/components/sections/calendar-section'), { loading: SectionFallback });
 
 const allNavItems: { id: Section; label: string; icon: React.ElementType }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'masters', label: 'Masters', icon: Database },
   { id: 'attendance', label: 'Attendance', icon: ScanLine },
   { id: 'lms', label: 'Learning Mgmt', icon: BookOpen },
   { id: 'users', label: 'Users & RBAC', icon: Users },
@@ -80,7 +78,7 @@ function AppContent() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { status } = useSession();
-  const { activeSection, setActiveSection, sidebarOpen, setSidebarOpen, currentUser, roleSwitching } = useAppStore();
+  const { activeSection, setActiveSection, setSectionContext, sidebarOpen, setSidebarOpen, currentUser, roleSwitching } = useAppStore();
   const { theme, setTheme } = useTheme();
   const allowedSections = useEffectiveSections();
   const { data: platformGeneral } = usePlatformSettings(status === 'authenticated');
@@ -117,6 +115,14 @@ function AppContent() {
     refetchInterval: 3 * 60 * 1000,
   });
 
+  // Masters is tenant catalog config — only under Administration (not main nav).
+  useEffect(() => {
+    if (activeSection === 'masters') {
+      setActiveSection('settings');
+      setSectionContext({ settingsTab: 'masters' });
+    }
+  }, [activeSection, setActiveSection, setSectionContext]);
+
   if (roleSwitching) {
     return <LoadingScreen message={`Switching to ${roleSwitching}…`} />;
   }
@@ -127,6 +133,8 @@ function AppContent() {
 
   const role = currentUser.role;
   const canAccessSettings = allowedSections.includes('settings');
+  const canAccessMasters = allowedSections.includes('masters');
+  const showAdministration = canAccessSettings || canAccessMasters;
   const isDemoUser = DEMO_ACCOUNTS.some((a) => a.email === currentUser.email);
 
   async function markNotificationsRead(ids?: string[]) {
@@ -140,8 +148,16 @@ function AppContent() {
     }
   }
   const allowedSectionsNav = allowedSections;
-  const navItems = allNavItems.filter((item) => allowedSectionsNav.includes(item.id));
-  const safeSection = allowedSectionsNav.includes(activeSection) ? activeSection : 'dashboard';
+  const navItems = allNavItems.filter((item) => {
+    if (item.id === 'settings') return showAdministration;
+    return allowedSectionsNav.includes(item.id);
+  });
+  const safeSection = (() => {
+    if (activeSection === 'masters') return 'settings';
+    if (activeSection === 'settings' && showAdministration) return 'settings';
+    if (allowedSectionsNav.includes(activeSection)) return activeSection;
+    return 'dashboard';
+  })();
 
   const unreadCount = notifData?.unreadCount ?? 0;
   const pendingViolations = violationsData?.total ?? 0;
@@ -156,7 +172,6 @@ function AppContent() {
       case 'reports': return <ReportsSection />;
       case 'geofences': return <GeofencesSection />;
       case 'calendar': return <CalendarSection />;
-      case 'masters': return <MastersSection />;
       case 'settings': return <SettingsSection />;
       default: return <DashboardSection />;
     }

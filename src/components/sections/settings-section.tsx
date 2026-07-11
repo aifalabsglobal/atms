@@ -24,6 +24,7 @@ import { KnuctCredentialsPanel } from '@/components/knuct/knuct-credentials-pane
 import { MfaSettingsPanel } from '@/components/settings/mfa-settings-panel';
 import { SettingsWorkspace } from '@/components/administration/settings-workspace';
 import { UserAccountsPanel } from '@/components/users/user-accounts-panel';
+import MastersSection from '@/components/sections/masters-section';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAppStore, ROLE_LABELS, useRoleSections, useSectionAccess, type Role, type Section, type SectionContext } from '@/lib/store';
 import { ALL_ROLES, DEFAULT_ROLE_SECTIONS } from '@/lib/rbac-defaults';
@@ -60,7 +61,7 @@ const roleColors: Record<Role, string> = {
 
 const navModules: { section: Section; name: string }[] = [
   { section: 'dashboard', name: 'Dashboard' },
-  { section: 'masters', name: 'Masters' },
+  { section: 'masters', name: 'Masters (Administration)' },
   { section: 'attendance', name: 'Attendance' },
   { section: 'lms', name: 'Learning Mgmt' },
   { section: 'users', name: 'Users & RBAC' },
@@ -312,13 +313,17 @@ function UserRbacOverridesPanel({ isSuperAdmin }: { isSuperAdmin: boolean }) {
 
 
 function SuperAdminControlCenter({ onNavigate }: { onNavigate: (section: Section, ctx?: SectionContext) => void }) {
-  const modules: { section: Section; label: string; description: string; icon: typeof Shield }[] = [
-    { section: 'masters', label: 'Masters', description: 'Departments, programs, subjects, academic years', icon: Building2 },
+  /** Tenant-specific catalog & admin modules — opened inside Administration, not main nav. */
+  const tenantModules: { settingsTab?: string; section?: Section; label: string; description: string; icon: typeof Shield }[] = [
+    { settingsTab: 'masters', label: 'Masters', description: 'Departments, programs, subjects, academic years (tenant catalog)', icon: Building2 },
     { section: 'users', label: 'Users & RBAC', description: 'Directory, roles, wallets', icon: Users },
-    { section: 'attendance', label: 'Attendance', description: 'Sessions, timetable, capture rules', icon: Clock },
-    { section: 'lms', label: 'Learning', description: 'Courses, assignments, quizzes', icon: BookOpen },
     { section: 'geofences', label: 'Geofences', description: 'Campus zones and location rules', icon: MapPinned },
     { section: 'calendar', label: 'Calendar', description: 'Academic events and holidays', icon: CalendarDays },
+  ];
+
+  const operationalModules: { section: Section; label: string; description: string; icon: typeof Shield }[] = [
+    { section: 'attendance', label: 'Attendance', description: 'Sessions, timetable, capture rules', icon: Clock },
+    { section: 'lms', label: 'Learning', description: 'Courses, assignments, quizzes', icon: BookOpen },
     { section: 'violations', label: 'Violations', description: 'Policy breaches and actions', icon: Shield },
     { section: 'reports', label: 'Reports', description: 'Analytics and exports', icon: BarChart3 },
   ];
@@ -338,14 +343,40 @@ function SuperAdminControlCenter({ onNavigate }: { onNavigate: (section: Section
           Super Admin — full campus control
         </CardTitle>
         <CardDescription>
-          You can configure every module, create all user roles (teachers, students, staff), edit system policy, RBAC, and Knuct integration from Settings.
+          Tenant catalog (Masters) and platform settings stay under Administration. Day-to-day modules remain in the sidebar.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div>
-          <p className="text-xs font-medium text-muted-foreground mb-2">Campus modules</p>
+          <p className="text-xs font-medium text-muted-foreground mb-2">Tenant administration</p>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            {modules.map((mod) => {
+            {tenantModules.map((mod) => {
+              const Icon = mod.icon;
+              const key = mod.settingsTab ?? mod.section!;
+              return (
+                <Button
+                  key={key}
+                  variant="outline"
+                  className="h-auto flex-col items-start gap-1 p-3 text-left whitespace-normal border-brand/30"
+                  onClick={() => {
+                    if (mod.settingsTab) onNavigate('settings', { settingsTab: mod.settingsTab });
+                    else if (mod.section) onNavigate(mod.section);
+                  }}
+                >
+                  <span className="flex items-center gap-2 font-medium text-sm">
+                    <Icon className="h-4 w-4 text-brand shrink-0" />
+                    {mod.label}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground font-normal leading-snug">{mod.description}</span>
+                </Button>
+              );
+            })}
+          </div>
+        </div>
+        <div>
+          <p className="text-xs font-medium text-muted-foreground mb-2">Operational modules</p>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {operationalModules.map((mod) => {
               const Icon = mod.icon;
               return (
                 <Button
@@ -395,12 +426,13 @@ export default function SettingsSection() {
   const { currentUser, setRoleSections, navigateToSection, sectionContext, setSectionContext } = useAppStore();
   const liveRoleSections = useRoleSections();
   const hasSettingsAccess = useSectionAccess('settings');
+  const hasMastersAccess = useSectionAccess('masters');
   const isAdmin = currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
   const isSuperAdmin = currentUser?.role === 'super_admin';
   const showSettingsAdminTabs = hasSettingsAccess && isAdmin;
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [activeTab, setActiveTab] = useState('config');
+  const [activeTab, setActiveTab] = useState(() => (hasMastersAccess && !hasSettingsAccess ? 'masters' : 'config'));
 
   useEffect(() => {
     if (sectionContext?.settingsTab) {
@@ -408,6 +440,12 @@ export default function SettingsSection() {
       setSectionContext(null);
     }
   }, [sectionContext?.settingsTab, setSectionContext]);
+
+  useEffect(() => {
+    if (!hasSettingsAccess && hasMastersAccess && activeTab !== 'masters') {
+      setActiveTab('masters');
+    }
+  }, [hasSettingsAccess, hasMastersAccess, activeTab]);
 
   const { data: configData } = useQuery<SystemConfigResponse>({
     queryKey: ['system-config'],
@@ -614,8 +652,10 @@ export default function SettingsSection() {
         <h1 className="text-2xl font-bold text-brand">Administration</h1>
         <p className="text-sm text-muted-foreground mt-1">
           {isSuperAdmin
-            ? 'Platform settings, users, roles, integrations, and campus modules.'
-            : 'System settings, RBAC matrix, and integrations'}
+            ? 'Tenant catalog (Masters), platform settings, users, roles, and integrations.'
+            : hasMastersAccess && !hasSettingsAccess
+              ? 'Academic masters catalog for your campus tenant.'
+              : 'System settings, RBAC matrix, and integrations'}
         </p>
       </div>
 
@@ -625,22 +665,44 @@ export default function SettingsSection() {
         <TabsList
           className={cn(
             'grid w-full max-w-4xl h-auto',
-            isSuperAdmin ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6' : showSettingsAdminTabs ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5' : 'grid-cols-3',
+            isSuperAdmin
+              ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-7'
+              : showSettingsAdminTabs
+                ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6'
+                : hasMastersAccess && hasSettingsAccess
+                  ? 'grid-cols-4'
+                  : hasMastersAccess
+                    ? 'grid-cols-1'
+                    : 'grid-cols-3',
           )}
         >
-          <TabsTrigger value="config">Settings</TabsTrigger>
-          <TabsTrigger value="rbac">RBAC Matrix</TabsTrigger>
+          {hasMastersAccess && (
+            <TabsTrigger value="masters" className="gap-1.5">
+              <Building2 className="h-3.5 w-3.5" />
+              Masters
+            </TabsTrigger>
+          )}
+          {hasSettingsAccess && <TabsTrigger value="config">Settings</TabsTrigger>}
+          {hasSettingsAccess && <TabsTrigger value="rbac">RBAC Matrix</TabsTrigger>}
           {isSuperAdmin && <TabsTrigger value="users">User Accounts</TabsTrigger>}
           {showSettingsAdminTabs && <TabsTrigger value="knuct">Knuct</TabsTrigger>}
           {showSettingsAdminTabs && <TabsTrigger value="audit">Audit Log</TabsTrigger>}
-          <TabsTrigger value="notifications">Notifications</TabsTrigger>
+          {hasSettingsAccess && <TabsTrigger value="notifications">Notifications</TabsTrigger>}
         </TabsList>
 
+        {hasMastersAccess && (
+          <TabsContent value="masters" className="space-y-4">
+            <MastersSection />
+          </TabsContent>
+        )}
+
         {/* System Configuration */}
+        {hasSettingsAccess && (
         <TabsContent value="config" className="space-y-4">
           <SettingsWorkspace isSuperAdmin={isSuperAdmin} />
           <MfaSettingsPanel />
         </TabsContent>
+        )}
 
         {/* RBAC Permission Matrix */}
         <TabsContent value="rbac" className="space-y-4">

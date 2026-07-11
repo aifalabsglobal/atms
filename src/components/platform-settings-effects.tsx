@@ -16,13 +16,25 @@ export function PlatformSettingsEffects({
   allowedSections: Section[];
   role: string;
 }) {
-  const { setActiveSection } = useAppStore();
+  const { setActiveSection, setSectionContext } = useAppStore();
   const lastLanding = useRef<string | null>(null);
 
   useEffect(() => {
     const target = general.landingSection;
     if (!target || target === 'dashboard') {
       lastLanding.current = target || 'dashboard';
+      return;
+    }
+    // Masters lives under Administration (tenant catalog).
+    if (target === 'masters') {
+      if (!allowedSections.includes('masters') && !allowedSections.includes('settings')) {
+        lastLanding.current = target;
+        return;
+      }
+      if (lastLanding.current === target) return;
+      lastLanding.current = target;
+      setSectionContext({ settingsTab: 'masters' });
+      setActiveSection('settings');
       return;
     }
     if (!allowedSections.includes(target)) {
@@ -33,7 +45,7 @@ export function PlatformSettingsEffects({
     if (lastLanding.current === target) return;
     lastLanding.current = target;
     setActiveSection(target);
-  }, [general.landingSection, allowedSections, setActiveSection]);
+  }, [general.landingSection, allowedSections, setActiveSection, setSectionContext]);
 
   useEffect(() => {
     const minutes = general.sessionTimeoutMinutes;

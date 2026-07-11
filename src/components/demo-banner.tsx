@@ -9,9 +9,9 @@ import { DEMO_ACCOUNTS } from '@/lib/demo-accounts';
 import { useAppStore, type Section } from '@/lib/store';
 import { cn } from '@/lib/utils';
 
-const QUICK_STEPS: { label: string; section: Section; sub?: string; icon: React.ElementType }[] = [
+const QUICK_STEPS: { label: string; section: Section; sub?: string; settingsTab?: string; icon: React.ElementType }[] = [
   { label: 'Dashboard', section: 'dashboard', icon: LayoutDashboard },
-  { label: 'Import Masters', section: 'masters', icon: Database },
+  { label: 'Import Masters', section: 'settings', settingsTab: 'masters', icon: Database },
   { label: 'Coding Practice', section: 'lms', sub: 'quizzes', icon: Code2 },
   { label: 'Reports', section: 'reports', icon: BookOpen },
 ];
@@ -62,7 +62,9 @@ export function DemoBanner() {
               size="sm"
               className="h-7 text-[10px] gap-1 px-2"
               onClick={() => {
-                if (step.sub === 'quizzes') {
+                if (step.settingsTab) {
+                  navigateToSection(step.section, { settingsTab: step.settingsTab });
+                } else if (step.sub === 'quizzes') {
                   navigateToSection(step.section, { lmsTab: 'quizzes' });
                 } else {
                   navigateToSection(step.section);

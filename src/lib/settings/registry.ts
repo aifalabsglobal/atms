@@ -236,7 +236,7 @@ const defs: SettingDefinition[] = [
       ],
       optionLabels: {
         dashboard: 'Dashboard',
-        masters: 'Masters (academic catalog)',
+        masters: 'Administration → Masters (academic catalog)',
         attendance: 'Attendance',
         lms: 'Learning Management',
         users: 'Users & RBAC',
