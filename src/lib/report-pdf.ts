@@ -1,39 +1,58 @@
 import type { StudentExportData, StaffExportData } from '@/lib/report-export';
+import { BRAND } from '@/lib/branding';
 import { jsPDF } from 'jspdf';
+
+export type ReportPdfBrand = {
+  appName?: string;
+  companyName?: string;
+  locale?: string;
+};
+
+function brandLabel(brand?: ReportPdfBrand) {
+  return brand?.appName?.trim() || BRAND.name;
+}
 
 function downloadPdfBlob(filename: string, doc: jsPDF) {
   doc.save(filename);
 }
 
-function addFooter(doc: jsPDF, page: number) {
+function addFooter(doc: jsPDF, page: number, brand?: ReportPdfBrand) {
   const h = doc.internal.pageSize.getHeight();
   doc.setFontSize(8);
   doc.setTextColor(120);
-  doc.text(`AIMSCS · page ${page}`, 14, h - 8);
+  doc.text(`${brandLabel(brand)} · page ${page}`, 14, h - 8);
   doc.setTextColor(0);
 }
 
-function ensureSpace(doc: jsPDF, y: number, needed: number, pageRef: { n: number }): number {
+function ensureSpace(
+  doc: jsPDF,
+  y: number,
+  needed: number,
+  pageRef: { n: number },
+  brand?: ReportPdfBrand,
+): number {
   const h = doc.internal.pageSize.getHeight();
   if (y + needed < h - 16) return y;
-  addFooter(doc, pageRef.n);
+  addFooter(doc, pageRef.n, brand);
   doc.addPage();
   pageRef.n += 1;
   return 18;
 }
 
-export function exportStudentReportPdf(data: StudentExportData) {
+export function exportStudentReportPdf(data: StudentExportData, brand?: ReportPdfBrand) {
   const doc = new jsPDF();
   const page = { n: 1 };
   let y = 18;
+  const name = brandLabel(brand);
+  const locale = brand?.locale || 'en-IN';
 
   doc.setFontSize(16);
   doc.setTextColor(26, 60, 110);
-  doc.text('AIMSCS — Student Report', 14, y);
+  doc.text(`${name} — Student Report`, 14, y);
   y += 8;
   doc.setFontSize(10);
   doc.setTextColor(80);
-  doc.text(`Generated ${new Date().toLocaleString('en-IN')}`, 14, y);
+  doc.text(`Generated ${new Date().toLocaleString(locale)}`, 14, y);
   y += 10;
 
   doc.setTextColor(0);
@@ -45,6 +64,10 @@ export function exportStudentReportPdf(data: StudentExportData) {
   y += 5;
   doc.text(`ID: ${data.student.employeeId ?? '—'} · Dept: ${data.student.department ?? '—'}`, 14, y);
   y += 5;
+  if (brand?.companyName) {
+    doc.text(brand.companyName, 14, y);
+    y += 5;
+  }
   if (data.riskStatus) {
     doc.text(`Risk: ${data.riskStatus}`, 14, y);
     y += 8;
@@ -70,13 +93,13 @@ export function exportStudentReportPdf(data: StudentExportData) {
   y += 6;
   doc.setFontSize(9);
   for (const c of data.attendance.courseAttendance.slice(0, 20)) {
-    y = ensureSpace(doc, y, 6, page);
+    y = ensureSpace(doc, y, 6, page, brand);
     doc.text(`${c.course.code} — ${c.course.name}: ${c.percentage}% (${c.present}/${c.total})`, 14, y);
     y += 5;
   }
 
   y += 4;
-  y = ensureSpace(doc, y, 30, page);
+  y = ensureSpace(doc, y, 30, page, brand);
   doc.setFontSize(11);
   doc.setTextColor(26, 60, 110);
   doc.text('Academics', 14, y);
@@ -105,7 +128,7 @@ export function exportStudentReportPdf(data: StudentExportData) {
   y += 8;
 
   if (data.violations.length > 0) {
-    y = ensureSpace(doc, y, 20, page);
+    y = ensureSpace(doc, y, 20, page, brand);
     doc.setFontSize(11);
     doc.setTextColor(26, 60, 110);
     doc.text('Violations', 14, y);
@@ -113,29 +136,31 @@ export function exportStudentReportPdf(data: StudentExportData) {
     doc.setFontSize(9);
     doc.setTextColor(0);
     for (const v of data.violations.slice(0, 15)) {
-      y = ensureSpace(doc, y, 5, page);
+      y = ensureSpace(doc, y, 5, page, brand);
       doc.text(`${v.type} · ${v.severity} · ${v.reviewStatus}`, 14, y);
       y += 5;
     }
   }
 
-  addFooter(doc, page.n);
+  addFooter(doc, page.n, brand);
   const slug = data.student.employeeId || data.student.name.split(' ')[0];
   downloadPdfBlob(`student-report-${slug}-${new Date().toISOString().slice(0, 10)}.pdf`, doc);
 }
 
-export function exportStaffReportPdf(data: StaffExportData) {
+export function exportStaffReportPdf(data: StaffExportData, brand?: ReportPdfBrand) {
   const doc = new jsPDF();
   const page = { n: 1 };
   let y = 18;
+  const name = brandLabel(brand);
+  const locale = brand?.locale || 'en-IN';
 
   doc.setFontSize(16);
   doc.setTextColor(26, 60, 110);
-  doc.text('AIMSCS — Analytics Report', 14, y);
+  doc.text(`${name} — Analytics Report`, 14, y);
   y += 8;
   doc.setFontSize(10);
   doc.setTextColor(80);
-  doc.text(`${data.scopeLabel} · ${new Date().toLocaleString('en-IN')}`, 14, y);
+  doc.text(`${data.scopeLabel} · ${new Date().toLocaleString(locale)}`, 14, y);
   y += 10;
 
   doc.setFontSize(12);
@@ -156,7 +181,7 @@ export function exportStaffReportPdf(data: StaffExportData) {
   y += 4;
 
   if (data.weeklyAttendanceTrend.length > 0) {
-    y = ensureSpace(doc, y, 20, page);
+    y = ensureSpace(doc, y, 20, page, brand);
     doc.setFontSize(11);
     doc.setTextColor(26, 60, 110);
     doc.text('Weekly attendance trend', 14, y);
@@ -164,7 +189,7 @@ export function exportStaffReportPdf(data: StaffExportData) {
     doc.setFontSize(9);
     doc.setTextColor(0);
     for (const w of data.weeklyAttendanceTrend) {
-      y = ensureSpace(doc, y, 5, page);
+      y = ensureSpace(doc, y, 5, page, brand);
       doc.text(`${w.week}: ${w.rate}% (P${w.present}/A${w.absent}/L${w.late})`, 14, y);
       y += 5;
     }
@@ -172,7 +197,7 @@ export function exportStaffReportPdf(data: StaffExportData) {
   }
 
   if (data.departmentAnalytics.length > 0) {
-    y = ensureSpace(doc, y, 20, page);
+    y = ensureSpace(doc, y, 20, page, brand);
     doc.setFontSize(11);
     doc.setTextColor(26, 60, 110);
     doc.text('Department breakdown', 14, y);
@@ -180,7 +205,7 @@ export function exportStaffReportPdf(data: StaffExportData) {
     doc.setFontSize(9);
     doc.setTextColor(0);
     for (const d of data.departmentAnalytics) {
-      y = ensureSpace(doc, y, 5, page);
+      y = ensureSpace(doc, y, 5, page, brand);
       doc.text(`${d.department}: ${d.students} students · avg ${d.avgAttendance}% · at risk ${d.atRisk}`, 14, y);
       y += 5;
     }
@@ -188,7 +213,7 @@ export function exportStaffReportPdf(data: StaffExportData) {
   }
 
   if (data.atRiskStudents.length > 0) {
-    y = ensureSpace(doc, y, 20, page);
+    y = ensureSpace(doc, y, 20, page, brand);
     doc.setFontSize(11);
     doc.setTextColor(26, 60, 110);
     doc.text('At-risk students', 14, y);
@@ -196,7 +221,7 @@ export function exportStaffReportPdf(data: StaffExportData) {
     doc.setFontSize(9);
     doc.setTextColor(0);
     for (const s of data.atRiskStudents.slice(0, 25)) {
-      y = ensureSpace(doc, y, 5, page);
+      y = ensureSpace(doc, y, 5, page, brand);
       doc.text(
         `${s.name} (${s.employeeId ?? '—'}) · ${s.department ?? '—'} · ${s.stats.percentage}% / ${s.stats.total} sessions`,
         14,
@@ -208,7 +233,7 @@ export function exportStaffReportPdf(data: StaffExportData) {
   }
 
   if (data.lmsEngagement.topCourses.length > 0) {
-    y = ensureSpace(doc, y, 20, page);
+    y = ensureSpace(doc, y, 20, page, brand);
     doc.setFontSize(11);
     doc.setTextColor(26, 60, 110);
     doc.text('Top courses', 14, y);
@@ -216,13 +241,13 @@ export function exportStaffReportPdf(data: StaffExportData) {
     doc.setFontSize(9);
     doc.setTextColor(0);
     for (const c of data.lmsEngagement.topCourses) {
-      y = ensureSpace(doc, y, 5, page);
+      y = ensureSpace(doc, y, 5, page, brand);
       doc.text(`${c.code} — ${c.name}: ${c.enrollments} enrolled · avg grade ${c.avgGrade ?? '—'}%`, 14, y);
       y += 5;
     }
   }
 
-  addFooter(doc, page.n);
+  addFooter(doc, page.n, brand);
   const scopeSlug = data.analyticsScope.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
   downloadPdfBlob(`analytics-${scopeSlug}-${new Date().toISOString().slice(0, 10)}.pdf`, doc);
 }

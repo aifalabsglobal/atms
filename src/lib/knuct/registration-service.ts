@@ -36,7 +36,9 @@ export async function assertDidAvailableForRegistration(did: string): Promise<st
 export async function validateRegistrationProfile(profile: RegistrationProfile) {
   const email = profile.email.trim().toLowerCase();
   const name = profile.name.trim();
-  const requestedRole = profile.requestedRole?.trim() || 'student';
+  const { getAuthSettings } = await import('@/lib/settings/auth-config');
+  const authSettings = await getAuthSettings();
+  const requestedRole = profile.requestedRole?.trim() || authSettings.defaultRole || 'student';
 
   if (!email || !name) {
     throw new Error('Name and email are required.');
@@ -261,11 +263,14 @@ export async function approveRegistrationRequest(params: {
     registrationRequestId: request.id,
   }).catch(() => null);
 
-  const { notifyRegistrationApproved } = await import('@/lib/notifications');
-  await notifyRegistrationApproved(user.id, assignedRole);
-
-  const { sendRegistrationApprovedEmail } = await import('@/lib/email');
-  await sendRegistrationApprovedEmail(user.email, user.name, assignedRole);
+  const { getGlobalBoolean } = await import('@/lib/settings');
+  const notifyOutcome = await getGlobalBoolean('notifications.registration_outcome', true);
+  if (notifyOutcome) {
+    const { notifyRegistrationApproved } = await import('@/lib/notifications');
+    await notifyRegistrationApproved(user.id, assignedRole);
+    const { sendRegistrationApprovedEmail } = await import('@/lib/email');
+    await sendRegistrationApprovedEmail(user.email, user.name, assignedRole);
+  }
 
   return user;
 }
@@ -302,6 +307,10 @@ export async function rejectRegistrationRequest(params: {
   });
 
   const reason = params.reason?.trim() || 'Rejected by administrator';
-  const { sendRegistrationRejectedEmail } = await import('@/lib/email');
-  await sendRegistrationRejectedEmail(request.email, request.name, reason);
+  const { getGlobalBoolean } = await import('@/lib/settings');
+  const notifyOutcome = await getGlobalBoolean('notifications.registration_outcome', true);
+  if (notifyOutcome) {
+    const { sendRegistrationRejectedEmail } = await import('@/lib/email');
+    await sendRegistrationRejectedEmail(request.email, request.name, reason);
+  }
 }

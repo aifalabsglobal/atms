@@ -90,6 +90,31 @@ export async function POST(request: Request) {
 
     const systemConfig = await getSystemConfig();
 
+    const { getOrgSettings } = await import('@/lib/settings/org-config');
+    const org = await getOrgSettings();
+    if (org.holidayBlockAttendance) {
+      const sessionDay = new Date(`${attendanceSession.sessionDate}T12:00:00`);
+      const dayKey = attendanceSession.sessionDate;
+      const holiday = await db.calendarEvent.findFirst({
+        where: {
+          type: 'holiday',
+          startDate: { lte: dayKey },
+          OR: [{ endDate: null }, { endDate: { gte: dayKey } }],
+        },
+        select: { id: true, title: true },
+      });
+      if (holiday || !org.workingDays.includes(sessionDay.getDay())) {
+        return NextResponse.json(
+          {
+            error: holiday
+              ? `Attendance is blocked on holiday: ${holiday.title}`
+              : 'Attendance is blocked on non-working days (Organization settings).',
+          },
+          { status: 403 },
+        );
+      }
+    }
+
     if (systemConfig.policies.faceVerificationEnforced && !isFaceVerificationApiConfigured()) {
       return NextResponse.json(
         {

@@ -67,11 +67,41 @@ const providers: NextAuthOptions['providers'] = [
 
         if (!user || user.status !== 'active') return null;
 
+        const {
+          getAuthSettings,
+          getLoginLockState,
+          recordLoginFailure,
+          clearLoginFailures,
+        } = await import('@/lib/settings/auth-config');
+        const authSettings = await getAuthSettings();
+        const lock = getLoginLockState(credentials.email);
+        if (lock.locked) {
+          throw new Error(`ACCOUNT_LOCKED:${lock.retryAfterSeconds}`);
+        }
+
         const valid = isPlaceholderPasswordHash(user.passwordHash)
           ? verifyPlaceholderPassword(credentials.password)
           : await bcrypt.compare(credentials.password, user.passwordHash);
 
-        if (!valid) return null;
+        if (!valid) {
+          const { locked } = recordLoginFailure(credentials.email, authSettings);
+          const { getGlobalBoolean } = await import('@/lib/settings');
+          const logFailed = await getGlobalBoolean('audit.log_failed_logins', true);
+          if (logFailed) {
+            await logAudit({
+              userId: user.id,
+              action: 'login.failed',
+              resource: `user:${user.id}`,
+              details: { email: user.email, locked },
+            });
+          }
+          if (locked) {
+            throw new Error(`ACCOUNT_LOCKED:${authSettings.lockoutMinutes * 60}`);
+          }
+          return null;
+        }
+
+        clearLoginFailures(credentials.email);
 
         if (user.mfaEnabled) {
           const code = credentials.mfaCode?.trim() ?? '';
@@ -97,6 +127,9 @@ const providers: NextAuthOptions['providers'] = [
         return buildAuthUser(user);
       } catch (err) {
         if (err instanceof Error && (err.message === 'MFA_REQUIRED' || err.message === 'MFA_INVALID')) {
+          throw err;
+        }
+        if (err instanceof Error && err.message.startsWith('ACCOUNT_LOCKED:')) {
           throw err;
         }
         console.error('[auth] authorize failed:', err);

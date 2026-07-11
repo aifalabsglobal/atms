@@ -175,7 +175,17 @@ export async function POST(request: Request) {
       resolvedDept = dept?.name ?? null;
     }
 
-    const tempPassword = password?.trim() || generateTempPassword();
+    const { getAuthSettings, validatePasswordAgainstPolicy } = await import('@/lib/settings/auth-config');
+    const authSettings = await getAuthSettings();
+    const providedPassword = typeof password === 'string' ? password.trim() : '';
+    if (providedPassword) {
+      const policyError = validatePasswordAgainstPolicy(providedPassword, authSettings);
+      if (policyError) {
+        return NextResponse.json({ error: policyError }, { status: 400 });
+      }
+    }
+
+    const tempPassword = providedPassword || generateTempPassword(authSettings.tempPasswordLength);
     const passwordHash = await bcrypt.hash(tempPassword, 10);
 
     const user = await db.user.create({
@@ -205,7 +215,7 @@ export async function POST(request: Request) {
       ipAddress: getClientIp(request),
     });
 
-    if (!password?.trim()) {
+    if (!providedPassword) {
       sendWelcomeEmail(user.email, user.name, tempPassword).catch((err) =>
         console.warn('[email] welcome failed:', err)
       );
@@ -214,7 +224,7 @@ export async function POST(request: Request) {
     maybeProvisionWalletOnCreate(user.id);
 
     return NextResponse.json(
-      { user, tempPassword: password?.trim() ? undefined : tempPassword },
+      { user, tempPassword: providedPassword ? undefined : tempPassword },
       { status: 201 }
     );
   } catch (error) {

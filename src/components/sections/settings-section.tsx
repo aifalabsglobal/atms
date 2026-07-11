@@ -88,6 +88,15 @@ type UserRbacDetail = {
 function UserRbacOverridesPanel({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { data: allowOverridesData } = useQuery({
+    queryKey: ['settings-rbac-allow-overrides'],
+    queryFn: () =>
+      fetch(`/api/settings/${encodeURIComponent('rbac.allow_per_user_overrides')}`).then((r) =>
+        r.ok ? r.json() : { setting: { value: true } },
+      ),
+  });
+  const allowOverrides = allowOverridesData?.setting?.value !== false;
+  const canEditOverrides = isSuperAdmin && allowOverrides;
   const [selectedUserId, setSelectedUserId] = useState('');
   const [draftEffective, setDraftEffective] = useState<Section[] | null>(null);
   const [userDirty, setUserDirty] = useState(false);
@@ -195,9 +204,10 @@ function UserRbacOverridesPanel({ isSuperAdmin }: { isSuperAdmin: boolean }) {
             </CardTitle>
             <CardDescription>
               Override role defaults for individual users — grants add modules, revokes remove them.
+              {!allowOverrides && ' (Disabled in Settings → RBAC → Allow per-user overrides.)'}
             </CardDescription>
           </div>
-          {selectedUserId && (
+          {selectedUserId && canEditOverrides && (
             <div className="flex flex-wrap gap-2">
               <Button
                 size="sm"
@@ -263,7 +273,9 @@ function UserRbacOverridesPanel({ isSuperAdmin }: { isSuperAdmin: boolean }) {
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {navModules.map((mod) => {
                 const src = sectionSource(mod.section);
-                const locked = userDetail.user.role === 'super_admin' && (mod.section === 'dashboard' || mod.section === 'settings');
+                const locked =
+                  !canEditOverrides ||
+                  (userDetail.user.role === 'super_admin' && (mod.section === 'dashboard' || mod.section === 'settings'));
                 const checked = draftEffective.includes(mod.section);
                 return (
                   <button
@@ -298,418 +310,6 @@ function UserRbacOverridesPanel({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   );
 }
 
-function ConfigurationPanel({ isSuperAdmin }: { isSuperAdmin: boolean }) {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const [draft, setDraft] = useState<SystemConfigSettings | null>(null);
-  const [dirty, setDirty] = useState(false);
-
-  const { data, isLoading, isError, error } = useQuery<SystemConfigResponse>({
-    queryKey: ['system-config'],
-    queryFn: () => fetch('/api/settings/config').then((r) => {
-      if (!r.ok) throw new Error('Failed to load configuration');
-      return r.json();
-    }),
-  });
-
-  useEffect(() => {
-    if (data?.settings && !dirty) {
-      setDraft(JSON.parse(JSON.stringify(data.settings)) as SystemConfigSettings);
-    }
-  }, [data?.settings, dirty]);
-
-  const saveMutation = useMutation({
-    mutationFn: async (payload: { settings?: SystemConfigSettings; reset?: boolean }) => {
-      const res = await fetch('/api/settings/config', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Failed to save configuration');
-      return json as SystemConfigResponse & { message: string };
-    },
-    onSuccess: (result) => {
-      setDraft(result.settings);
-      setDirty(false);
-      queryClient.invalidateQueries({ queryKey: ['system-config'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      queryClient.invalidateQueries({ queryKey: ['reports'] });
-      toast({ title: 'Configuration saved', description: result.message });
-    },
-    onError: (err: Error) => {
-      toast({ title: 'Save failed', description: err.message, variant: 'destructive' });
-    },
-  });
-
-  const settings = draft ?? data?.settings;
-  const runtime = data?.runtime;
-  const changed = dirty && draft && data?.settings
-    ? JSON.stringify(draft) !== JSON.stringify(data.settings)
-    : false;
-
-  const patch = (updater: (prev: SystemConfigSettings) => SystemConfigSettings) => {
-    if (!isSuperAdmin) return;
-    setDraft((prev) => {
-      const base = prev ?? data?.settings;
-      if (!base) return prev;
-      return updater(JSON.parse(JSON.stringify(base)) as SystemConfigSettings);
-    });
-    setDirty(true);
-  };
-
-  const runtimeCards = runtime ? [
-    {
-      label: 'Face Verification',
-      value: runtime.faceVerification.mode === 'live'
-        ? 'Live API configured'
-        : runtime.faceVerification.mode === 'demo'
-          ? 'Enabled — set FACE_VERIFICATION_API_URL for live matching'
-          : 'Set FACE_VERIFICATION_ENABLED=true in .env',
-      icon: ScanFace,
-      status: runtime.faceVerification.mode === 'live' ? 'active' as const : runtime.faceVerification.enabled ? 'demo' as const : 'disabled' as const,
-    },
-    {
-      label: 'GPS Geofencing',
-      value: runtime.geofencing.algorithm,
-      icon: MapPin,
-      status: 'active' as const,
-    },
-    {
-      label: 'Knuct Blockchain',
-      value: runtime.knuct.liveEnabled
-        ? `Live pilot · anchors ${runtime.knuct.anchorsEnabled ? 'on' : 'off'}${runtime.knuct.chainPublish ? ' · chain publish on' : ''}`
-        : 'Hash anchors in DB · set KNUCT_ENABLED=true for live wallet',
-      icon: Link2,
-      status: runtime.knuct.liveEnabled ? 'active' as const : 'demo' as const,
-    },
-    {
-      label: 'Email',
-      value: runtime.email.status === 'configured'
-        ? `Provider: ${runtime.email.provider ?? 'configured'}`
-        : 'Configure RESEND_API_KEY or SMTP_* in .env',
-      icon: Bell,
-      status: runtime.email.status === 'configured' ? 'active' as const : 'demo' as const,
-    },
-    {
-      label: 'SMS',
-      value: runtime.sms?.configured ? 'Twilio configured' : 'Optional TWILIO_* in .env',
-      icon: Bell,
-      status: runtime.sms?.configured ? 'active' as const : 'planned' as const,
-    },
-    {
-      label: 'Rate Limiting',
-      value: runtime.rateLimit.backend === 'upstash' ? 'Upstash Redis' : 'In-memory (dev)',
-      icon: Server,
-      status: 'active' as const,
-    },
-    {
-      label: 'Database',
-      value: runtime.database.provider,
-      icon: Database,
-      status: 'active' as const,
-    },
-    {
-      label: 'Auth Method',
-      value: runtime.auth.method,
-      icon: Lock,
-      status: 'active' as const,
-    },
-    {
-      label: 'API',
-      value: 'Next.js App Router (/api/*)',
-      icon: Server,
-      status: 'active' as const,
-    },
-  ] : [];
-
-  if (isLoading) {
-    return (
-      <div className="grid gap-4 md:grid-cols-2">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <Card key={i}><CardContent className="p-4"><Skeleton className="h-24 w-full" /></CardContent></Card>
-        ))}
-      </div>
-    );
-  }
-
-  if (isError || !settings) {
-    return (
-      <Card>
-        <CardContent className="p-6 text-sm text-muted-foreground">
-          Failed to load configuration: {(error as Error)?.message || 'Unknown error'}
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      {!isSuperAdmin && (
-        <Card className="border-amber-200 bg-amber-50/50 dark:bg-amber-950/20">
-          <CardContent className="p-4 text-sm text-muted-foreground">
-            Configuration is read-only for your role. Super Admin can edit attendance thresholds and policy toggles below.
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          {data?.updatedAt && (
-            <p className="text-[10px] text-muted-foreground">
-              Last saved: {new Date(data.updatedAt).toLocaleString('en-IN')}
-              {data.updatedBy ? ` · by ${data.updatedBy}` : ''}
-            </p>
-          )}
-        </div>
-        {isSuperAdmin && (
-          <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              className="gap-1.5"
-              disabled={saveMutation.isPending}
-              onClick={() => {
-                if (data?.settings) {
-                  setDraft(JSON.parse(JSON.stringify(data.settings)) as SystemConfigSettings);
-                  setDirty(false);
-                }
-              }}
-            >
-              <RotateCcw className="h-3.5 w-3.5" /> Discard
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="gap-1.5"
-              disabled={saveMutation.isPending}
-              onClick={() => saveMutation.mutate({ reset: true })}
-            >
-              Reset defaults
-            </Button>
-            <Button
-              size="sm"
-              className="gap-1.5 bg-[#1A3C6E] hover:bg-[#1A3C6E]/90 text-white"
-              disabled={!changed || saveMutation.isPending}
-              onClick={() => draft && saveMutation.mutate({ settings: draft })}
-            >
-              <Save className="h-3.5 w-3.5" /> Save configuration
-            </Button>
-          </div>
-        )}
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Clock className="h-4 w-4 text-[#1A3C6E]" /> Attendance thresholds
-            </CardTitle>
-            <CardDescription>Used by dashboard, reports, and student risk badges</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="eligibilityPct">Eligibility minimum (%)</Label>
-                <Input
-                  id="eligibilityPct"
-                  type="number"
-                  min={50}
-                  max={100}
-                  disabled={!isSuperAdmin}
-                  value={settings.attendance.eligibilityPct}
-                  onChange={(e) => patch((s) => ({
-                    ...s,
-                    attendance: { ...s.attendance, eligibilityPct: Number(e.target.value) },
-                  }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="condonationPct">Condonation threshold (%)</Label>
-                <Input
-                  id="condonationPct"
-                  type="number"
-                  min={0}
-                  max={100}
-                  disabled={!isSuperAdmin}
-                  value={settings.attendance.condonationPct}
-                  onChange={(e) => patch((s) => ({
-                    ...s,
-                    attendance: { ...s.attendance, condonationPct: Number(e.target.value) },
-                  }))}
-                />
-              </div>
-            </div>
-            <div className="flex items-center justify-between rounded-lg border p-3">
-              <div>
-                <p className="text-sm font-medium">Require HOD approval for condonation</p>
-                <p className="text-xs text-muted-foreground">
-                  Between {settings.attendance.condonationPct}% and {settings.attendance.eligibilityPct}%
-                </p>
-              </div>
-              <Switch
-                checked={settings.attendance.requireHodForCondonation}
-                disabled={!isSuperAdmin}
-                onCheckedChange={(v) => patch((s) => ({
-                  ...s,
-                  attendance: { ...s.attendance, requireHodForCondonation: v },
-                }))}
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Shield className="h-4 w-4 text-[#1A3C6E]" /> Attendance policies
-            </CardTitle>
-            <CardDescription>Runtime enforcement on self-mark and audit anchors</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {[
-              {
-                key: 'faceVerificationEnforced' as const,
-                label: 'Enforce face verification',
-                hint: 'Reject self-mark when selfie does not match profile photo',
-              },
-              {
-                key: 'geofenceSelfMarkRequired' as const,
-                label: 'Require geofence for self-mark',
-                hint: 'When off, geofence checks are skipped even if session expects GPS',
-              },
-              {
-                key: 'knuctAnchorsEnabled' as const,
-                label: 'Record Knuct hash anchors',
-                hint: 'Hash anchors on session complete, violations, calendar publish, etc.',
-              },
-              {
-                key: 'auditLoggingEnabled' as const,
-                label: 'Audit logging',
-                hint: 'When disabled, audit log writes are skipped (login and security events may still apply elsewhere)',
-              },
-            ].map((item) => (
-              <div key={item.key} className="flex items-center justify-between rounded-lg border p-3">
-                <div className="pr-4">
-                  <p className="text-sm font-medium">{item.label}</p>
-                  <p className="text-xs text-muted-foreground">{item.hint}</p>
-                </div>
-                <Switch
-                  checked={settings.policies[item.key]}
-                  disabled={!isSuperAdmin}
-                  onCheckedChange={(v) => patch((s) => ({
-                    ...s,
-                    policies: { ...s.policies, [item.key]: v },
-                  }))}
-                />
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <MapPin className="h-4 w-4 text-[#1A3C6E]" /> Geofence defaults
-            </CardTitle>
-            <CardDescription>Default radius when creating circle geofences</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2 max-w-xs">
-              <Label htmlFor="defaultRadius">Default radius (meters)</Label>
-              <Input
-                id="defaultRadius"
-                type="number"
-                min={10}
-                max={5000}
-                disabled={!isSuperAdmin}
-                value={settings.geofence.defaultRadiusMeters}
-                onChange={(e) => patch((s) => ({
-                  ...s,
-                  geofence: { defaultRadiusMeters: Number(e.target.value) },
-                }))}
-              />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <Bell className="h-4 w-4 text-[#1A3C6E]" /> Notification policies
-            </CardTitle>
-            <CardDescription>In-app rules; email requires env configuration</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {[
-              {
-                key: 'lowAttendanceWarningEnabled' as const,
-                label: `Low attendance warning (< ${settings.attendance.eligibilityPct}%)`,
-                hint: 'In-app alert for students below eligibility',
-              },
-              {
-                key: 'lowAttendanceEmailEnabled' as const,
-                label: 'Email on low attendance',
-                hint: 'Requires SMTP or Resend env vars',
-              },
-              {
-                key: 'violationAlertEnabled' as const,
-                label: 'Violation alerts',
-                hint: 'Notify HOD/admin on confirmed violations',
-              },
-            ].map((item) => (
-              <div key={item.key} className="flex items-center justify-between rounded-lg border p-3">
-                <div className="pr-4">
-                  <p className="text-sm font-medium">{item.label}</p>
-                  <p className="text-xs text-muted-foreground">{item.hint}</p>
-                </div>
-                <Switch
-                  checked={settings.notifications[item.key]}
-                  disabled={!isSuperAdmin}
-                  onCheckedChange={(v) => patch((s) => ({
-                    ...s,
-                    notifications: { ...s.notifications, [item.key]: v },
-                  }))}
-                />
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Server className="h-4 w-4 text-[#1A3C6E]" /> Runtime integrations
-          </CardTitle>
-          <CardDescription>Read-only status from environment and live services</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-2">
-            {runtimeCards.map((cfg) => {
-              const Icon = cfg.icon;
-              return (
-                <div key={cfg.label} className="flex items-start gap-3 rounded-lg border p-4">
-                  <div className="h-9 w-9 rounded-lg bg-[#1A3C6E]/10 flex items-center justify-center shrink-0">
-                    <Icon className="h-4 w-4 text-[#1A3C6E]" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium">{cfg.label}</p>
-                    <p className="text-sm text-muted-foreground mt-0.5">{cfg.value}</p>
-                  </div>
-                  <Badge variant="outline" className={`shrink-0 text-[10px] ${statusBadge[cfg.status].className}`}>
-                    {cfg.status === 'active' ? <CheckCircle className="h-3 w-3 mr-1" /> : null}
-                    {statusBadge[cfg.status].label}
-                  </Badge>
-                </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
 
 function SuperAdminControlCenter({ onNavigate }: { onNavigate: (section: Section, ctx?: SectionContext) => void }) {
   const modules: { section: Section; label: string; description: string; icon: typeof Shield }[] = [
@@ -819,7 +419,30 @@ export default function SettingsSection() {
   });
   const eligibilityPct = configData?.settings?.attendance?.eligibilityPct ?? 75;
 
-  const [auditAnchorOnly, setAuditAnchorOnly] = useState(false);
+  const [auditAnchorOnly, setAuditAnchorOnly] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/settings/platform')
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null)
+      .then(async () => {
+        // Load audit filter default from settings list
+        const res = await fetch('/api/settings?category=audit');
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        const row = (data.settings as { key: string; value: unknown }[] | undefined)?.find(
+          (s) => s.key === 'audit.default_anchorable_filter',
+        );
+        if (!cancelled && typeof row?.value === 'boolean') {
+          setAuditAnchorOnly(row.value);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [draftMatrix, setDraftMatrix] = useState<Record<Role, Section[]> | null>(null);
   const [rbacDirty, setRbacDirty] = useState(false);
 

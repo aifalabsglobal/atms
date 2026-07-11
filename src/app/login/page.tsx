@@ -15,6 +15,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { KnuctDIDAuthPanel } from '@/components/knuct/did-auth-panel';
 import { DEMO_ACCOUNTS, DEMO_PASSWORD } from '@/lib/demo-accounts';
 import { BRAND } from '@/lib/branding';
+import { usePlatformSettings } from '@/hooks/use-platform-settings';
+import { DEFAULT_GENERAL_SETTINGS } from '@/lib/settings/general-defaults';
 import { copyDemoShareKit, copyDemoWalkthrough } from '@/lib/demo-share';
 import { DEMO_FLOW, DEMO_PREP_STEPS, DEMO_DO_NOT_SHOW } from '@/lib/demo-walkthrough';
 import { ROLE_COLORS } from '@/lib/store';
@@ -31,6 +33,8 @@ const QUICK_TRY = [
 export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const { data: platform } = usePlatformSettings(true);
+  const general = platform ?? DEFAULT_GENERAL_SETTINGS;
   const [mounted, setMounted] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -188,13 +192,20 @@ export default function LoginPage() {
   const loading = loadingEmail !== null || knuctLoading;
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#1A3C6E]/5 via-background to-[#1A3C6E]/10 p-4 py-8">
+    <div
+      className="min-h-screen flex items-center justify-center p-4 py-8"
+      style={{
+        background: `linear-gradient(to bottom right, color-mix(in srgb, ${general.brandingPrimaryColor} 5%, transparent), var(--background), color-mix(in srgb, ${general.brandingPrimaryColor} 10%, transparent))`,
+      }}
+    >
       <Card className="w-full max-w-2xl shadow-lg">
         <CardHeader className="text-center space-y-3 pb-2">
-          <BrandLogo size="lg" className="mx-auto" priority />
-          <CardTitle className="text-xl text-[#1A3C6E]">{BRAND.name}</CardTitle>
+          <BrandLogo size="lg" className="mx-auto" priority src={general.logoUrl} alt={general.companyName} />
+          <CardTitle className="text-xl" style={{ color: general.brandingPrimaryColor }}>
+            {general.appName}
+          </CardTitle>
           <CardDescription>
-            {BRAND.tagline} — sign in with email or Knuct DID
+            {general.tagline} — sign in with email or Knuct DID
           </CardDescription>
         </CardHeader>
         <CardContent>

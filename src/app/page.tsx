@@ -2,8 +2,10 @@
 
 import dynamic from 'next/dynamic';
 import { useAppStore, ROLE_LABELS, ROLE_COLORS, useEffectiveSections, type Role, type Section } from '@/lib/store';
-import { BRAND } from '@/lib/branding';
 import { BrandLogo } from '@/components/brand-logo';
+import { PlatformSettingsEffects } from '@/components/platform-settings-effects';
+import { usePlatformSettings } from '@/hooks/use-platform-settings';
+import { DEFAULT_GENERAL_SETTINGS } from '@/lib/settings/general-defaults';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, ScanLine, BookOpen, Users, ShieldAlert,
@@ -81,12 +83,20 @@ function AppContent() {
   const { activeSection, setActiveSection, sidebarOpen, setSidebarOpen, currentUser, roleSwitching } = useAppStore();
   const { theme, setTheme } = useTheme();
   const allowedSections = useEffectiveSections();
+  const { data: platformGeneral } = usePlatformSettings(status === 'authenticated');
+  const general = platformGeneral ?? DEFAULT_GENERAL_SETTINGS;
 
   useEffect(() => {
     if (status === 'unauthenticated') {
       router.replace('/login');
     }
   }, [status, router]);
+
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.title = `${general.appName} - ${general.tagline}`;
+    }
+  }, [general.appName, general.tagline]);
 
   const { data: notifData } = useQuery({
     queryKey: ['notifications', currentUser?.id],
@@ -159,16 +169,26 @@ function AppContent() {
   return (
     <TooltipProvider>
       <div className="min-h-screen flex flex-col bg-background">
+        <PlatformSettingsEffects
+          general={general}
+          allowedSections={allowedSectionsNav}
+          role={role}
+        />
         <header className="sticky top-0 z-50 flex items-center justify-between h-14 px-4 border-b bg-card/95 backdrop-blur supports-[backdrop-filter]:bg-card/80">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setSidebarOpen(!sidebarOpen)}>
               {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
             </Button>
             <div className="flex items-center gap-2">
-              <BrandLogo size="sm" priority />
+              <BrandLogo size="sm" priority src={general.logoUrl} alt={general.companyName} />
               <div className="hidden sm:flex flex-col">
-                <span className="text-sm font-bold leading-tight text-[#1A3C6E]">{BRAND.name}</span>
-                <span className="text-[10px] text-muted-foreground leading-tight">{BRAND.tagline}</span>
+                <span
+                  className="text-sm font-bold leading-tight"
+                  style={{ color: general.brandingPrimaryColor }}
+                >
+                  {general.appName}
+                </span>
+                <span className="text-[10px] text-muted-foreground leading-tight">{general.tagline}</span>
               </div>
             </div>
           </div>
@@ -354,11 +374,16 @@ function AppContent() {
             </div>
             <footer className="border-t shrink-0">
               <div className="px-4 md:px-6 py-3 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-muted-foreground">
-                <span>{BRAND.copyright}</span>
+                <span>{general.copyrightText}</span>
                 <div className="flex items-center gap-4">
-                  <span>Powered by <strong className="text-[#1A3C6E]">{BRAND.name}</strong></span>
+                  <span>
+                    Powered by{' '}
+                    <strong style={{ color: general.brandingPrimaryColor }}>{general.appName}</strong>
+                  </span>
                   <Separator orientation="vertical" className="h-3" />
-                  <span>IT Department</span>
+                  <span className="truncate max-w-[240px]" title={general.companyName}>
+                    {general.companyName}
+                  </span>
                 </div>
               </div>
             </footer>

@@ -107,7 +107,16 @@ export async function PATCH(request: Request, context: RouteContext) {
     }
 
     if (body.resetPassword) {
-      const newPassword = body.password?.trim() || generateTempPassword();
+      const { getAuthSettings, validatePasswordAgainstPolicy } = await import('@/lib/settings/auth-config');
+      const authSettings = await getAuthSettings();
+      const provided = body.password?.trim() || '';
+      if (provided) {
+        const policyError = validatePasswordAgainstPolicy(provided, authSettings);
+        if (policyError) {
+          return NextResponse.json({ error: policyError }, { status: 400 });
+        }
+      }
+      const newPassword = provided || generateTempPassword(authSettings.tempPasswordLength);
       tempPassword = newPassword;
       data.passwordHash = await bcrypt.hash(newPassword, 10);
     }

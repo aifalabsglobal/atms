@@ -25,6 +25,12 @@ export async function POST(req: Request) {
   const limited = await enforceRateLimit(`register:${clientIp(req)}`, 8, 60_000);
   if (limited) return limited;
 
+  const { getAuthSettings } = await import('@/lib/settings/auth-config');
+  const authSettings = await getAuthSettings();
+  if (!authSettings.selfRegistrationEnabled) {
+    return NextResponse.json({ error: 'Self-registration is disabled' }, { status: 403 });
+  }
+
   await purgeDIDAuthSessions();
 
   const body = (await req.json()) as {

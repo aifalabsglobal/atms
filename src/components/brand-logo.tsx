@@ -15,12 +15,18 @@ export function BrandLogo({
   size = 'md',
   className,
   priority = false,
+  src,
+  alt,
 }: {
   size?: BrandLogoSize;
   className?: string;
   priority?: boolean;
+  src?: string;
+  alt?: string;
 }) {
   const config = SIZES[size];
+  const imageSrc = src && src.startsWith('/') ? src : BRAND.logoSrc;
+  const imageAlt = alt?.trim() || BRAND.logoAlt;
 
   return (
     <div
@@ -29,10 +35,11 @@ export function BrandLogo({
         config.box,
         className,
       )}
+      style={{ ['--tw-ring-color' as string]: 'color-mix(in srgb, var(--brand-primary, #1A3C6E) 10%, transparent)' }}
     >
       <Image
-        src={BRAND.logoSrc}
-        alt={BRAND.logoAlt}
+        src={imageSrc}
+        alt={imageAlt}
         width={config.dimension}
         height={config.dimension}
         className={cn('h-full w-full object-contain', config.padding)}

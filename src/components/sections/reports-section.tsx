@@ -13,6 +13,8 @@ import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { exportStaffReportCsv, exportStudentReportCsv } from '@/lib/report-export';
 import { exportStaffReportPdf, exportStudentReportPdf } from '@/lib/report-pdf';
+import { usePlatformSettings } from '@/hooks/use-platform-settings';
+import { DEFAULT_GENERAL_SETTINGS } from '@/lib/settings/general-defaults';
 import { Button } from '@/components/ui/button';
 import {
   BarChart3, Users, BookOpen, ShieldAlert, TrendingUp, TrendingDown,
@@ -88,6 +90,13 @@ interface StudentReportData {
 }
 
 function StudentReportView({ data }: { data: StudentReportData }) {
+  const { data: platform } = usePlatformSettings();
+  const general = platform ?? DEFAULT_GENERAL_SETTINGS;
+  const pdfBrand = {
+    appName: general.appName,
+    companyName: general.companyName,
+    locale: general.locale,
+  };
   const { student, enrolledCourses, attendance, assignments, quizzes, grades, violations, riskStatus } = data;
   const thresholds = data.thresholds ?? FALLBACK_THRESHOLDS;
   const isWardView = !!data.isParent;
@@ -149,7 +158,7 @@ function StudentReportView({ data }: { data: StudentReportData }) {
             variant="outline"
             size="sm"
             className="gap-1.5"
-            onClick={() => exportStudentReportPdf(data)}
+            onClick={() => exportStudentReportPdf(data, pdfBrand)}
           >
             <FileText className="h-3.5 w-3.5" /> Export PDF
           </Button>
@@ -871,6 +880,13 @@ interface StaffReportData {
 }
 
 function StaffAnalyticsView({ data }: { data: StaffReportData }) {
+  const { data: platform } = usePlatformSettings();
+  const general = platform ?? DEFAULT_GENERAL_SETTINGS;
+  const pdfBrand = {
+    appName: general.appName,
+    companyName: general.companyName,
+    locale: general.locale,
+  };
   const thresholds = data.thresholds ?? FALLBACK_THRESHOLDS;
   const {
     kpis, weeklyAttendanceTrend, departmentAnalytics, atRiskStudents, topPerformers,
@@ -941,7 +957,7 @@ function StaffAnalyticsView({ data }: { data: StaffReportData }) {
               departmentAnalytics: data.departmentAnalytics,
               atRiskStudents: data.atRiskStudents,
               lmsEngagement: { topCourses: data.lmsEngagement.topCourses },
-            })}
+            }, pdfBrand)}
           >
             <FileText className="h-3.5 w-3.5" /> Export PDF
           </Button>

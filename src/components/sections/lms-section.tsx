@@ -12,6 +12,9 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAppStore, useCanWriteLms, useCanViewLmsRoster, useSectionWrite, MASTERS_WRITE_ROLES } from '@/lib/store';
+import { usePlatformSettings } from '@/hooks/use-platform-settings';
+import { DEFAULT_GENERAL_SETTINGS } from '@/lib/settings/general-defaults';
+import { formatCampusDateTime } from '@/lib/datetime-format';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -143,9 +146,17 @@ function isOverdue(dateStr: string): boolean {
   return new Date(dateStr) < new Date();
 }
 
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('en-IN', {
-    day: '2-digit', month: 'short', year: 'numeric',
+function formatDate(dateStr: string, opts?: {
+  dateFormat?: string;
+  timeFormat?: '12h' | '24h';
+  locale?: string;
+  timezone?: string;
+}): string {
+  return formatCampusDateTime(dateStr, {
+    dateFormat: opts?.dateFormat ?? DEFAULT_GENERAL_SETTINGS.dateFormat,
+    timeFormat: opts?.timeFormat ?? DEFAULT_GENERAL_SETTINGS.timeFormat,
+    locale: opts?.locale ?? DEFAULT_GENERAL_SETTINGS.locale,
+    timezone: opts?.timezone ?? DEFAULT_GENERAL_SETTINGS.timezone,
   });
 }
 
@@ -362,6 +373,13 @@ function CourseCard({ course, canManageRoster, canViewRoster, onManageRoster, ca
 // ─── Student Assignments Tab ────────────────────────────────────────────────
 
 function StudentAssignmentsTab({ assignments, onSubmit }: { assignments: Assignment[]; onSubmit: (a: Assignment) => void }) {
+  const { data: platform } = usePlatformSettings();
+  const dateOpts = {
+    dateFormat: platform?.dateFormat ?? DEFAULT_GENERAL_SETTINGS.dateFormat,
+    timeFormat: platform?.timeFormat ?? DEFAULT_GENERAL_SETTINGS.timeFormat,
+    locale: platform?.locale ?? DEFAULT_GENERAL_SETTINGS.locale,
+    timezone: platform?.timezone ?? DEFAULT_GENERAL_SETTINGS.timezone,
+  };
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const pending = assignments.filter(a => a.myStatus === 'not_started' || a.myStatus === 'overdue');
@@ -467,7 +485,7 @@ function StudentAssignmentsTab({ assignments, onSubmit }: { assignments: Assignm
                           <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
                             <span className="flex items-center gap-1">
                               <CalendarDays className="h-3 w-3" />
-                              {formatDate(a.dueDate)}
+                              {formatDate(a.dueDate, dateOpts)}
                             </span>
                             {a.myStatus !== 'graded' && days >= 0 && days <= 7 && (
                               <span className={cn('text-[10px] font-medium', days <= 2 ? 'text-red-600' : 'text-amber-600')}>
@@ -779,6 +797,13 @@ function AdminAssignmentsTab({ assignments, onGrade, onEdit, onDelete }: {
   onDelete?: (a: Assignment) => void;
 }) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const { data: platform } = usePlatformSettings();
+  const dateOpts = {
+    dateFormat: platform?.dateFormat ?? DEFAULT_GENERAL_SETTINGS.dateFormat,
+    timeFormat: platform?.timeFormat ?? DEFAULT_GENERAL_SETTINGS.timeFormat,
+    locale: platform?.locale ?? DEFAULT_GENERAL_SETTINGS.locale,
+    timezone: platform?.timezone ?? DEFAULT_GENERAL_SETTINGS.timezone,
+  };
 
   const chartData = assignments
     .filter(a => a.stats.avgScore !== null)
@@ -872,7 +897,7 @@ function AdminAssignmentsTab({ assignments, onGrade, onEdit, onDelete }: {
                           <TableCell className="hidden sm:table-cell">
                             <div className="flex items-center gap-1.5">
                               <CalendarDays className="h-3 w-3 text-muted-foreground shrink-0" />
-                              <span className={cn('text-xs', overdue && 'text-destructive font-medium')}>{formatDate(a.dueDate)}</span>
+                              <span className={cn('text-xs', overdue && 'text-destructive font-medium')}>{formatDate(a.dueDate, dateOpts)}</span>
                             </div>
                           </TableCell>
                           <TableCell className="text-right hidden md:table-cell">
@@ -1361,6 +1386,8 @@ export default function LmsSection() {
   >(null);
   const { toast } = useToast();
   const { currentUser, sectionContext, setSectionContext } = useAppStore();
+  const { data: platform } = usePlatformSettings();
+  const pageSize = platform?.paginationDefault ?? DEFAULT_GENERAL_SETTINGS.paginationDefault;
 
   useEffect(() => {
     if (sectionContext?.lmsTab) {
@@ -1428,13 +1455,13 @@ export default function LmsSection() {
   });
 
   const { data: courseData, isLoading: coursesLoading } = useQuery<CourseResponse>({
-    queryKey: ['lms-courses'],
-    queryFn: () => fetch('/api/lms/courses?page=1&limit=20').then(r => r.json()),
+    queryKey: ['lms-courses', pageSize],
+    queryFn: () => fetch(`/api/lms/courses?page=1&limit=${pageSize}`).then(r => r.json()),
   });
 
   const { data: assignmentData, isLoading: assignmentsLoading } = useQuery<AssignmentResponse>({
-    queryKey: ['lms-assignments', learnerQueryKey],
-    queryFn: () => fetch(`/api/lms/assignments?page=1&limit=20${isStudent ? `&studentId=${currentUser.id}` : ''}`).then((r) => {
+    queryKey: ['lms-assignments', learnerQueryKey, pageSize],
+    queryFn: () => fetch(`/api/lms/assignments?page=1&limit=${pageSize}${isStudent ? `&studentId=${currentUser.id}` : ''}`).then((r) => {
       if (!r.ok) throw new Error('Failed to load assignments');
       return r.json();
     }),

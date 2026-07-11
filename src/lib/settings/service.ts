@@ -17,6 +17,26 @@ import type {
   SetSettingOptions,
 } from './types';
 import { isDemoAuthAllowed } from '@/lib/demo-mode';
+
+async function settingsTtlMs(): Promise<number> {
+  try {
+    const row = await db.settingValue.findUnique({
+      where: {
+        key_scope_scopeId: {
+          key: 'runtime.settings_cache_ttl_seconds',
+          scope: 'global',
+          scopeId: '',
+        },
+      },
+      select: { value: true },
+    });
+    const raw = row?.value;
+    const seconds = typeof raw === 'number' ? raw : 60;
+    return Math.min(3600, Math.max(5, Math.round(seconds))) * 1000;
+  } catch {
+    return 60_000;
+  }
+}
 import { emailStatus } from '@/lib/email';
 import { isSmsConfigured } from '@/lib/sms';
 import { isS3ObjectStorageConfigured } from '@/lib/object-storage';
@@ -150,7 +170,7 @@ export async function getEffectiveSetting(
     updatedBy: resolved.updatedBy,
     updatedAt: resolved.updatedAt,
   };
-  return settingsCacheSet(ck, result, 60_000);
+  return settingsCacheSet(ck, result, await settingsTtlMs());
 }
 
 export async function getSetting(

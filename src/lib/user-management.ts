@@ -93,10 +93,11 @@ export function isStaffRole(role: Role): boolean {
   return STAFF_ROLES.includes(role);
 }
 
-export function generateTempPassword(): string {
+export function generateTempPassword(length = 10): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  const len = Math.min(32, Math.max(8, Math.round(length) || 10));
   let out = '';
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < len; i++) {
     out += chars[Math.floor(Math.random() * chars.length)];
   }
   return out;

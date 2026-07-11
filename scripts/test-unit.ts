@@ -26,6 +26,11 @@ import {
 import { resolveEffectiveValue } from '../src/lib/settings/resolve';
 import { parseSystemConfig, validateSystemConfig } from '../src/lib/system-config-defaults';
 import { canAccessSectionSync, cloneDefaultMatrix, validateRbacMatrix } from '../src/lib/rbac-defaults';
+import { formatCampusCurrency, formatCampusDateTime } from '../src/lib/datetime-format';
+import {
+  validatePasswordAgainstPolicy,
+  DEFAULT_AUTH_SETTINGS,
+} from '../src/lib/settings/auth-config';
 
 let passed = 0;
 
@@ -81,6 +86,51 @@ try {
   assert('theme enum accepts light', validateSettingValue(theme!, 'light') === null);
   assert('theme enum rejects neon', validateSettingValue(theme!, 'neon') !== null);
 
+  const landing = getSettingDefinition('general.landing_section');
+  assert('landing_section registered', !!landing && landing.valueType === 'enum');
+  assert('landing accepts dashboard', validateSettingValue(landing!, 'dashboard') === null);
+  assert('landing rejects bogus', validateSettingValue(landing!, 'finance') !== null);
+
+  const pagination = getSettingDefinition('general.pagination_default');
+  assert('pagination_default registered', !!pagination && pagination.valueType === 'number');
+  assert('pagination 20 valid', validateSettingValue(pagination!, 20) === null);
+  assert('pagination 3 rejected', validateSettingValue(pagination!, 3) !== null);
+
+  const brandColor = getSettingDefinition('general.branding_primary_color');
+  assert('brand color accepts hex', validateSettingValue(brandColor!, '#1A3C6E') === null);
+  assert('brand color rejects plain', validateSettingValue(brandColor!, 'navy') !== null);
+
+  const logoUrl = getSettingDefinition('general.logo_url');
+  assert('logo_url accepts path', validateSettingValue(logoUrl!, '/logo.jpeg') === null);
+  assert('logo_url rejects remote', validateSettingValue(logoUrl!, 'https://cdn.example/logo.png') !== null);
+
+  const generalKeys = [
+    'general.company_name',
+    'general.tagline',
+    'general.time_format',
+    'general.language',
+    'general.locale',
+    'general.currency',
+    'general.favicon_url',
+    'general.copyright_text',
+  ];
+  for (const key of generalKeys) {
+    assert(`${key} registered`, !!getSettingDefinition(key));
+  }
+
+  const catsGeneral = listSettingCategories().find((c) => c.id === 'general');
+  assert('general category has 15+ keys', (catsGeneral?.keys.length ?? 0) >= 15);
+
+  const sample = formatCampusDateTime('2026-07-11T10:30:00+05:30', {
+    dateFormat: 'dd/MM/yyyy',
+    timeFormat: '24h',
+    locale: 'en-IN',
+    timezone: 'Asia/Kolkata',
+    includeTime: true,
+  });
+  assert('formatCampusDateTime returns date', sample.includes('11/07/2026') || sample.includes('2026'));
+  assert('formatCampusCurrency INR', formatCampusCurrency(100, { currency: 'INR', locale: 'en-IN' }).includes('100'));
+
   const demoFlag = getSettingDefinition('flags.demo_auth_visible');
   assert('env-only flag not writable', validateSettingValue(demoFlag!, true) !== null);
 
@@ -88,7 +138,29 @@ try {
   assert('categories include attendance', cats.some((c) => c.id === 'attendance' && c.keys.length > 0));
   assert('categories include lms', cats.some((c) => c.id === 'lms' && c.keys.length >= 10));
   assert('categories include integrations', cats.some((c) => c.id === 'integrations' && c.keys.length >= 5));
-  assert('phase2 definitions registered', listSettingDefinitions().length >= 35);
+  assert('organization category registered', listSettingCategories().some((c) => c.id === 'organization'));
+  assert('users category registered', listSettingCategories().some((c) => c.id === 'users'));
+  assert('audit category registered', listSettingCategories().some((c) => c.id === 'audit'));
+  assert('users.password_min_length registered', !!getSettingDefinition('users.password_min_length'));
+  assert('organization.working_days registered', !!getSettingDefinition('organization.working_days'));
+  assert('lms.enrollment_capacity_default registered', !!getSettingDefinition('lms.enrollment_capacity_default'));
+  assert('audit.retention_days registered', !!getSettingDefinition('audit.retention_days'));
+  assert('runtime.settings_cache_ttl_seconds registered', !!getSettingDefinition('runtime.settings_cache_ttl_seconds'));
+
+  assert(
+    'password policy rejects short',
+    validatePasswordAgainstPolicy('ab1', { ...DEFAULT_AUTH_SETTINGS, passwordMinLength: 8 }) !== null,
+  );
+  assert(
+    'password policy accepts strong',
+    validatePasswordAgainstPolicy('Abcdef12', {
+      ...DEFAULT_AUTH_SETTINGS,
+      passwordMinLength: 8,
+      passwordRequireUppercase: true,
+      passwordRequireNumber: true,
+      passwordRequireSpecial: false,
+    }) === null,
+  );
   assert('rbac.matrix registered', !!getSettingDefinition('rbac.matrix'));
   assert('lms.coding_enabled registered', getSettingDefinition('lms.coding_enabled')?.valueType === 'boolean');
   assert('runtime.storage_configured env-only', !!getSettingDefinition('runtime.storage_configured')?.envOnly);

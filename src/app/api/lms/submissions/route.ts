@@ -159,18 +159,33 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
+    const lms = await getLmsSettings();
+    let gradedScore = score !== undefined ? Number(score) : undefined;
+    if (
+      gradedScore !== undefined &&
+      lms.applyLatePenaltyOnGrade &&
+      (existing.status === 'late' || existing.status === 'submitted') &&
+      existing.submittedAt > existing.assignment.dueDate &&
+      typeof existing.assignment.latePenalty === 'number' &&
+      existing.assignment.latePenalty > 0
+    ) {
+      gradedScore = Math.max(
+        0,
+        Math.round(gradedScore * (1 - existing.assignment.latePenalty / 100) * 100) / 100,
+      );
+    }
+
     const submission = await db.submission.update({
       where: { id },
       data: {
-        ...(score !== undefined && { score }),
+        ...(gradedScore !== undefined && { score: gradedScore }),
         ...(feedback !== undefined && { feedback }),
         ...(status !== undefined && { status }),
-        ...(score !== undefined && { status: 'graded', gradedAt: new Date() }),
+        ...(gradedScore !== undefined && { status: 'graded', gradedAt: new Date() }),
       },
     });
 
-    if (score !== undefined) {
-      const lms = await getLmsSettings();
+    if (gradedScore !== undefined) {
       const existingGrade = await db.gradeBook.findFirst({
         where: {
           courseId: existing.assignment.courseId,
@@ -182,14 +197,19 @@ export async function PUT(request: Request) {
       if (existingGrade) {
         await db.gradeBook.update({
           where: { id: existingGrade.id },
-          data: { score, maxScore: existing.assignment.maxScore, gradedBy: session.user.id, gradedAt: new Date() },
+          data: {
+            score: gradedScore,
+            maxScore: existing.assignment.maxScore,
+            gradedBy: session.user.id,
+            gradedAt: new Date(),
+          },
         });
         enqueueAnchor('grade_publish', id, {
           courseId: existing.assignment.courseId,
           studentId: existing.studentId,
           component: 'assignment',
           componentId: existing.assignmentId,
-          score,
+          score: gradedScore,
           maxScore: existing.assignment.maxScore,
           gradedBy: session.user.id,
           gradedAt: new Date().toISOString(),
@@ -201,7 +221,7 @@ export async function PUT(request: Request) {
             studentId: existing.studentId,
             component: 'assignment',
             componentId: existing.assignmentId,
-            score,
+            score: gradedScore,
             maxScore: existing.assignment.maxScore,
             weightage: lms.assignmentGradeWeightPct,
             gradedBy: session.user.id,
@@ -212,7 +232,7 @@ export async function PUT(request: Request) {
           studentId: existing.studentId,
           component: 'assignment',
           componentId: existing.assignmentId,
-          score,
+          score: gradedScore,
           maxScore: existing.assignment.maxScore,
           gradedBy: session.user.id,
           gradedAt: new Date().toISOString(),
@@ -220,7 +240,9 @@ export async function PUT(request: Request) {
       }
     }
 
-    await auditLms(request, session.user.id, 'lms.submission.grade', `submission:${id}`, { score });
+    await auditLms(request, session.user.id, 'lms.submission.grade', `submission:${id}`, {
+      score: gradedScore,
+    });
 
     return NextResponse.json({ submission });
   } catch (err) {

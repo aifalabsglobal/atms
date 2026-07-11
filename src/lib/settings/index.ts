@@ -41,3 +41,23 @@ export {
 export { settingsCacheInvalidate } from './cache';
 export { resolveEffectiveValue } from './resolve';
 export { getLmsSettings, DEFAULT_LMS_SETTINGS, type LmsSettings } from './lms-config';
+export {
+  getGeneralSettings,
+  DEFAULT_GENERAL_SETTINGS,
+  type GeneralSettings,
+} from './general-config';
+export {
+  getAuthSettings,
+  validatePasswordAgainstPolicy,
+  getLoginLockState,
+  recordLoginFailure,
+  clearLoginFailures,
+  DEFAULT_AUTH_SETTINGS,
+  type AuthSettings,
+} from './auth-config';
+export {
+  getOrgSettings,
+  isNonWorkingDay,
+  DEFAULT_ORG_SETTINGS,
+  type OrgSettings,
+} from './org-config';

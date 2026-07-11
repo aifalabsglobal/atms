@@ -83,6 +83,18 @@ export async function migrateLegacySettings(updatedBy = 'system:migrate'): Promi
     ['general.session_timeout_minutes', 480],
     ['general.maintenance_mode', false],
     ['general.theme', 'light'],
+    ['general.company_name', undefined],
+    ['general.tagline', undefined],
+    ['general.time_format', '12h'],
+    ['general.language', 'en'],
+    ['general.locale', 'en-IN'],
+    ['general.currency', 'INR'],
+    ['general.pagination_default', 20],
+    ['general.landing_section', 'dashboard'],
+    ['general.branding_primary_color', '#1A3C6E'],
+    ['general.logo_url', undefined],
+    ['general.favicon_url', undefined],
+    ['general.copyright_text', undefined],
   ];
   for (const [key, fallback] of generals) {
     const existing = await db.settingValue.findUnique({

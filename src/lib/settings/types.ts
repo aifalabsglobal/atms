@@ -13,6 +13,8 @@ export type SettingValueType =
 
 export type SettingCategory =
   | 'general'
+  | 'organization'
+  | 'users'
   | 'attendance'
   | 'policies'
   | 'geofence'
@@ -20,6 +22,7 @@ export type SettingCategory =
   | 'lms'
   | 'integrations'
   | 'rbac'
+  | 'audit'
   | 'flags'
   | 'runtime';
 

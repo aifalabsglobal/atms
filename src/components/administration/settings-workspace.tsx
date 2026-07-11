@@ -259,6 +259,7 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
         return next;
       });
       queryClient.invalidateQueries({ queryKey: ['settings-list'] });
+      queryClient.invalidateQueries({ queryKey: ['platform-settings'] });
       queryClient.invalidateQueries({ queryKey: ['system-config'] });
       queryClient.invalidateQueries({ queryKey: ['rbac-config'] });
     },
@@ -277,6 +278,7 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
     onSuccess: () => {
       toast({ title: 'Department override cleared' });
       queryClient.invalidateQueries({ queryKey: ['settings-list'] });
+      queryClient.invalidateQueries({ queryKey: ['platform-settings'] });
       queryClient.invalidateQueries({ queryKey: ['system-config'] });
     },
     onError: (err: Error) => toast({ title: 'Clear failed', description: err.message, variant: 'destructive' }),
@@ -292,6 +294,7 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
     onSuccess: () => {
       toast({ title: 'Reset to default' });
       queryClient.invalidateQueries({ queryKey: ['settings-list'] });
+      queryClient.invalidateQueries({ queryKey: ['platform-settings'] });
       queryClient.invalidateQueries({ queryKey: ['system-config'] });
     },
     onError: (err: Error) => toast({ title: 'Reset failed', description: err.message, variant: 'destructive' }),
@@ -318,6 +321,7 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
       toast({ title: 'Rolled back' });
       queryClient.invalidateQueries({ queryKey: ['settings-list'] });
       queryClient.invalidateQueries({ queryKey: ['settings-history'] });
+      queryClient.invalidateQueries({ queryKey: ['platform-settings'] });
       queryClient.invalidateQueries({ queryKey: ['system-config'] });
     },
     onError: (err: Error) => toast({ title: 'Rollback failed', description: err.message, variant: 'destructive' }),
@@ -349,6 +353,7 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
     onSuccess: () => {
       toast({ title: 'Settings imported' });
       queryClient.invalidateQueries({ queryKey: ['settings-list'] });
+      queryClient.invalidateQueries({ queryKey: ['platform-settings'] });
       queryClient.invalidateQueries({ queryKey: ['system-config'] });
       queryClient.invalidateQueries({ queryKey: ['rbac-config'] });
     },

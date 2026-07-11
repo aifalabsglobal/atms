@@ -95,6 +95,22 @@ export async function POST(request: Request) {
     const course = await db.course.findUnique({ where: { id: courseId } });
     if (!course) return NextResponse.json({ error: 'Course not found' }, { status: 404 });
 
+    const { getLmsSettings } = await import('@/lib/settings/lms-config');
+    const lms = await getLmsSettings();
+    if (lms.enrollmentCapacityDefault > 0) {
+      const currentCount = await db.courseEnrollment.count({
+        where: { courseId, status: 'enrolled' },
+      });
+      if (currentCount + ids.length > lms.enrollmentCapacityDefault) {
+        return NextResponse.json(
+          {
+            error: `Enrollment capacity exceeded (limit ${lms.enrollmentCapacityDefault}, currently ${currentCount}).`,
+          },
+          { status: 400 },
+        );
+      }
+    }
+
     const students = await db.user.findMany({
       where: { id: { in: ids }, role: 'student', status: 'active' },
       select: { id: true },

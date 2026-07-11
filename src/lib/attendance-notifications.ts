@@ -1,9 +1,14 @@
 import { db } from '@/lib/db';
 import { getSystemConfig } from '@/lib/system-config';
 import { createInAppNotification } from '@/lib/notifications';
+import { getGlobalNumber } from '@/lib/settings';
 
 const LOW_ATTENDANCE_TITLE = 'Low attendance warning';
-const DEDUPE_DAYS = 7;
+
+async function dedupeDays(): Promise<number> {
+  const days = await getGlobalNumber('notifications.dedupe_days', 7);
+  return Math.min(90, Math.max(1, Math.round(days) || 7));
+}
 
 function daysAgo(days: number): Date {
   const d = new Date();
@@ -12,11 +17,12 @@ function daysAgo(days: number): Date {
 }
 
 async function hasRecentNotification(userId: string, title: string): Promise<boolean> {
+  const windowDays = await dedupeDays();
   const existing = await db.notification.findFirst({
     where: {
       userId,
       title,
-      createdAt: { gte: daysAgo(DEDUPE_DAYS) },
+      createdAt: { gte: daysAgo(windowDays) },
     },
     select: { id: true },
   });
