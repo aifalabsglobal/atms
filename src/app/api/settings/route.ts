@@ -21,6 +21,7 @@ export async function GET(request: Request) {
       category: category || undefined,
       search,
       userId: session.user.id,
+      departmentId: searchParams.get('departmentId') ?? undefined,
     });
 
     return NextResponse.json({ settings, total: settings.length });

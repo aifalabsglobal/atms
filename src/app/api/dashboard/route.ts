@@ -149,12 +149,16 @@ export async function GET() {
     if (cached) return NextResponse.json(cached);
 
     if (role === 'student' || role === 'parent') {
-      const thresholds = await getAttendanceThresholds();
       const { studentId, error: studentError } = await resolveStudentId(session, null);
       if (studentError) return studentError;
       if (!studentId) {
         return NextResponse.json({ error: 'No student scope available' }, { status: 403 });
       }
+      const studentRow = await db.user.findUnique({
+        where: { id: studentId },
+        select: { departmentId: true },
+      });
+      const thresholds = await getAttendanceThresholds({ departmentId: studentRow?.departmentId });
       const studentData = await buildStudentDashboard(studentId, thresholds);
       if (role === 'parent') {
         const ward = await db.user.findUnique({

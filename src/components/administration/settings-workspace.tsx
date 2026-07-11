@@ -26,6 +26,7 @@ type EffectiveSetting = {
   source: string;
   version?: number;
   updatedAt?: string | null;
+  layers?: { scope: string; scopeId: string; value: unknown; version?: number }[];
   definition: {
     key: string;
     category: string;
@@ -35,6 +36,8 @@ type EffectiveSetting = {
     defaultValue: unknown;
     editable?: boolean;
     envOnly?: boolean;
+    allowUserOverride?: boolean;
+    allowDepartmentOverride?: boolean;
     validation?: { allowedValues?: (string | number | boolean)[]; min?: number; max?: number };
   };
 };
@@ -149,18 +152,29 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, unknown>>({});
   const [showHistory, setShowHistory] = useState(false);
+  const [editScope, setEditScope] = useState<'global' | 'department'>('global');
+  const [departmentId, setDepartmentId] = useState<string>('');
 
   const { data: catData } = useQuery({
     queryKey: ['settings-categories'],
     queryFn: () => fetchJson<{ categories: Category[] }>('/api/settings/categories'),
   });
 
+  const { data: deptData } = useQuery({
+    queryKey: ['settings-departments'],
+    queryFn: () => fetchJson<{ departments: { id: string; code: string; name: string }[] }>(
+      '/api/masters/departments?limit=100&isActive=true',
+    ),
+    enabled: isSuperAdmin,
+  });
+
   const { data: listData, isLoading } = useQuery({
-    queryKey: ['settings-list', category, search],
+    queryKey: ['settings-list', category, search, departmentId],
     queryFn: () => {
       const params = new URLSearchParams();
       if (category && category !== 'favorites' && category !== 'recent') params.set('category', category);
       if (search.trim()) params.set('search', search.trim());
+      if (departmentId) params.set('departmentId', departmentId);
       return fetchJson<{ settings: EffectiveSetting[] }>(`/api/settings?${params}`);
     },
     enabled: category !== 'favorites' && category !== 'recent',
@@ -217,15 +231,28 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (!selected) throw new Error('No setting selected');
+      if (editScope === 'department' && !departmentId) {
+        throw new Error('Select a department for department-scoped saves');
+      }
+      if (editScope === 'department' && !selected.definition.allowDepartmentOverride) {
+        throw new Error('This setting does not allow department overrides');
+      }
       const value = parseDraft(selected, draftValue);
       return fetchJson<{ setting: EffectiveSetting }>(`/api/settings/${encodeURIComponent(selected.key)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ value }),
+        body: JSON.stringify({
+          value,
+          scope: editScope,
+          scopeId: editScope === 'department' ? departmentId : '',
+        }),
       });
     },
     onSuccess: (data) => {
-      toast({ title: 'Setting saved', description: data.setting.key });
+      toast({
+        title: 'Setting saved',
+        description: `${data.setting.key} (${editScope}${editScope === 'department' ? ` · ${departmentId.slice(0, 8)}…` : ''})`,
+      });
       setDrafts((d) => {
         const next = { ...d };
         delete next[data.setting.key];
@@ -236,6 +263,23 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
       queryClient.invalidateQueries({ queryKey: ['rbac-config'] });
     },
     onError: (err: Error) => toast({ title: 'Save failed', description: err.message, variant: 'destructive' }),
+  });
+
+  const clearOverrideMutation = useMutation({
+    mutationFn: async () => {
+      if (!selected || !departmentId) throw new Error('Department required');
+      return fetchJson('/api/settings/clear-override', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: selected.key, scope: 'department', scopeId: departmentId }),
+      });
+    },
+    onSuccess: () => {
+      toast({ title: 'Department override cleared' });
+      queryClient.invalidateQueries({ queryKey: ['settings-list'] });
+      queryClient.invalidateQueries({ queryKey: ['system-config'] });
+    },
+    onError: (err: Error) => toast({ title: 'Clear failed', description: err.message, variant: 'destructive' }),
   });
 
   const resetMutation = useMutation({
@@ -313,7 +357,13 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
 
   const favKeys = new Set((favData?.settings ?? []).map((s) => s.key));
   const categories = catData?.categories ?? [];
-  const editable = isSuperAdmin && selected && !selected.definition.envOnly && selected.definition.editable !== false;
+  const departments = deptData?.departments ?? [];
+  const canDeptOverride = Boolean(selected?.definition.allowDepartmentOverride);
+  const editable = isSuperAdmin && selected && !selected.definition.envOnly && selected.definition.editable !== false
+    && (editScope === 'global' || (editScope === 'department' && canDeptOverride && !!departmentId));
+  const hasDeptLayer = Boolean(
+    selected?.layers?.some((l) => l.scope === 'department' && l.scopeId === departmentId),
+  );
 
   return (
     <div className="space-y-4">
@@ -540,6 +590,12 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
                       <Badge variant="outline" className="text-[10px] font-mono">{selected.key}</Badge>
                       <Badge variant="outline" className="text-[10px]">{selected.definition.valueType}</Badge>
                       {selected.definition.envOnly && <Badge className="text-[10px] bg-amber-100 text-amber-800">env only</Badge>}
+                      {selected.definition.allowDepartmentOverride && (
+                        <Badge variant="outline" className="text-[10px]">dept override</Badge>
+                      )}
+                      {selected.definition.allowUserOverride && (
+                        <Badge variant="outline" className="text-[10px]">user override</Badge>
+                      )}
                     </div>
                   </>
                 ) : (
@@ -551,6 +607,61 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
                   <p className="text-xs text-muted-foreground">Choose a key from the list.</p>
                 ) : (
                   <>
+                    {isSuperAdmin && (
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Edit scope</Label>
+                          <Select
+                            value={editScope}
+                            onValueChange={(v) => setEditScope(v as 'global' | 'department')}
+                          >
+                            <SelectTrigger className="h-9">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="global">Global</SelectItem>
+                              <SelectItem value="department" disabled={!canDeptOverride}>
+                                Department{!canDeptOverride ? ' (not allowed)' : ''}
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Department</Label>
+                          <Select
+                            value={departmentId || '__none__'}
+                            onValueChange={(v) => setDepartmentId(v === '__none__' ? '' : v)}
+                          >
+                            <SelectTrigger className="h-9">
+                              <SelectValue placeholder="Select department" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">None (preview global)</SelectItem>
+                              {departments.map((d) => (
+                                <SelectItem key={d.id} value={d.id}>
+                                  {d.code} — {d.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    )}
+
+                    {(selected.layers?.length ?? 0) > 0 && (
+                      <div className="rounded-md border px-3 py-2 space-y-1">
+                        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Resolution layers</p>
+                        <ul className="space-y-1">
+                          {selected.layers!.map((l, i) => (
+                            <li key={`${l.scope}-${l.scopeId}-${i}`} className="flex justify-between gap-2 text-[10px] font-mono">
+                              <span>{l.scope}{l.scopeId ? `:${l.scopeId.slice(0, 8)}` : ''}</span>
+                              <span className="truncate opacity-80">{JSON.stringify(l.value)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
                     <div className="space-y-2">
                       <Label className="text-xs">Value</Label>
                       <SettingEditor
@@ -560,7 +671,8 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
                         onChange={(v) => setDrafts((d) => ({ ...d, [selected.key]: v }))}
                       />
                       <p className="text-[10px] text-muted-foreground">
-                        Default: <code className="font-mono">{JSON.stringify(selected.definition.defaultValue)}</code>
+                        Effective source: <code className="font-mono">{selected.source}</code>
+                        {' · '}Default: <code className="font-mono">{JSON.stringify(selected.definition.defaultValue)}</code>
                         {selected.version != null && ` · v${selected.version}`}
                       </p>
                     </div>
@@ -574,17 +686,28 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
                           onClick={() => saveMutation.mutate()}
                         >
                           {saveMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                          Save
+                          Save {editScope === 'department' ? 'dept override' : 'global'}
                         </Button>
                         <Button
                           size="sm"
                           variant="outline"
                           className="gap-1.5"
-                          disabled={!editable || resetMutation.isPending}
+                          disabled={!editable || editScope !== 'global' || resetMutation.isPending}
                           onClick={() => resetMutation.mutate(selected.key)}
                         >
-                          <RotateCcw className="h-3.5 w-3.5" /> Reset
+                          <RotateCcw className="h-3.5 w-3.5" /> Reset global
                         </Button>
+                        {canDeptOverride && departmentId && hasDeptLayer && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1.5"
+                            disabled={clearOverrideMutation.isPending}
+                            onClick={() => clearOverrideMutation.mutate()}
+                          >
+                            Clear dept override
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="ghost"

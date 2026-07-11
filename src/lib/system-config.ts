@@ -93,9 +93,27 @@ export async function getSystemConfig(): Promise<SystemConfigSettings> {
   return cachedSettings;
 }
 
-export async function getAttendanceThresholds(): Promise<AttendanceThresholds> {
-  const cfg = await getSystemConfig();
-  return cfg.attendance;
+export async function getAttendanceThresholds(opts?: {
+  departmentId?: string | null;
+}): Promise<AttendanceThresholds> {
+  if (!opts?.departmentId) {
+    const cfg = await getSystemConfig();
+    return cfg.attendance;
+  }
+
+  const { getSetting } = await import('@/lib/settings');
+  const deptOpts = { departmentId: opts.departmentId };
+  const [eligibilityRaw, condonationRaw, hodRaw] = await Promise.all([
+    getSetting('attendance.eligibility_pct', deptOpts),
+    getSetting('attendance.condonation_pct', deptOpts),
+    getSetting('attendance.require_hod_for_condonation', deptOpts),
+  ]);
+
+  return {
+    eligibilityPct: typeof eligibilityRaw === 'number' ? eligibilityRaw : 75,
+    condonationPct: typeof condonationRaw === 'number' ? condonationRaw : 65,
+    requireHodForCondonation: typeof hodRaw === 'boolean' ? hodRaw : true,
+  };
 }
 
 export async function getSystemConfigMeta(): Promise<{

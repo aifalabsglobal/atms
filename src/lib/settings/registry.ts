@@ -55,6 +55,7 @@ const defs: SettingDefinition[] = [
     valueType: 'enum',
     defaultValue: 'light',
     validation: { allowedValues: ['light', 'dark', 'system'] },
+    allowUserOverride: true,
   },
 
   // Attendance
@@ -66,6 +67,7 @@ const defs: SettingDefinition[] = [
     valueType: 'number',
     defaultValue: 75,
     validation: { min: 0, max: 100, required: true },
+    allowDepartmentOverride: true,
   },
   {
     key: 'attendance.condonation_pct',
@@ -75,6 +77,7 @@ const defs: SettingDefinition[] = [
     valueType: 'number',
     defaultValue: 65,
     validation: { min: 0, max: 100, required: true },
+    allowDepartmentOverride: true,
   },
   {
     key: 'attendance.require_hod_for_condonation',
@@ -83,6 +86,7 @@ const defs: SettingDefinition[] = [
     description: 'HOD approval required for condonation requests.',
     valueType: 'boolean',
     defaultValue: true,
+    allowDepartmentOverride: true,
   },
 
   // Policies
@@ -128,6 +132,7 @@ const defs: SettingDefinition[] = [
     valueType: 'number',
     defaultValue: 100,
     validation: { min: 10, max: 5000 },
+    allowDepartmentOverride: true,
   },
 
   // Notifications
@@ -172,6 +177,7 @@ const defs: SettingDefinition[] = [
     description: 'Allow students to run and submit coding quiz problems.',
     valueType: 'boolean',
     defaultValue: true,
+    allowDepartmentOverride: true,
   },
   {
     key: 'lms.coding_default_time_limit_ms',
@@ -189,6 +195,7 @@ const defs: SettingDefinition[] = [
     description: 'Allow Python submissions (JavaScript remains the default).',
     valueType: 'boolean',
     defaultValue: false,
+    allowDepartmentOverride: true,
   },
   {
     key: 'lms.coding_run_rate_limit_per_min',
@@ -216,6 +223,7 @@ const defs: SettingDefinition[] = [
     valueType: 'number',
     defaultValue: 15,
     validation: { min: 0, max: 100 },
+    allowDepartmentOverride: true,
   },
   {
     key: 'lms.assignment_grade_weight_pct',
@@ -225,6 +233,7 @@ const defs: SettingDefinition[] = [
     valueType: 'number',
     defaultValue: 25,
     validation: { min: 0, max: 100 },
+    allowDepartmentOverride: true,
   },
   {
     key: 'lms.default_assignment_max_score',

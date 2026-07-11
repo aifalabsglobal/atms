@@ -202,6 +202,15 @@ export async function setSetting(
   if (scope !== GLOBAL_SCOPE && !options.scopeId) {
     throw new Error('scopeId is required for non-global scopes');
   }
+  if (scope === 'department' && !def.allowDepartmentOverride) {
+    throw new Error(`Setting ${key} does not allow department overrides`);
+  }
+  if (scope === 'user' && !def.allowUserOverride) {
+    throw new Error(`Setting ${key} does not allow user overrides`);
+  }
+  if (scope === 'organization') {
+    throw new Error('Organization scope is reserved for a later phase');
+  }
 
   const existing = await db.settingValue.findUnique({
     where: { key_scope_scopeId: { key, scope, scopeId } },
@@ -257,7 +266,56 @@ export async function setSetting(
 
   settingsCacheInvalidate(`eff:${key}`);
   settingsCacheInvalidate('list:');
-  return getEffectiveSetting(key);
+  return getEffectiveSetting(key, {
+    userId: scope === 'user' ? scopeId : undefined,
+    departmentId: scope === 'department' ? scopeId : undefined,
+  });
+}
+
+/** Remove a scoped override (falls back to lower layers / default). */
+export async function clearSettingOverride(
+  key: string,
+  options: { scope: SettingScope; scopeId: string; updatedBy?: string; reason?: string },
+): Promise<EffectiveSetting> {
+  const def = requireSettingDefinition(key);
+  if (options.scope === 'global') {
+    throw new Error('Use reset to clear a global value');
+  }
+  if (options.scope === 'department' && !def.allowDepartmentOverride) {
+    throw new Error(`Setting ${key} does not allow department overrides`);
+  }
+  if (options.scope === 'user' && !def.allowUserOverride) {
+    throw new Error(`Setting ${key} does not allow user overrides`);
+  }
+
+  const existing = await db.settingValue.findUnique({
+    where: {
+      key_scope_scopeId: { key, scope: options.scope, scopeId: options.scopeId },
+    },
+  });
+  if (existing) {
+    await db.settingHistory.create({
+      data: {
+        key,
+        scope: options.scope,
+        scopeId: options.scopeId,
+        value: existing.value as Prisma.InputJsonValue,
+        version: existing.version,
+        updatedBy: options.updatedBy ?? existing.updatedBy,
+        reason: options.reason ?? 'clear_override',
+      },
+    });
+    await db.settingValue.delete({
+      where: { key_scope_scopeId: { key, scope: options.scope, scopeId: options.scopeId } },
+    });
+  }
+
+  settingsCacheInvalidate(`eff:${key}`);
+  settingsCacheInvalidate('list:');
+  return getEffectiveSetting(key, {
+    userId: options.scope === 'user' ? options.scopeId : undefined,
+    departmentId: options.scope === 'department' ? options.scopeId : undefined,
+  });
 }
 
 export async function resetSetting(

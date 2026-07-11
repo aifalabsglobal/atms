@@ -22,6 +22,7 @@ export {
   setSetting,
   resetSetting,
   resetCategory,
+  clearSettingOverride,
   getSettingHistory,
   rollbackSetting,
   exportSettings,

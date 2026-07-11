@@ -92,6 +92,18 @@ try {
   assert('rbac.matrix registered', !!getSettingDefinition('rbac.matrix'));
   assert('lms.coding_enabled registered', getSettingDefinition('lms.coding_enabled')?.valueType === 'boolean');
   assert('runtime.storage_configured env-only', !!getSettingDefinition('runtime.storage_configured')?.envOnly);
+  assert(
+    'eligibility allows department override',
+    !!getSettingDefinition('attendance.eligibility_pct')?.allowDepartmentOverride,
+  );
+  assert(
+    'theme allows user override',
+    !!getSettingDefinition('general.theme')?.allowUserOverride,
+  );
+  assert(
+    'rbac.matrix disallows department override',
+    !getSettingDefinition('rbac.matrix')?.allowDepartmentOverride,
+  );
 
   // Resolution order: env → user → department → organization → global → default
   const layers = [
