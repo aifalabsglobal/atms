@@ -15,6 +15,8 @@ import {
 } from '@/components/ui/select';
 import { KnuctDIDAuthPanel, type RegisterProfile } from '@/components/knuct/did-auth-panel';
 import { BRAND } from '@/lib/branding';
+import { usePlatformSettings } from '@/hooks/use-platform-settings';
+import { DEFAULT_GENERAL_SETTINGS } from '@/lib/settings/general-defaults';
 
 const REGISTER_ROLES = [
   { value: 'student', label: 'Student' },
@@ -117,6 +119,8 @@ function ProfileFields({
 }
 
 export default function RegisterPage() {
+  const { data: platform } = usePlatformSettings(true);
+  const general = platform ?? DEFAULT_GENERAL_SETTINGS;
   const [mounted, setMounted] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -161,11 +165,18 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#1A3C6E]/5 via-background to-[#1A3C6E]/10 p-4 py-8">
+    <div
+      className="min-h-screen flex items-center justify-center p-4 py-8"
+      style={{
+        background: `linear-gradient(to bottom right, color-mix(in srgb, ${general.brandingPrimaryColor} 5%, transparent), var(--background), color-mix(in srgb, ${general.brandingPrimaryColor} 10%, transparent))`,
+      }}
+    >
       <Card className="w-full max-w-lg shadow-lg">
         <CardHeader className="text-center space-y-3 pb-2">
-          <BrandLogo size="lg" className="mx-auto" priority />
-          <CardTitle className="text-xl text-[#1A3C6E]">Register with Knuct</CardTitle>
+          <BrandLogo size="lg" className="mx-auto" priority src={general.logoUrl} alt={general.companyName} />
+          <CardTitle className="text-xl" style={{ color: general.brandingPrimaryColor }}>
+            Register with {general.appName}
+          </CardTitle>
           <CardDescription>
             Create a new Knuct wallet or link an existing one. An administrator will approve your campus account.
           </CardDescription>
@@ -184,7 +195,7 @@ export default function RegisterPage() {
                 An administrator will review your request and create your Knuct wallet upon approval.
                 After approval, sign in with email, download your private share from the dashboard, then use Knuct login.
               </p>
-              <Button asChild className="bg-[#1A3C6E] hover:bg-[#1A3C6E]/90">
+              <Button asChild className="text-white hover:opacity-90" style={{ backgroundColor: general.brandingPrimaryColor }}>
                 <Link href="/login">Back to login</Link>
               </Button>
             </div>
@@ -209,7 +220,8 @@ export default function RegisterPage() {
                   )}
                   <Button
                     type="button"
-                    className="w-full bg-[#1A3C6E] hover:bg-[#1A3C6E]/90 gap-2"
+                    className="w-full text-white hover:opacity-90 gap-2"
+                    style={{ backgroundColor: general.brandingPrimaryColor }}
                     disabled={!profileReady || creating}
                     onClick={() => void createWalletAndRegister()}
                   >
@@ -242,7 +254,7 @@ export default function RegisterPage() {
 
               <p className="text-center text-sm text-muted-foreground">
                 Already have an account?{' '}
-                <Link href="/login" className="text-[#1A3C6E] font-medium hover:underline">
+                <Link href="/login" className="text-brand font-medium hover:underline">
                   Sign in
                 </Link>
               </p>

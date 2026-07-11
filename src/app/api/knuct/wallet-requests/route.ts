@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireAuth, requireRoles } from '@/lib/auth-helpers';
+import { requireAuth, requireRoles, requireWritableRoles } from '@/lib/auth-helpers';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { getClientIp } from '@/lib/audit';
 import {
@@ -72,7 +72,7 @@ export async function POST(req: Request) {
     }
 
     if (body.action === 'approve' || body.action === 'reject') {
-      const adminCheck = await requireRoles(['super_admin', 'admin']);
+      const adminCheck = await requireWritableRoles(['super_admin', 'admin']);
       if (adminCheck.error || !adminCheck.session) return adminCheck.error;
 
       if (!body.id) {

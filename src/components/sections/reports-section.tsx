@@ -15,6 +15,7 @@ import { exportStaffReportCsv, exportStudentReportCsv } from '@/lib/report-expor
 import { exportStaffReportPdf, exportStudentReportPdf } from '@/lib/report-pdf';
 import { usePlatformSettings } from '@/hooks/use-platform-settings';
 import { DEFAULT_GENERAL_SETTINGS } from '@/lib/settings/general-defaults';
+import { DEFAULT_BRAND_PRIMARY } from '@/lib/brand-color';
 import { Button } from '@/components/ui/button';
 import {
   BarChart3, Users, BookOpen, ShieldAlert, TrendingUp, TrendingDown,
@@ -27,7 +28,7 @@ import {
   PieChart, Pie, Cell, Legend, LineChart, Line,
 } from 'recharts';
 
-const COLORS = ['#1A3C6E', '#2E7D32', '#E65100', '#6A1B9A', '#C62828', '#00838F', '#F9A825'];
+const COLORS = [DEFAULT_BRAND_PRIMARY, '#2E7D32', '#E65100', '#6A1B9A', '#C62828', '#00838F', '#F9A825'];
 
 type ReportThresholds = { eligibilityPct: number; condonationPct: number };
 const FALLBACK_THRESHOLDS: ReportThresholds = { eligibilityPct: 75, condonationPct: 65 };
@@ -45,7 +46,7 @@ function attendancePctBgClass(pct: number, t: ReportThresholds): string {
 }
 
 const ROLE_COLORS: Record<string, string> = {
-  super_admin: '#1A3C6E',
+  super_admin: DEFAULT_BRAND_PRIMARY,
   admin: '#2C5F8A',
   hod: '#1B6B4A',
   faculty: '#7C3AED',
@@ -96,6 +97,7 @@ function StudentReportView({ data }: { data: StudentReportData }) {
     appName: general.appName,
     companyName: general.companyName,
     locale: general.locale,
+    brandingPrimaryColor: general.brandingPrimaryColor,
   };
   const { student, enrolledCourses, attendance, assignments, quizzes, grades, violations, riskStatus } = data;
   const thresholds = data.thresholds ?? FALLBACK_THRESHOLDS;
@@ -132,7 +134,7 @@ function StudentReportView({ data }: { data: StudentReportData }) {
           </AvatarFallback>
         </Avatar>
         <div className="flex-1 min-w-0">
-          <h1 className="text-2xl font-bold text-[#1A3C6E]">
+          <h1 className="text-2xl font-bold text-brand">
             {isWardView ? `${student.name}'s Report` : student.name}
           </h1>
           <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground flex-wrap">
@@ -192,8 +194,8 @@ function StudentReportView({ data }: { data: StudentReportData }) {
         </Card>
         <Card className="py-3">
           <CardContent className="flex items-center gap-3 px-3">
-            <div className="h-9 w-9 rounded-lg bg-[#1A3C6E]/10 flex items-center justify-center shrink-0">
-              <GraduationCap className="h-4 w-4 text-[#1A3C6E]" />
+            <div className="h-9 w-9 rounded-lg bg-brand/10 flex items-center justify-center shrink-0">
+              <GraduationCap className="h-4 w-4 text-brand" />
             </div>
             <div>
               <p className="text-lg font-bold">{assignments.avgScore ?? '—'}{assignments.avgScore ? '%' : ''}</p>
@@ -281,7 +283,7 @@ function StudentReportView({ data }: { data: StudentReportData }) {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4 text-[#1A3C6E]" /> My Attendance Overview
+                  <BarChart3 className="h-4 w-4 text-brand" /> My Attendance Overview
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -322,7 +324,7 @@ function StudentReportView({ data }: { data: StudentReportData }) {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Target className="h-4 w-4 text-[#1A3C6E]" /> Course-wise Attendance
+                  <Target className="h-4 w-4 text-brand" /> Course-wise Attendance
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -333,7 +335,7 @@ function StudentReportView({ data }: { data: StudentReportData }) {
                       <XAxis dataKey="name" fontSize={11} />
                       <YAxis domain={[0, 100]} fontSize={11} />
                       <RechartsTooltip formatter={(value: number) => [`${value}%`, 'Attendance']} />
-                      <Bar dataKey="percentage" fill="#1A3C6E" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="percentage" fill={COLORS[0]} radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
@@ -349,7 +351,7 @@ function StudentReportView({ data }: { data: StudentReportData }) {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
-                  <TrendingUp className="h-4 w-4 text-[#1A3C6E]" /> Weekly attendance trend
+                  <TrendingUp className="h-4 w-4 text-brand" /> Weekly attendance trend
                 </CardTitle>
                 <CardDescription>Your present rate over the last {attendance.weeklyTrend.length} weeks</CardDescription>
               </CardHeader>
@@ -365,7 +367,7 @@ function StudentReportView({ data }: { data: StudentReportData }) {
                         return [v, name];
                       }}
                     />
-                    <Line type="monotone" dataKey="rate" stroke="#1A3C6E" strokeWidth={2} dot={{ r: 3 }} name="rate" />
+                    <Line type="monotone" dataKey="rate" stroke={COLORS[0]} strokeWidth={2} dot={{ r: 3 }} name="rate" />
                   </LineChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -403,7 +405,7 @@ function StudentReportView({ data }: { data: StudentReportData }) {
                         <TableRow key={ca.course.id}>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <Badge className="text-[10px] font-mono bg-[#1A3C6E] text-white shrink-0">{ca.course.code}</Badge>
+                              <Badge className="text-[10px] font-mono bg-brand text-white shrink-0">{ca.course.code}</Badge>
                               <span className="text-sm truncate max-w-[150px]" title={ca.course.name}>{ca.course.name}</span>
                             </div>
                           </TableCell>
@@ -435,8 +437,8 @@ function StudentReportView({ data }: { data: StudentReportData }) {
           <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
             <Card className="py-3">
               <CardContent className="flex items-center gap-3 px-3">
-                <div className="h-9 w-9 rounded-lg bg-[#1A3C6E]/10 flex items-center justify-center shrink-0">
-                  <FileText className="h-4 w-4 text-[#1A3C6E]" />
+                <div className="h-9 w-9 rounded-lg bg-brand/10 flex items-center justify-center shrink-0">
+                  <FileText className="h-4 w-4 text-brand" />
                 </div>
                 <div>
                   <p className="text-lg font-bold">{assignments.total}</p>
@@ -482,7 +484,7 @@ function StudentReportView({ data }: { data: StudentReportData }) {
           <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
-                <FileText className="h-4 w-4 text-[#1A3C6E]" /> My Assignment Submissions
+                <FileText className="h-4 w-4 text-brand" /> My Assignment Submissions
               </CardTitle>
               <CardDescription>Your graded and pending assignments</CardDescription>
             </CardHeader>
@@ -522,7 +524,7 @@ function StudentReportView({ data }: { data: StudentReportData }) {
                               </div>
                             </TableCell>
                             <TableCell>
-                              <Badge className="text-[10px] font-mono bg-[#1A3C6E] text-white">{a.course.code}</Badge>
+                              <Badge className="text-[10px] font-mono bg-brand text-white">{a.course.code}</Badge>
                             </TableCell>
                             <TableCell>
                               <Badge variant="outline" className={cn('text-[10px]',
@@ -561,8 +563,8 @@ function StudentReportView({ data }: { data: StudentReportData }) {
           <div className="grid gap-3 grid-cols-2 md:grid-cols-4">
             <Card className="py-3">
               <CardContent className="flex items-center gap-3 px-3">
-                <div className="h-9 w-9 rounded-lg bg-[#1A3C6E]/10 flex items-center justify-center shrink-0">
-                  <HelpCircle className="h-4 w-4 text-[#1A3C6E]" />
+                <div className="h-9 w-9 rounded-lg bg-brand/10 flex items-center justify-center shrink-0">
+                  <HelpCircle className="h-4 w-4 text-brand" />
                 </div>
                 <div>
                   <p className="text-lg font-bold">{quizzes.totalAttempts}</p>
@@ -594,8 +596,8 @@ function StudentReportView({ data }: { data: StudentReportData }) {
             </Card>
             <Card className="py-3">
               <CardContent className="flex items-center gap-3 px-3">
-                <div className="h-9 w-9 rounded-lg bg-[#1A3C6E]/10 flex items-center justify-center shrink-0">
-                  <Zap className="h-4 w-4 text-[#1A3C6E]" />
+                <div className="h-9 w-9 rounded-lg bg-brand/10 flex items-center justify-center shrink-0">
+                  <Zap className="h-4 w-4 text-brand" />
                 </div>
                 <div>
                   <p className="text-lg font-bold">{quizzes.avgScore >= 80 ? 'A' : quizzes.avgScore >= 60 ? 'B' : quizzes.avgScore >= 40 ? 'C' : quizzes.avgScore > 0 ? 'D' : '—'}</p>
@@ -608,7 +610,7 @@ function StudentReportView({ data }: { data: StudentReportData }) {
           <Card>
             <CardHeader>
               <CardTitle className="text-base flex items-center gap-2">
-                <ClipboardList className="h-4 w-4 text-[#1A3C6E]" /> My Quiz Attempts
+                <ClipboardList className="h-4 w-4 text-brand" /> My Quiz Attempts
               </CardTitle>
               <CardDescription>{quizzes.recent.length} quiz attempts recorded</CardDescription>
             </CardHeader>
@@ -642,7 +644,7 @@ function StudentReportView({ data }: { data: StudentReportData }) {
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <Badge className="text-[10px] font-mono bg-[#1A3C6E] text-white shrink-0">{at.course.code}</Badge>
+                              <Badge className="text-[10px] font-mono bg-brand text-white shrink-0">{at.course.code}</Badge>
                               <span className="text-sm font-medium truncate">{at.course.name}</span>
                             </div>
                             <div className="flex items-center gap-3 mt-1">
@@ -768,7 +770,7 @@ function StudentReportView({ data }: { data: StudentReportData }) {
                         <TableRow key={cg.courseId}>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <Badge className="text-[10px] font-mono bg-[#1A3C6E] text-white shrink-0">{cg.course.code}</Badge>
+                              <Badge className="text-[10px] font-mono bg-brand text-white shrink-0">{cg.course.code}</Badge>
                               <span className="text-sm truncate max-w-[150px]" title={cg.course.name}>{cg.course.name}</span>
                             </div>
                           </TableCell>
@@ -886,6 +888,7 @@ function StaffAnalyticsView({ data }: { data: StaffReportData }) {
     appName: general.appName,
     companyName: general.companyName,
     locale: general.locale,
+    brandingPrimaryColor: general.brandingPrimaryColor,
   };
   const thresholds = data.thresholds ?? FALLBACK_THRESHOLDS;
   const {
@@ -922,7 +925,7 @@ function StaffAnalyticsView({ data }: { data: StaffReportData }) {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[#1A3C6E]">Reports & Analytics</h1>
+          <h1 className="text-2xl font-bold text-brand">Reports & Analytics</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Role-scoped depth analytics — attendance, academics, LMS, compliance
           </p>
@@ -961,7 +964,7 @@ function StaffAnalyticsView({ data }: { data: StaffReportData }) {
           >
             <FileText className="h-3.5 w-3.5" /> Export PDF
           </Button>
-          <Badge className="bg-[#1A3C6E] text-white">{scopeLabel}</Badge>
+          <Badge className="bg-brand text-white">{scopeLabel}</Badge>
           <Badge variant="outline" className="gap-1"><Calendar className="h-3 w-3" /> AY 2025-26</Badge>
         </div>
       </div>
@@ -987,8 +990,8 @@ function StaffAnalyticsView({ data }: { data: StaffReportData }) {
             ].map((k) => (
               <Card key={k.label} className="py-3">
                 <CardContent className="flex items-center gap-3 px-3">
-                  <div className="h-9 w-9 rounded-lg bg-[#1A3C6E]/10 flex items-center justify-center shrink-0">
-                    <k.icon className="h-4 w-4 text-[#1A3C6E]" />
+                  <div className="h-9 w-9 rounded-lg bg-brand/10 flex items-center justify-center shrink-0">
+                    <k.icon className="h-4 w-4 text-brand" />
                   </div>
                   <div>
                     <p className="text-lg font-bold">{k.value}</p>
@@ -1012,7 +1015,7 @@ function StaffAnalyticsView({ data }: { data: StaffReportData }) {
                     <XAxis dataKey="week" fontSize={10} tickFormatter={(v) => v.slice(5)} />
                     <YAxis domain={[0, 100]} fontSize={12} />
                     <RechartsTooltip formatter={(v: number) => [`${v}%`, 'Rate']} />
-                    <Line type="monotone" dataKey="rate" stroke="#1A3C6E" strokeWidth={2} dot={{ r: 3 }} />
+                    <Line type="monotone" dataKey="rate" stroke={COLORS[0]} strokeWidth={2} dot={{ r: 3 }} />
                   </LineChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -1141,7 +1144,7 @@ function StaffAnalyticsView({ data }: { data: StaffReportData }) {
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-lg bg-[#1A3C6E]/10 flex items-center justify-center"><BarChart3 className="h-5 w-5 text-[#1A3C6E]" /></div>
+                  <div className="h-10 w-10 rounded-lg bg-brand/10 flex items-center justify-center"><BarChart3 className="h-5 w-5 text-brand" /></div>
                   <div><p className="text-xs text-muted-foreground">Total Sessions</p><p className="text-xl font-bold">{attendanceSummary?.length || 0}</p></div>
                 </div>
               </CardContent>
@@ -1317,7 +1320,7 @@ function StaffAnalyticsView({ data }: { data: StaffReportData }) {
                     <XAxis dataKey="name" fontSize={12} />
                     <YAxis domain={[0, 100]} fontSize={12} />
                     <RechartsTooltip formatter={(value: number) => [`${value}%`, 'Avg Grade']} />
-                    <Bar dataKey="avgGrade" fill="#1A3C6E" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="avgGrade" fill={COLORS[0]} radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
@@ -1468,7 +1471,7 @@ export default function ReportsSection() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <h1 className="text-2xl font-bold text-[#1A3C6E]">Reports & Analytics</h1>
+        <h1 className="text-2xl font-bold text-brand">Reports & Analytics</h1>
         <div className="grid gap-4 md:grid-cols-3">
           {[1, 2, 3].map(i => (
             <Card key={i}><CardContent className="p-6"><div className="h-32 bg-muted animate-pulse rounded" /></CardContent></Card>

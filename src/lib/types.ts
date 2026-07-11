@@ -129,7 +129,13 @@ export interface UserItem {
   lastLoginAt: string | null;
   createdAt: string;
   _count: { attendanceRecords: number; courseEnrollments: number; submissions: number; taughtCourses: number };
-  knuctWallet?: { did: string | null; status: string } | null;
+  knuctWallet?: {
+    did: string | null;
+    status: string;
+    lastError?: string | null;
+    updatedAt?: string | Date | null;
+    createdAt?: string | Date | null;
+  } | null;
 }
 
 export interface GeofenceItem {

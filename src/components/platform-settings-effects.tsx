@@ -2,12 +2,11 @@
 
 import { useEffect, useRef } from 'react';
 import { signOut } from 'next-auth/react';
-import { useTheme } from 'next-themes';
 import type { GeneralSettings } from '@/lib/settings/general-defaults';
 import type { Section } from '@/lib/roles';
 import { useAppStore } from '@/lib/store';
 
-/** Applies branding CSS vars, favicon, html lang, default theme, and idle logout. */
+/** Landing section, idle logout, and maintenance banner for the authenticated shell. */
 export function PlatformSettingsEffects({
   general,
   allowedSections,
@@ -17,51 +16,24 @@ export function PlatformSettingsEffects({
   allowedSections: Section[];
   role: string;
 }) {
-  const { setTheme } = useTheme();
-  const { activeSection, setActiveSection } = useAppStore();
-  const landingApplied = useRef(false);
-  const themeApplied = useRef(false);
+  const { setActiveSection } = useAppStore();
+  const lastLanding = useRef<string | null>(null);
 
   useEffect(() => {
-    document.documentElement.style.setProperty('--brand-primary', general.brandingPrimaryColor);
-    document.documentElement.lang = general.language || 'en';
-  }, [general.brandingPrimaryColor, general.language]);
-
-  useEffect(() => {
-    const href = general.faviconUrl || '/logo.jpeg';
-    let link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
-    if (!link) {
-      link = document.createElement('link');
-      link.rel = 'icon';
-      document.head.appendChild(link);
-    }
-    link.href = href;
-  }, [general.faviconUrl]);
-
-  useEffect(() => {
-    if (themeApplied.current) return;
-    themeApplied.current = true;
-    if (general.theme === 'light' || general.theme === 'dark' || general.theme === 'system') {
-      setTheme(general.theme);
-    }
-  }, [general.theme, setTheme]);
-
-  useEffect(() => {
-    if (landingApplied.current) return;
     const target = general.landingSection;
     if (!target || target === 'dashboard') {
-      landingApplied.current = true;
+      lastLanding.current = target || 'dashboard';
       return;
     }
-    if (activeSection !== 'dashboard') {
-      landingApplied.current = true;
+    if (!allowedSections.includes(target)) {
+      lastLanding.current = target;
       return;
     }
-    if (allowedSections.includes(target)) {
-      setActiveSection(target);
-    }
-    landingApplied.current = true;
-  }, [general.landingSection, allowedSections, activeSection, setActiveSection]);
+    // Apply on first load and whenever the campus landing setting changes.
+    if (lastLanding.current === target) return;
+    lastLanding.current = target;
+    setActiveSection(target);
+  }, [general.landingSection, allowedSections, setActiveSection]);
 
   useEffect(() => {
     const minutes = general.sessionTimeoutMinutes;

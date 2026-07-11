@@ -3,6 +3,9 @@
 import { useState, useRef, useMemo, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
+import { useCampusFormat } from '@/hooks/use-campus-format';
+import { useListPageSize } from '@/hooks/use-list-page-size';
+import { DEFAULT_BRAND_PRIMARY } from '@/lib/brand-color';
 import {
   ScanLine, Plus, PenLine, ScanFace, MapPin, QrCode,
   Fingerprint, Radio, CalendarIcon, ChevronLeft, ChevronRight,
@@ -117,7 +120,7 @@ interface SessionsResponse {
 }
 
 // ─── Constants ──────────────────────────────────────────────────
-const UOH_NAVY = '#1A3C6E';
+const UOH_NAVY = DEFAULT_BRAND_PRIMARY;
 
 const CAPTURE_METHOD_CONFIG: Record<string, { icon: React.ElementType; label: string }> = {
   manual: { icon: PenLine, label: 'Manual' },
@@ -383,8 +386,8 @@ function StudentMarkAttendance() {
                   key={session.id}
                   className={cn(
                     'cursor-pointer transition-all hover:shadow-md py-3',
-                    session.alreadyMarked ? 'opacity-60' : 'hover:ring-2 hover:ring-[#1A3C6E]/30',
-                    selectedSession?.id === session.id && 'ring-2 ring-[#1A3C6E]'
+                    session.alreadyMarked ? 'opacity-60' : 'hover:ring-2 hover:ring-brand/30',
+                    selectedSession?.id === session.id && 'ring-2 ring-brand'
                   )}
                   onClick={() => {
                     if (!session.alreadyMarked) {
@@ -422,7 +425,7 @@ function StudentMarkAttendance() {
                             <CheckCircle2 className="h-3 w-3 mr-1" /> Marked
                           </Badge>
                         ) : (
-                          <Button size="sm" className="h-7 text-xs bg-[#1A3C6E] hover:bg-[#1A3C6E]/90 text-white">
+                          <Button size="sm" className="h-7 text-xs bg-brand hover:bg-brand/90 text-white">
                             Mark
                           </Button>
                         )}
@@ -536,10 +539,10 @@ function StudentMarkAttendance() {
                   </div>
                 ) : cameraActive ? (
                   <div className="space-y-2">
-                    <div className="relative w-48 h-48 mx-auto rounded-full overflow-hidden border-4 border-[#1A3C6E]/30">
+                    <div className="relative w-48 h-48 mx-auto rounded-full overflow-hidden border-4 border-brand/30">
                       <video ref={videoRef} autoPlay playsInline muted className="h-full w-full object-cover scale-x-[-1]" />
                     </div>
-                    <Button onClick={captureSelfie} className="w-full max-w-[200px] mx-auto flex bg-[#1A3C6E] hover:bg-[#1A3C6E]/90 text-white" size="sm">
+                    <Button onClick={captureSelfie} className="w-full max-w-[200px] mx-auto flex bg-brand hover:bg-brand/90 text-white" size="sm">
                       <Camera className="h-4 w-4 mr-2" /> Capture
                     </Button>
                   </div>
@@ -576,7 +579,7 @@ function StudentMarkAttendance() {
               {/* Submit Button */}
               <div className="flex items-center gap-3 pt-2 border-t">
                 <Button
-                  className="bg-[#1A3C6E] hover:bg-[#1A3C6E]/90 text-white gap-2"
+                  className="bg-brand hover:bg-brand/90 text-white gap-2"
                   disabled={
                     markMutation.isPending ||
                     faceMisconfigured ||
@@ -613,7 +616,7 @@ function StudentMarkAttendance() {
       {markingStep === 'submitting' && (
         <Card className="py-8">
           <CardContent className="flex flex-col items-center text-center">
-            <Loader2 className="h-10 w-10 animate-spin text-[#1A3C6E] mb-3" />
+            <Loader2 className="h-10 w-10 animate-spin text-brand mb-3" />
             <p className="text-sm font-medium">Verifying your attendance...</p>
             <p className="text-xs text-muted-foreground mt-1">Checking geofence & saving selfie</p>
           </CardContent>
@@ -785,6 +788,7 @@ function SessionDetailDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { formatDate } = useCampusFormat();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -834,7 +838,7 @@ function SessionDetailDialog({
           </DialogTitle>
           {session && (
             <DialogDescription>
-              {session.course?.code} — {format(new Date(session.sessionDate + 'T00:00:00'), 'MMM dd, yyyy')} · {session.startTime}
+              {session.course?.code} — {formatDate(session.sessionDate + 'T00:00:00')} · {session.startTime}
             </DialogDescription>
           )}
         </DialogHeader>
@@ -1097,7 +1101,7 @@ function FacultyTimetableEditor() {
           <Button
             size="sm"
             onClick={openNew}
-            className="gap-1.5 bg-[#1A3C6E] hover:bg-[#1A3C6E]/90 text-white"
+            className="gap-1.5 bg-brand hover:bg-brand/90 text-white"
             disabled={courses.length === 0}
           >
             <Plus className="h-4 w-4" /> Add slot
@@ -1233,7 +1237,7 @@ function FacultyTimetableEditor() {
             <Button
               onClick={handleSubmit}
               disabled={saveMut.isPending || !form.courseId}
-              className="bg-[#1A3C6E] hover:bg-[#1A3C6E]/90 text-white"
+              className="bg-brand hover:bg-brand/90 text-white"
             >
               {saveMut.isPending && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
               {editItem ? 'Save changes' : 'Add slot'}
@@ -1369,7 +1373,7 @@ function FacultyScheduleCard({
                     <div className="flex flex-wrap gap-2">
                       <Button
                         size="sm"
-                        className="h-7 text-xs bg-[#1A3C6E] hover:bg-[#1A3C6E]/90 text-white"
+                        className="h-7 text-xs bg-brand hover:bg-brand/90 text-white"
                         disabled={isCreating}
                         onClick={() => onQuickStart(slot, todayStr)}
                       >
@@ -1399,6 +1403,8 @@ function FacultyScheduleCard({
 function AdminSessionsView() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { formatDate } = useCampusFormat();
+  const pageSize = useListPageSize(20);
   const { sectionContext, setSectionContext } = useAppStore();
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [courseFilter, setCourseFilter] = useState<string>('all');
@@ -1406,7 +1412,7 @@ function AdminSessionsView() {
   const [dateFilter, setDateFilter] = useState<Date | undefined>(undefined);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [page, setPage] = useState(1);
-  const limit = 20;
+  const limit = pageSize;
   const [dialogOpen, setDialogOpen] = useState(false);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [detailSessionId, setDetailSessionId] = useState<string | null>(null);
@@ -1561,9 +1567,9 @@ function AdminSessionsView() {
       {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { title: 'Total Sessions', value: data?.summary?.totalSessions ?? 0, icon: ScanLine, color: UOH_NAVY, bg: 'bg-[#1A3C6E]/10' },
+          { title: 'Total Sessions', value: data?.summary?.totalSessions ?? 0, icon: ScanLine, color: UOH_NAVY, bg: 'bg-brand/10' },
           { title: 'Active', value: data?.summary?.activeCount ?? 0, icon: Clock, color: '#16a34a', bg: 'bg-green-100 dark:bg-green-900/30' },
-          { title: 'Completed', value: data?.summary?.completedCount ?? 0, icon: CheckCircle2, color: UOH_NAVY, bg: 'bg-[#1A3C6E]/10' },
+          { title: 'Completed', value: data?.summary?.completedCount ?? 0, icon: CheckCircle2, color: UOH_NAVY, bg: 'bg-brand/10' },
           { title: 'Avg Rate', value: `${data?.summary?.avgAttendanceRate ?? 0}%`, icon: Users, color: (data?.summary?.avgAttendanceRate ?? 0) >= 75 ? '#16a34a' : '#d97706', bg: 'bg-amber-100 dark:bg-amber-900/30' },
         ].map(card => {
           const Icon = card.icon;
@@ -1623,7 +1629,7 @@ function AdminSessionsView() {
           {hasActiveFilters && <Button variant="ghost" size="sm" onClick={() => { setStatusFilter('all'); setCourseFilter('all'); setMethodFilter('all'); setDateFilter(undefined); setPage(1); }} className="text-xs"><XCircle className="h-3.5 w-3.5 mr-1" />Clear</Button>}
           <div className="ml-auto">
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-              <DialogTrigger asChild><Button size="sm" className="gap-1.5 bg-[#1A3C6E] hover:bg-[#1A3C6E]/90 text-white"><Plus className="h-3.5 w-3.5" />New Session</Button></DialogTrigger>
+              <DialogTrigger asChild><Button size="sm" className="gap-1.5 bg-brand hover:bg-brand/90 text-white"><Plus className="h-3.5 w-3.5" />New Session</Button></DialogTrigger>
               <DialogContent className="sm:max-w-[500px]">
                 <DialogHeader><DialogTitle>Create Session</DialogTitle><DialogDescription>Set up attendance session</DialogDescription></DialogHeader>
                 <div className="grid gap-3 py-3">
@@ -1702,7 +1708,7 @@ function AdminSessionsView() {
                     )}
                   </div>
                 </div>
-                <DialogFooter><Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button><Button onClick={() => createMutation.mutate({ courseId: newSession.courseId, sessionDate: newSession.sessionDate, startTime: newSession.startTime, endTime: newSession.endTime, captureMethod: newSession.captureMethod, geofenceId: newSession.geofenceId || undefined, timetableSlotId: newSession.timetableSlotId || undefined })} disabled={createMutation.isPending || !newSession.courseId || !newSession.sessionDate || (geofenceRequired && !newSession.geofenceId)} className="bg-[#1A3C6E] hover:bg-[#1A3C6E]/90 text-white">{createMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-1" />}Create</Button></DialogFooter>
+                <DialogFooter><Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button><Button onClick={() => createMutation.mutate({ courseId: newSession.courseId, sessionDate: newSession.sessionDate, startTime: newSession.startTime, endTime: newSession.endTime, captureMethod: newSession.captureMethod, geofenceId: newSession.geofenceId || undefined, timetableSlotId: newSession.timetableSlotId || undefined })} disabled={createMutation.isPending || !newSession.courseId || !newSession.sessionDate || (geofenceRequired && !newSession.geofenceId)} className="bg-brand hover:bg-brand/90 text-white">{createMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-1" />}Create</Button></DialogFooter>
               </DialogContent>
             </Dialog>
           </div>
@@ -1742,7 +1748,7 @@ function AdminSessionsView() {
                       const rate = s.expectedCount > 0 ? Math.round((s.presentCount / s.expectedCount) * 100) : 0;
                       return (
                         <TableRow key={s.id}>
-                          <TableCell className="text-xs font-medium">{format(new Date(s.sessionDate + 'T00:00:00'), 'MMM dd')}</TableCell>
+                          <TableCell className="text-xs font-medium">{formatDate(s.sessionDate + 'T00:00:00')}</TableCell>
                           <TableCell><span className="text-xs font-mono" style={{ color: UOH_NAVY }}>{s.course?.code || '—'}</span></TableCell>
                           <TableCell><ScheduleTypeBadge timetableSlotId={s.timetableSlotId} /></TableCell>
                           <TableCell className="text-xs">{s.startTime}</TableCell>

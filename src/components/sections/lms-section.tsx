@@ -11,6 +11,7 @@ import {
   XCircle, Loader2, Trophy, Target, Zap, Plus, Code2, Pencil, Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { DEFAULT_BRAND_PRIMARY } from '@/lib/brand-color';
 import { useAppStore, useCanWriteLms, useCanViewLmsRoster, useSectionWrite, MASTERS_WRITE_ROLES } from '@/lib/store';
 import { usePlatformSettings } from '@/hooks/use-platform-settings';
 import { DEFAULT_GENERAL_SETTINGS } from '@/lib/settings/general-defaults';
@@ -151,12 +152,14 @@ function formatDate(dateStr: string, opts?: {
   timeFormat?: '12h' | '24h';
   locale?: string;
   timezone?: string;
+  includeTime?: boolean;
 }): string {
   return formatCampusDateTime(dateStr, {
     dateFormat: opts?.dateFormat ?? DEFAULT_GENERAL_SETTINGS.dateFormat,
     timeFormat: opts?.timeFormat ?? DEFAULT_GENERAL_SETTINGS.timeFormat,
     locale: opts?.locale ?? DEFAULT_GENERAL_SETTINGS.locale,
     timezone: opts?.timezone ?? DEFAULT_GENERAL_SETTINGS.timezone,
+    includeTime: opts?.includeTime,
   });
 }
 
@@ -244,14 +247,14 @@ function CourseCard({ course, canManageRoster, canViewRoster, onManageRoster, ca
     <Collapsible open={open} onOpenChange={setOpen}>
       <Card className={cn(
         'transition-all duration-200 hover:shadow-md cursor-pointer py-4',
-        open && 'ring-2 ring-[#1A3C6E]/20'
+        open && 'ring-2 ring-brand/20'
       )}>
         <CollapsibleTrigger asChild>
           <div className="px-4">
             <CardHeader className="p-0 pb-3">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center gap-2 min-w-0">
-                  <Badge className="bg-[#1A3C6E] text-white hover:bg-[#1A3C6E]/90 shrink-0 text-[11px] font-mono">
+                  <Badge className="bg-brand text-white hover:bg-brand/90 shrink-0 text-[11px] font-mono">
                     {course.code}
                   </Badge>
                   <Badge variant="outline" className={cn('text-[11px] shrink-0', typeConf.className)}>
@@ -341,7 +344,7 @@ function CourseCard({ course, canManageRoster, canViewRoster, onManageRoster, ca
                     className="flex items-center justify-between gap-2 rounded-md px-3 py-2 bg-muted/50 hover:bg-muted transition-colors"
                   >
                     <div className="flex items-center gap-2 min-w-0">
-                      <span className="flex items-center justify-center h-5 w-5 rounded bg-[#1A3C6E]/10 text-[10px] font-bold text-[#1A3C6E] dark:text-[#7BA5E0] shrink-0">
+                      <span className="flex items-center justify-center h-5 w-5 rounded bg-brand/10 text-[10px] font-bold text-brand dark:text-[#7BA5E0] shrink-0">
                         {mod.orderIndex + 1}
                       </span>
                       <span className="text-sm truncate">{mod.title}</span>
@@ -457,7 +460,7 @@ function StudentAssignmentsTab({ assignments, onSubmit }: { assignments: Assignm
               <Card key={a.id} className={cn(
                 'py-3 transition-all',
                 a.myStatus === 'overdue' && 'border-red-200 dark:border-red-800 bg-red-50/30 dark:bg-red-950/10',
-                isExpanded && 'ring-1 ring-[#1A3C6E]/20'
+                isExpanded && 'ring-1 ring-brand/20'
               )}>
                 <Collapsible open={isExpanded} onOpenChange={(open) => setExpandedId(open ? a.id : null)}>
                   <CollapsibleTrigger asChild>
@@ -465,7 +468,7 @@ function StudentAssignmentsTab({ assignments, onSubmit }: { assignments: Assignm
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1 flex-wrap">
-                            <Badge className="bg-[#1A3C6E] text-white hover:bg-[#1A3C6E]/90 text-[10px] font-mono shrink-0">
+                            <Badge className="bg-brand text-white hover:bg-brand/90 text-[10px] font-mono shrink-0">
                               {a.course.code}
                             </Badge>
                             <Badge variant="outline" className={cn('text-[10px] shrink-0', statusConf.className)}>
@@ -485,7 +488,7 @@ function StudentAssignmentsTab({ assignments, onSubmit }: { assignments: Assignm
                           <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground">
                             <span className="flex items-center gap-1">
                               <CalendarDays className="h-3 w-3" />
-                              {formatDate(a.dueDate, dateOpts)}
+                              {formatDate(a.dueDate, { ...dateOpts, includeTime: true })}
                             </span>
                             {a.myStatus !== 'graded' && days >= 0 && days <= 7 && (
                               <span className={cn('text-[10px] font-medium', days <= 2 ? 'text-red-600' : 'text-amber-600')}>
@@ -542,12 +545,12 @@ function StudentAssignmentsTab({ assignments, onSubmit }: { assignments: Assignm
                           <div className="grid grid-cols-2 gap-2 text-xs">
                             <div>
                               <span className="text-muted-foreground">Submitted:</span>
-                              <span className="ml-1">{new Date(a.mySubmission.submittedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                              <span className="ml-1">{formatDate(a.mySubmission.submittedAt, { ...dateOpts, includeTime: true })}</span>
                             </div>
                             {a.mySubmission.gradedAt && (
                               <div>
                                 <span className="text-muted-foreground">Graded:</span>
-                                <span className="ml-1">{new Date(a.mySubmission.gradedAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>
+                                <span className="ml-1">{formatDate(a.mySubmission.gradedAt, { ...dateOpts, includeTime: true })}</span>
                               </div>
                             )}
                             {a.mySubmission.score != null && (
@@ -577,7 +580,7 @@ function StudentAssignmentsTab({ assignments, onSubmit }: { assignments: Assignm
                               <XCircle className="h-3 w-3 mr-0.5" /> Deadline passed
                             </Badge>
                           ) : a.status === 'published' ? (
-                            <Button size="sm" className="h-7 text-xs bg-[#1A3C6E] hover:bg-[#1A3C6E]/90 text-white gap-1" onClick={() => onSubmit(a)}>
+                            <Button size="sm" className="h-7 text-xs bg-brand hover:bg-brand/90 text-white gap-1" onClick={() => onSubmit(a)}>
                               <Upload className="h-3 w-3" /> Submit Assignment
                             </Button>
                           ) : null}
@@ -614,7 +617,7 @@ function StudentQuizzesTab({ questions, attempts, summary, onTakeQuiz }: {
     <div className="space-y-6">
       {onTakeQuiz && questions.length > 0 && (
         <div className="flex justify-end">
-          <Button size="sm" className="gap-1.5 bg-[#1A3C6E] text-white" onClick={onTakeQuiz}>
+          <Button size="sm" className="gap-1.5 bg-brand text-white" onClick={onTakeQuiz}>
             <Zap className="h-3.5 w-3.5" /> Take Quiz
           </Button>
         </div>
@@ -623,8 +626,8 @@ function StudentQuizzesTab({ questions, attempts, summary, onTakeQuiz }: {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card className="py-3">
           <CardContent className="flex items-center gap-3 px-3">
-            <div className="h-9 w-9 rounded-lg bg-[#1A3C6E]/10 flex items-center justify-center shrink-0">
-              <HelpCircle className="h-4 w-4 text-[#1A3C6E]" />
+            <div className="h-9 w-9 rounded-lg bg-brand/10 flex items-center justify-center shrink-0">
+              <HelpCircle className="h-4 w-4 text-brand" />
             </div>
             <div>
               <p className="text-lg font-bold">{summary.totalQuestions}</p>
@@ -671,7 +674,7 @@ function StudentQuizzesTab({ questions, attempts, summary, onTakeQuiz }: {
       <Card className="py-4">
         <CardHeader className="px-4 pb-0">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <Timer className="h-4 w-4 text-[#1A3C6E]" />
+            <Timer className="h-4 w-4 text-brand" />
             My Quiz Attempts
           </CardTitle>
           <CardDescription>{attempts.length} attempts recorded</CardDescription>
@@ -708,7 +711,7 @@ function StudentQuizzesTab({ questions, attempts, summary, onTakeQuiz }: {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <Badge className="text-[10px] font-mono bg-[#1A3C6E] text-white shrink-0">{at.course.code}</Badge>
+                          <Badge className="text-[10px] font-mono bg-brand text-white shrink-0">{at.course.code}</Badge>
                           <span className="text-sm font-medium truncate">{at.course.name}</span>
                         </div>
                         <div className="flex items-center gap-3 mt-1">
@@ -748,7 +751,7 @@ function StudentQuizzesTab({ questions, attempts, summary, onTakeQuiz }: {
         <Card className="py-4">
           <CardHeader className="px-4 pb-0">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <HelpCircle className="h-4 w-4 text-[#1A3C6E]" />
+              <HelpCircle className="h-4 w-4 text-brand" />
               Practice Questions
             </CardTitle>
             <CardDescription>{questions.length} questions available for practice</CardDescription>
@@ -761,8 +764,8 @@ function StudentQuizzesTab({ questions, attempts, summary, onTakeQuiz }: {
                   const diffConf = difficultyConfig[q.difficulty] || difficultyConfig.medium;
                   return (
                     <div key={q.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
-                      <div className="h-6 w-6 rounded bg-[#1A3C6E]/10 flex items-center justify-center shrink-0 mt-0.5">
-                        <span className="text-[10px] font-bold text-[#1A3C6E]">{idx + 1}</span>
+                      <div className="h-6 w-6 rounded bg-brand/10 flex items-center justify-center shrink-0 mt-0.5">
+                        <span className="text-[10px] font-bold text-brand">{idx + 1}</span>
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs line-clamp-2">{q.question}</p>
@@ -771,7 +774,7 @@ function StudentQuizzesTab({ questions, attempts, summary, onTakeQuiz }: {
                             <TypeIcon className="h-2.5 w-2.5 mr-0.5" />
                             {q.type === 'true_false' ? 'T/F' : q.type.replace('_', ' ')}
                           </Badge>
-                          <Badge className="text-[9px] font-mono bg-[#1A3C6E] text-white">{q.course.code}</Badge>
+                          <Badge className="text-[9px] font-mono bg-brand text-white">{q.course.code}</Badge>
                           <Badge variant="outline" className={cn('text-[9px]', diffConf.className)}>{diffConf.label}</Badge>
                           <span className="text-[9px] text-muted-foreground">{q.points} pts</span>
                         </div>
@@ -819,7 +822,7 @@ function AdminAssignmentsTab({ assignments, onGrade, onEdit, onDelete }: {
         <Card className="py-4">
           <CardHeader className="px-4 pb-0">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <BarChart3 className="h-4 w-4 text-[#1A3C6E]" />
+              <BarChart3 className="h-4 w-4 text-brand" />
               Average Score Distribution
             </CardTitle>
           </CardHeader>
@@ -831,7 +834,7 @@ function AdminAssignmentsTab({ assignments, onGrade, onEdit, onDelete }: {
                   <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-35} textAnchor="end" interval={0} />
                   <YAxis tick={{ fontSize: 11 }} domain={[0, 100]} />
                   <RechartsTooltip contentStyle={{ borderRadius: '8px', fontSize: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
-                  <Bar dataKey="avgScore" fill="#1A3C6E" radius={[4, 4, 0, 0]} name="Avg Score" />
+                  <Bar dataKey="avgScore" fill={DEFAULT_BRAND_PRIMARY} radius={[4, 4, 0, 0]} name="Avg Score" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -842,7 +845,7 @@ function AdminAssignmentsTab({ assignments, onGrade, onEdit, onDelete }: {
       <Card className="py-4">
         <CardHeader className="px-4 pb-0">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <FileText className="h-4 w-4 text-[#1A3C6E]" />
+            <FileText className="h-4 w-4 text-brand" />
             All Assignments
           </CardTitle>
           <CardDescription>Click a row to view submission stats</CardDescription>
@@ -897,7 +900,7 @@ function AdminAssignmentsTab({ assignments, onGrade, onEdit, onDelete }: {
                           <TableCell className="hidden sm:table-cell">
                             <div className="flex items-center gap-1.5">
                               <CalendarDays className="h-3 w-3 text-muted-foreground shrink-0" />
-                              <span className={cn('text-xs', overdue && 'text-destructive font-medium')}>{formatDate(a.dueDate, dateOpts)}</span>
+                              <span className={cn('text-xs', overdue && 'text-destructive font-medium')}>{formatDate(a.dueDate, { ...dateOpts, includeTime: true })}</span>
                             </div>
                           </TableCell>
                           <TableCell className="text-right hidden md:table-cell">
@@ -1012,7 +1015,7 @@ function AdminQuizzesTab({ questions, attempts, onCreateQuiz, onEditQuiz }: {
         <Card className="py-4">
           <CardHeader className="px-4 pb-0">
             <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-[#1A3C6E]" />
+              <TrendingUp className="h-4 w-4 text-brand" />
               Quiz Performance Overview
             </CardTitle>
           </CardHeader>
@@ -1024,7 +1027,7 @@ function AdminQuizzesTab({ questions, attempts, onCreateQuiz, onEditQuiz }: {
                   <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-35} textAnchor="end" interval={0} />
                   <YAxis tick={{ fontSize: 11 }} domain={[0, 100]} />
                   <RechartsTooltip contentStyle={{ borderRadius: '8px', fontSize: '12px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} formatter={(value: number) => [`${value}%`, 'Score']} />
-                  <Bar dataKey="score" fill="#1A3C6E" radius={[4, 4, 0, 0]} name="Score %" />
+                  <Bar dataKey="score" fill={DEFAULT_BRAND_PRIMARY} radius={[4, 4, 0, 0]} name="Score %" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -1037,7 +1040,7 @@ function AdminQuizzesTab({ questions, attempts, onCreateQuiz, onEditQuiz }: {
           <div className="flex items-center justify-between gap-2">
             <div>
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <HelpCircle className="h-4 w-4 text-[#1A3C6E]" />
+                <HelpCircle className="h-4 w-4 text-brand" />
                 Question Bank
               </CardTitle>
               <CardDescription>{questions.length} questions available</CardDescription>
@@ -1108,7 +1111,7 @@ function AdminQuizzesTab({ questions, attempts, onCreateQuiz, onEditQuiz }: {
       <Card className="py-4">
         <CardHeader className="px-4 pb-0">
           <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <Timer className="h-4 w-4 text-[#1A3C6E]" />
+            <Timer className="h-4 w-4 text-brand" />
             Recent Attempts
           </CardTitle>
           <CardDescription>{attempts.length} attempts recorded</CardDescription>
@@ -1200,7 +1203,7 @@ function GradebookTab({ courses }: { courses: Course[] }) {
     <Card className="py-4">
       <CardHeader className="px-4 pb-2">
         <CardTitle className="text-base flex items-center gap-2">
-          <Award className="h-4 w-4 text-[#1A3C6E]" />
+          <Award className="h-4 w-4 text-brand" />
           Gradebook
         </CardTitle>
         <CardDescription>Weighted grades per enrolled student</CardDescription>
@@ -1216,7 +1219,7 @@ function GradebookTab({ courses }: { courses: Course[] }) {
                   key={c.id}
                   size="sm"
                   variant={courseId === c.id ? 'default' : 'outline'}
-                  className={cn('h-7 text-xs', courseId === c.id && 'bg-[#1A3C6E] text-white')}
+                  className={cn('h-7 text-xs', courseId === c.id && 'bg-brand text-white')}
                   onClick={() => setCourseId(c.id)}
                 >
                   {c.code}
@@ -1301,7 +1304,7 @@ function StudentGradebookTab({ studentId, courses }: { studentId: string; course
     <Card className="py-4">
       <CardHeader className="px-4 pb-2">
         <CardTitle className="text-base flex items-center gap-2">
-          <Award className="h-4 w-4 text-[#1A3C6E]" />
+          <Award className="h-4 w-4 text-brand" />
           My Grades
         </CardTitle>
         <CardDescription>Your scores and weighted overall per course</CardDescription>
@@ -1317,7 +1320,7 @@ function StudentGradebookTab({ studentId, courses }: { studentId: string; course
                   key={c.id}
                   size="sm"
                   variant={courseId === c.id ? 'default' : 'outline'}
-                  className={cn('h-7 text-xs', courseId === c.id && 'bg-[#1A3C6E] text-white')}
+                  className={cn('h-7 text-xs', courseId === c.id && 'bg-brand text-white')}
                   onClick={() => setCourseId(c.id)}
                 >
                   {c.code}
@@ -1331,7 +1334,7 @@ function StudentGradebookTab({ studentId, courses }: { studentId: string; course
             ) : (
               <div className="space-y-4">
                 {row.overallPct !== null && (
-                  <div className="flex items-center justify-between p-4 rounded-lg bg-[#1A3C6E]/5 border">
+                  <div className="flex items-center justify-between p-4 rounded-lg bg-brand/5 border">
                     <span className="text-sm font-medium">Overall Grade</span>
                     <span className={cn(
                       'text-2xl font-bold',
@@ -1502,7 +1505,7 @@ export default function LmsSection() {
       {/* Section Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold text-[#1A3C6E] dark:text-[#7BA5E0] flex items-center gap-2">
+          <h2 className="text-2xl font-bold text-brand dark:text-[#7BA5E0] flex items-center gap-2">
             <BookOpen className="h-6 w-6" />
             {isLearner ? (isParent ? "My Ward's Learning" : 'My Learning') : 'Learning Management'}
           </h2>
@@ -1515,7 +1518,7 @@ export default function LmsSection() {
         </div>
         <div className="flex items-center gap-2">
           {canCreateCourse && (
-            <Button size="sm" className="h-8 text-xs gap-1.5 bg-[#1A3C6E] text-white" onClick={() => setCreateCourseOpen(true)}>
+            <Button size="sm" className="h-8 text-xs gap-1.5 bg-brand text-white" onClick={() => setCreateCourseOpen(true)}>
               <Plus className="h-3.5 w-3.5" /> New Course
             </Button>
           )}
@@ -1535,7 +1538,7 @@ export default function LmsSection() {
             </Button>
           )}
           {isLearner && (
-            <Button size="sm" className="h-8 text-xs gap-1.5 bg-[#1A3C6E] text-white" onClick={() => { setActiveTab('quizzes'); setQuizSubTab('coding'); }}>
+            <Button size="sm" className="h-8 text-xs gap-1.5 bg-brand text-white" onClick={() => { setActiveTab('quizzes'); setQuizSubTab('coding'); }}>
               <Code2 className="h-3.5 w-3.5" /> Code Practice
             </Button>
           )}
@@ -1544,7 +1547,7 @@ export default function LmsSection() {
 
       {/* Overview Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <StatCard icon={BookOpen} label={isLearner ? 'Enrolled Courses' : 'Total Courses'} value={totalCourses} color="bg-[#1A3C6E]" />
+        <StatCard icon={BookOpen} label={isLearner ? 'Enrolled Courses' : 'Total Courses'} value={totalCourses} color="bg-brand" />
         <StatCard icon={isLearner ? ClipboardList : Users} label={isLearner ? 'Pending Assignments' : 'Enrollments'} value={isLearner ? studentPending : totalEnrollments} color={isLearner ? 'bg-amber-600' : 'bg-emerald-600'} />
         <StatCard icon={isLearner ? CheckCircle2 : FileText} label={isLearner ? 'Graded' : 'Assignments'} value={isLearner ? studentGraded : totalAssignments} color={isLearner ? 'bg-emerald-600' : 'bg-amber-600'} />
         <StatCard icon={isLearner ? Trophy : HelpCircle} label={isLearner ? 'Quiz Best' : 'Quiz Questions'} value={isLearner ? `${Math.round(quizSummary.bestScore)}%` : totalQuizzes} color="bg-purple-600" />
@@ -1640,7 +1643,7 @@ export default function LmsSection() {
             <Card className="py-4">
               <CardHeader className="px-4 pb-2">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Users className="h-4 w-4 text-[#1A3C6E]" />
+                  <Users className="h-4 w-4 text-brand" />
                   Class Rosters
                 </CardTitle>
                 <CardDescription>
@@ -1760,7 +1763,7 @@ export default function LmsSection() {
                   <Card className="py-4">
                     <CardHeader className="px-4 pb-2">
                       <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                        <Timer className="h-4 w-4 text-[#1A3C6E]" />
+                        <Timer className="h-4 w-4 text-brand" />
                         Recent Submissions
                       </CardTitle>
                       <CardDescription>{attempts.length} attempts (coding + MCQ)</CardDescription>

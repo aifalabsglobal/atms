@@ -63,7 +63,7 @@ export async function GET(request: Request) {
           id: true, email: true, name: true, employeeId: true, department: true, departmentId: true,
           phone: true, role: true, status: true, avatarUrl: true, linkedStudentId: true,
           lastLoginAt: true, createdAt: true,
-          knuctWallet: { select: { did: true, status: true } },
+          knuctWallet: { select: { did: true, status: true, lastError: true, updatedAt: true, createdAt: true } },
           _count: { select: { attendanceRecords: true, courseEnrollments: true, submissions: true, taughtCourses: true } },
         },
         orderBy: { createdAt: 'desc' },

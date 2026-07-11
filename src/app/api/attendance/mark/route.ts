@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { requireSection, resolveStudentId, SELF_MARK_METHODS } from '@/lib/auth-helpers';
+import { assertNotInMaintenance } from '@/lib/settings/maintenance';
 import type { Role } from '@/lib/store';
 import { verifyFaceMatch, isFaceVerificationApiConfigured } from '@/lib/face-verification';
 import { validateGeofenceLocation } from '@/lib/geofence';
@@ -18,6 +19,9 @@ export async function POST(request: Request) {
   try {
     const { error, session } = await requireSection('attendance');
     if (error || !session) return error;
+
+    const blocked = await assertNotInMaintenance(session.user.role);
+    if (blocked) return blocked;
 
     const limited = await rateLimitByUser(request, session.user.id, 'attendance-mark', 20, 60_000);
     if (limited) return limited;

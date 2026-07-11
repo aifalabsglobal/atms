@@ -87,10 +87,10 @@ export function WalletProvisionRequestsPanel({ actorRole }: { actorRole: Role })
   if (requests.length === 0) return null;
 
   return (
-    <Card className="border-[#1A3C6E]/20 bg-[#1A3C6E]/5">
+    <Card className="border-brand/20 bg-brand/5">
       <CardHeader className="pb-3">
         <div className="flex items-center gap-2">
-          <Wallet className="h-5 w-5 text-[#1A3C6E]" />
+          <Wallet className="h-5 w-5 text-brand" />
           <CardTitle className="text-base">Knuct wallet provision requests</CardTitle>
           <Badge variant="secondary">{requests.length} pending</Badge>
         </div>
@@ -121,7 +121,7 @@ export function WalletProvisionRequestsPanel({ actorRole }: { actorRole: Role })
                 <div className="flex gap-2">
                   <Button
                     size="sm"
-                    className="bg-[#1A3C6E] hover:bg-[#1A3C6E]/90 gap-1"
+                    className="bg-brand hover:bg-brand/90 gap-1"
                     disabled={busy}
                     onClick={() => review.mutate({ id: req.id, action: 'approve' })}
                   >

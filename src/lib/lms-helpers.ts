@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireAuth, requireSection, getCampusScope, assertCourseInScope } from '@/lib/auth-helpers';
 import type { Role } from '@/lib/store';
 import { logAudit, getClientIp } from '@/lib/audit';
+import { assertNotInMaintenance } from '@/lib/settings/maintenance';
 
 export async function requireLmsRead(session?: { user: { id: string; role: string } } | null) {
   if (!session) {
@@ -19,6 +20,8 @@ export async function requireLmsRead(session?: { user: { id: string; role: strin
 export async function requireLmsWrite() {
   const { error, session } = await requireAuth();
   if (error || !session) return { error, session: null };
+  const blocked = await assertNotInMaintenance(session.user.role);
+  if (blocked) return { error: blocked, session: null };
   const role = session.user.role as Role;
   if (role === 'hod') {
     return {

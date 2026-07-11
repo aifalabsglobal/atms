@@ -4,6 +4,7 @@ import {
   DEFAULT_GENERAL_SETTINGS,
   type GeneralSettings,
 } from './general-defaults';
+import { resolveAssetUrl } from './asset-url';
 
 export type { GeneralSettings };
 export { DEFAULT_GENERAL_SETTINGS };
@@ -35,8 +36,7 @@ function asTheme(value: string): 'light' | 'dark' | 'system' {
 }
 
 function asAssetPath(value: string, fallback: string): string {
-  if (typeof value === 'string' && value.startsWith('/')) return value;
-  return fallback;
+  return resolveAssetUrl(value, fallback);
 }
 
 function asHexColor(value: string, fallback: string): string {

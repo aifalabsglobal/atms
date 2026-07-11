@@ -67,7 +67,7 @@ export default function ViolationsSection() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[#1A3C6E]">Attendance Violations</h1>
+          <h1 className="text-2xl font-bold text-brand">Attendance Violations</h1>
           <p className="text-sm text-muted-foreground mt-1">Review and manage attendance policy violations</p>
         </div>
         <div className="flex items-center gap-2">
@@ -181,7 +181,7 @@ export default function ViolationsSection() {
       <Dialog open={!!selectedViolation} onOpenChange={() => setSelectedViolation(null)}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-[#1A3C6E]">Review Violation</DialogTitle>
+            <DialogTitle className="text-brand">Review Violation</DialogTitle>
           </DialogHeader>
           {selectedViolation && (
             <div className="space-y-4">

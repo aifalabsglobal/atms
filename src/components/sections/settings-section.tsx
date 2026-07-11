@@ -200,7 +200,7 @@ function UserRbacOverridesPanel({ isSuperAdmin }: { isSuperAdmin: boolean }) {
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
           <div>
             <CardTitle className="text-base flex items-center gap-2">
-              <UserCircle className="h-4 w-4 text-[#1A3C6E]" /> User-Based Permissions
+              <UserCircle className="h-4 w-4 text-brand" /> User-Based Permissions
             </CardTitle>
             <CardDescription>
               Override role defaults for individual users — grants add modules, revokes remove them.
@@ -227,7 +227,7 @@ function UserRbacOverridesPanel({ isSuperAdmin }: { isSuperAdmin: boolean }) {
               </Button>
               <Button
                 size="sm"
-                className="bg-[#1A3C6E] hover:bg-[#1A3C6E]/90"
+                className="bg-brand hover:bg-brand/90"
                 disabled={!userDirty || saveUserMut.isPending || !draftEffective}
                 onClick={() => saveUserMut.mutate()}
               >
@@ -331,9 +331,9 @@ function SuperAdminControlCenter({ onNavigate }: { onNavigate: (section: Section
   ];
 
   return (
-    <Card className="border-[#1A3C6E]/20 bg-gradient-to-br from-[#1A3C6E]/5 to-background">
+    <Card className="border-brand/20 bg-gradient-to-br from-brand/5 to-background">
       <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2 text-[#1A3C6E]">
+        <CardTitle className="text-base flex items-center gap-2 text-brand">
           <Crown className="h-4 w-4" />
           Super Admin — full campus control
         </CardTitle>
@@ -355,7 +355,7 @@ function SuperAdminControlCenter({ onNavigate }: { onNavigate: (section: Section
                   onClick={() => onNavigate(mod.section)}
                 >
                   <span className="flex items-center gap-2 font-medium text-sm">
-                    <Icon className="h-4 w-4 text-[#1A3C6E] shrink-0" />
+                    <Icon className="h-4 w-4 text-brand shrink-0" />
                     {mod.label}
                   </span>
                   <span className="text-[11px] text-muted-foreground font-normal leading-snug">{mod.description}</span>
@@ -373,11 +373,11 @@ function SuperAdminControlCenter({ onNavigate }: { onNavigate: (section: Section
                 <Button
                   key={item.settingsTab}
                   variant="outline"
-                  className="h-auto flex-col items-start gap-1 p-3 text-left whitespace-normal border-[#1A3C6E]/30"
+                  className="h-auto flex-col items-start gap-1 p-3 text-left whitespace-normal border-brand/30"
                   onClick={() => onNavigate('settings', { settingsTab: item.settingsTab })}
                 >
                   <span className="flex items-center gap-2 font-medium text-sm">
-                    <Icon className="h-4 w-4 text-[#1A3C6E] shrink-0" />
+                    <Icon className="h-4 w-4 text-brand shrink-0" />
                     {item.label}
                   </span>
                   <span className="text-[11px] text-muted-foreground font-normal leading-snug">{item.description}</span>
@@ -611,7 +611,7 @@ export default function SettingsSection() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-[#1A3C6E]">Administration</h1>
+        <h1 className="text-2xl font-bold text-brand">Administration</h1>
         <p className="text-sm text-muted-foreground mt-1">
           {isSuperAdmin
             ? 'Platform settings, users, roles, integrations, and campus modules.'
@@ -649,7 +649,7 @@ export default function SettingsSection() {
               <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                 <div>
                   <CardTitle className="text-base flex items-center gap-2">
-                    <Shield className="h-4 w-4 text-[#1A3C6E]" /> Role & User Access Control
+                    <Shield className="h-4 w-4 text-brand" /> Role & User Access Control
                   </CardTitle>
                   <CardDescription>
                     {isSuperAdmin
@@ -689,7 +689,7 @@ export default function SettingsSection() {
                     </Button>
                     <Button
                       size="sm"
-                      className="gap-1.5 bg-[#1A3C6E] hover:bg-[#1A3C6E]/90"
+                      className="gap-1.5 bg-brand hover:bg-brand/90"
                       disabled={!rbacChanged || rbacSaveMutation.isPending}
                       onClick={() => draftMatrix && rbacSaveMutation.mutate({ matrix: draftMatrix })}
                     >
@@ -794,7 +794,7 @@ export default function SettingsSection() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Link2 className="h-4 w-4 text-[#1A3C6E]" /> Knuct Wallet & DID
+                  <Link2 className="h-4 w-4 text-brand" /> Knuct Wallet & DID
                 </CardTitle>
                 <CardDescription>
                   Live Knuct pilot — set KNUCT_ENABLED=true and optional KNUCT_API_KEY in .env
@@ -880,7 +880,7 @@ export default function SettingsSection() {
                                   <Link
                                     href={`/verify?hash=${a.hash}`}
                                     target="_blank"
-                                    className="truncate hover:text-[#1A3C6E] hover:underline"
+                                    className="truncate hover:text-brand hover:underline"
                                     title={a.hash}
                                   >
                                     {a.hash.slice(0, 16)}…
@@ -964,7 +964,7 @@ export default function SettingsSection() {
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
-                    <ScrollText className="h-4 w-4 text-[#1A3C6E]" /> Blockchain Anchors
+                    <ScrollText className="h-4 w-4 text-brand" /> Blockchain Anchors
                   </CardTitle>
                   <CardDescription>Recent SHA-256 audit anchors stored in PostgreSQL (latest 20)</CardDescription>
                 </CardHeader>
@@ -1003,7 +1003,7 @@ export default function SettingsSection() {
                                 <Link
                                   href={`/verify?hash=${anchor.payloadHash}`}
                                   target="_blank"
-                                  className="text-muted-foreground hover:text-[#1A3C6E] hover:underline"
+                                  className="text-muted-foreground hover:text-brand hover:underline"
                                   title={anchor.payloadHash}
                                 >
                                   {anchor.payloadHash.slice(0, 12)}…
@@ -1036,7 +1036,7 @@ export default function SettingsSection() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
-                  <ScrollText className="h-4 w-4 text-[#1A3C6E]" /> Enterprise Audit Trail
+                  <ScrollText className="h-4 w-4 text-brand" /> Enterprise Audit Trail
                 </CardTitle>
                 <CardDescription>
                   Immutable log of security-sensitive actions. The Anchor column shows a SHA-256 hash only for
@@ -1099,7 +1099,7 @@ export default function SettingsSection() {
                                 <Link
                                   href={`/verify?hash=${log.anchorHash}`}
                                   target="_blank"
-                                  className="hover:text-[#1A3C6E] hover:underline"
+                                  className="hover:text-brand hover:underline"
                                   title={log.anchorHash}
                                 >
                                   {log.anchorHash.slice(0, 12)}…
@@ -1139,7 +1139,7 @@ export default function SettingsSection() {
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2"><Bell className="h-4 w-4 text-[#1A3C6E]" /> Notification Channels</CardTitle>
+              <CardTitle className="text-base flex items-center gap-2"><Bell className="h-4 w-4 text-brand" /> Notification Channels</CardTitle>
               <CardDescription>Planned multi-channel delivery (in-app is live)</CardDescription>
             </CardHeader>
             <CardContent>

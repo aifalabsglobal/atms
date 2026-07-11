@@ -1,129 +1,224 @@
 import type { SettingDefinition, SettingCategory } from './types';
 import { cloneDefaultMatrix } from '@/lib/rbac-defaults';
 import { BRAND } from '@/lib/branding';
+import { isAssetUrl, normalizeAssetUrl } from './asset-url';
 
 const defs: SettingDefinition[] = [
-  // General
+  // General — Branding
   {
     key: 'general.app_name',
     category: 'general',
-    displayName: 'Application name',
-    description: 'Product name shown in the UI and emails.',
+    subcategory: 'Branding',
+    displayName: 'Campus product name',
+    description:
+      'Short name shown in the sidebar header, browser tab, login screen, and PDF report titles (e.g. AIMSCS).',
     valueType: 'string',
     defaultValue: BRAND.name,
     validation: { required: true },
   },
   {
-    key: 'general.timezone',
-    category: 'general',
-    displayName: 'Timezone',
-    description: 'Default campus timezone (IANA).',
-    valueType: 'string',
-    defaultValue: 'Asia/Kolkata',
-  },
-  {
-    key: 'general.date_format',
-    category: 'general',
-    displayName: 'Date format',
-    description: 'Preferred date display format.',
-    valueType: 'enum',
-    defaultValue: 'dd/MM/yyyy',
-    validation: { allowedValues: ['dd/MM/yyyy', 'MM/dd/yyyy', 'yyyy-MM-dd'] },
-  },
-  {
-    key: 'general.session_timeout_minutes',
-    category: 'general',
-    displayName: 'Session timeout (minutes)',
-    description: 'Idle session timeout hint for clients (JWT refresh still applies).',
-    valueType: 'number',
-    defaultValue: 480,
-    validation: { min: 15, max: 10080 },
-  },
-  {
-    key: 'general.maintenance_mode',
-    category: 'general',
-    displayName: 'Maintenance mode',
-    description: 'When enabled, non-admin users see a maintenance banner.',
-    valueType: 'boolean',
-    defaultValue: false,
-  },
-  {
-    key: 'general.theme',
-    category: 'general',
-    displayName: 'Default theme',
-    description: 'Default UI theme for new sessions.',
-    valueType: 'enum',
-    defaultValue: 'light',
-    validation: { allowedValues: ['light', 'dark', 'system'] },
-    allowUserOverride: true,
-  },
-  {
-    key: 'general.company_name',
-    category: 'general',
-    displayName: 'Company / institute name',
-    description: 'Legal or institute name used in exports and footers.',
-    valueType: 'string',
-    defaultValue: BRAND.fullOrgName,
-  },
-  {
     key: 'general.tagline',
     category: 'general',
-    displayName: 'Product tagline',
-    description: 'Short subtitle shown under the application name.',
+    subcategory: 'Branding',
+    displayName: 'Tagline',
+    description: 'One-line subtitle under the product name on login and in the header (e.g. Smart Campus Management System).',
     valueType: 'string',
     defaultValue: BRAND.tagline,
   },
   {
-    key: 'general.time_format',
+    key: 'general.company_name',
     category: 'general',
-    displayName: 'Time format',
-    description: '12-hour or 24-hour clock for timestamps.',
-    valueType: 'enum',
-    defaultValue: '12h',
-    validation: { allowedValues: ['12h', '24h'] },
+    subcategory: 'Branding',
+    displayName: 'Institute / organization name',
+    description:
+      'Full legal or institute name used in the page footer and exported PDF headers.',
+    valueType: 'string',
+    defaultValue: BRAND.fullOrgName,
   },
   {
-    key: 'general.language',
+    key: 'general.logo_url',
     category: 'general',
-    displayName: 'Language',
-    description: 'Default UI language code (i18n catalogs can expand later).',
+    subcategory: 'Branding',
+    displayName: 'Logo image URL',
+    description:
+      'Campus logo in the header and login card. Upload an image (saved to public/branding or S3) or paste a public path / https URL.',
+    valueType: 'string',
+    defaultValue: BRAND.logoSrc,
+  },
+  {
+    key: 'general.favicon_url',
+    category: 'general',
+    subcategory: 'Branding',
+    displayName: 'Browser tab icon URL',
+    description:
+      'Favicon for the browser tab. Use a public path (e.g. /logo.jpeg) or a full https:// image URL.',
+    valueType: 'string',
+    defaultValue: BRAND.logoSrc,
+  },
+  {
+    key: 'general.branding_primary_color',
+    category: 'general',
+    subcategory: 'Branding',
+    displayName: 'Brand accent color',
+    description:
+      'Hex color (#RRGGBB) used for header titles, login accents, and primary UI highlights. Example: #1A3C6E.',
+    valueType: 'string',
+    defaultValue: '#1A3C6E',
+    validation: { regex: '^#[0-9A-Fa-f]{6}$' },
+  },
+  {
+    key: 'general.copyright_text',
+    category: 'general',
+    subcategory: 'Branding',
+    displayName: 'Footer copyright line',
+    description: 'Text shown in the bottom footer of the main app shell.',
+    valueType: 'string',
+    defaultValue: BRAND.copyright,
+  },
+
+  // General — Regional & formats
+  {
+    key: 'general.timezone',
+    category: 'general',
+    subcategory: 'Regional & formats',
+    displayName: 'Campus timezone',
+    description:
+      'IANA timezone for campus date/time display (LMS due dates, user dates, and other campus-formatted timestamps).',
     valueType: 'enum',
-    defaultValue: 'en',
-    validation: { allowedValues: ['en'] },
-    allowUserOverride: true,
+    defaultValue: 'Asia/Kolkata',
+    validation: {
+      allowedValues: [
+        'Asia/Kolkata',
+        'Asia/Dubai',
+        'Asia/Singapore',
+        'UTC',
+        'Europe/London',
+        'America/New_York',
+      ],
+      optionLabels: {
+        'Asia/Kolkata': 'India (Asia/Kolkata) — IST',
+        'Asia/Dubai': 'UAE (Asia/Dubai) — GST',
+        'Asia/Singapore': 'Singapore (Asia/Singapore)',
+        UTC: 'UTC (Coordinated Universal Time)',
+        'Europe/London': 'UK (Europe/London)',
+        'America/New_York': 'US Eastern (America/New_York)',
+      },
+    },
   },
   {
     key: 'general.locale',
     category: 'general',
-    displayName: 'Locale',
-    description: 'BCP 47 locale used for number and date formatting.',
+    subcategory: 'Regional & formats',
+    displayName: 'Number & currency locale',
+    description:
+      'Controls how numbers and currency amounts are formatted (thousands separators, currency symbol placement).',
     valueType: 'enum',
     defaultValue: 'en-IN',
-    validation: { allowedValues: ['en-IN', 'en-US', 'en-GB'] },
+    validation: {
+      allowedValues: ['en-IN', 'en-US', 'en-GB'],
+      optionLabels: {
+        'en-IN': 'English (India) — 1,00,000 style',
+        'en-US': 'English (United States)',
+        'en-GB': 'English (United Kingdom)',
+      },
+    },
+  },
+  {
+    key: 'general.language',
+    category: 'general',
+    subcategory: 'Regional & formats',
+    displayName: 'Interface language',
+    description:
+      'Sets the document language (html lang). English UI strings ship today; Hindi currently updates browser/accessibility language only until translations are added.',
+    valueType: 'enum',
+    defaultValue: 'en',
+    validation: {
+      allowedValues: ['en', 'hi'],
+      optionLabels: {
+        en: 'English',
+        hi: 'Hindi (lang only — UI still English)',
+      },
+    },
+  },
+  {
+    key: 'general.date_format',
+    category: 'general',
+    subcategory: 'Regional & formats',
+    displayName: 'Date display format',
+    description: 'How calendar dates appear in lists and reports (day, month, year order).',
+    valueType: 'enum',
+    defaultValue: 'dd/MM/yyyy',
+    validation: {
+      allowedValues: ['dd/MM/yyyy', 'MM/dd/yyyy', 'yyyy-MM-dd'],
+      optionLabels: {
+        'dd/MM/yyyy': 'DD/MM/YYYY — 11/07/2026 (common in India)',
+        'MM/dd/yyyy': 'MM/DD/YYYY — 07/11/2026 (US style)',
+        'yyyy-MM-dd': 'YYYY-MM-DD — 2026-07-11 (ISO)',
+      },
+    },
+  },
+  {
+    key: 'general.time_format',
+    category: 'general',
+    subcategory: 'Regional & formats',
+    displayName: 'Clock format',
+    description: '12-hour (AM/PM) or 24-hour clock for timestamps in LMS and reports.',
+    valueType: 'enum',
+    defaultValue: '12h',
+    validation: {
+      allowedValues: ['12h', '24h'],
+      optionLabels: {
+        '12h': '12-hour — 2:30 PM',
+        '24h': '24-hour — 14:30',
+      },
+    },
   },
   {
     key: 'general.currency',
     category: 'general',
+    subcategory: 'Regional & formats',
     displayName: 'Currency',
-    description: 'ISO 4217 currency code for monetary displays.',
+    description:
+      'Currency code for campus amount formatting (e.g. dashboard samples and wallet display when Knuct does not supply a currency).',
     valueType: 'enum',
     defaultValue: 'INR',
-    validation: { allowedValues: ['INR', 'USD', 'EUR', 'GBP'] },
+    validation: {
+      allowedValues: ['INR', 'USD', 'EUR', 'GBP'],
+      optionLabels: {
+        INR: 'Indian Rupee (₹)',
+        USD: 'US Dollar ($)',
+        EUR: 'Euro (€)',
+        GBP: 'British Pound (£)',
+      },
+    },
   },
+
+  // General — Experience
   {
-    key: 'general.pagination_default',
+    key: 'general.theme',
     category: 'general',
-    displayName: 'Default page size',
-    description: 'Default number of rows per page in list views.',
-    valueType: 'number',
-    defaultValue: 20,
-    validation: { min: 5, max: 200 },
+    subcategory: 'Experience',
+    displayName: 'Default appearance',
+    description:
+      'Campus light/dark mode applied after login and on the login page. Choose Light, Dark, or Match device. The header toggle can still switch for the current browser.',
+    valueType: 'enum',
+    defaultValue: 'light',
+    validation: {
+      allowedValues: ['light', 'dark', 'system'],
+      optionLabels: {
+        light: 'Light',
+        dark: 'Dark',
+        system: 'Match device (system)',
+      },
+    },
   },
   {
     key: 'general.landing_section',
     category: 'general',
-    displayName: 'Default landing section',
-    description: 'Section opened after login when no deep-link is present.',
+    subcategory: 'Experience',
+    displayName: 'Home screen after login',
+    description:
+      'Which module opens first after a successful login (if the user has access). Choose Dashboard unless you want staff to land in a specific module.',
     valueType: 'enum',
     defaultValue: 'dashboard',
     validation: {
@@ -139,42 +234,53 @@ const defs: SettingDefinition[] = [
         'calendar',
         'settings',
       ],
+      optionLabels: {
+        dashboard: 'Dashboard',
+        masters: 'Masters (academic catalog)',
+        attendance: 'Attendance',
+        lms: 'Learning Management',
+        users: 'Users & RBAC',
+        violations: 'Violations',
+        reports: 'Reports & Analytics',
+        geofences: 'Geofences',
+        calendar: 'Calendar',
+        settings: 'Administration',
+      },
     },
   },
   {
-    key: 'general.branding_primary_color',
+    key: 'general.pagination_default',
     category: 'general',
-    displayName: 'Primary brand color',
-    description: 'Hex accent color for the shell (e.g. #1A3C6E).',
-    valueType: 'string',
-    defaultValue: '#1A3C6E',
-    validation: { regex: '^#[0-9A-Fa-f]{6}$' },
+    subcategory: 'Experience',
+    displayName: 'Rows per page (lists)',
+    description:
+      'Default number of rows for LMS lists, Users, Violations, and similar paginated tables (5–200).',
+    valueType: 'number',
+    defaultValue: 20,
+    validation: { min: 5, max: 200 },
+  },
+
+  // General — Access & safety
+  {
+    key: 'general.session_timeout_minutes',
+    category: 'general',
+    subcategory: 'Access & safety',
+    displayName: 'Idle logout (minutes)',
+    description:
+      'Automatically sign the user out after this many minutes of inactivity (client). Also caps JWT session lifetime to the same duration. Default 480 = 8 hours. Range: 15 minutes to 7 days.',
+    valueType: 'number',
+    defaultValue: 480,
+    validation: { min: 15, max: 10080 },
   },
   {
-    key: 'general.logo_url',
+    key: 'general.maintenance_mode',
     category: 'general',
-    displayName: 'Logo URL',
-    description: 'Relative path to logo image (e.g. /logo.jpeg). Leave default to use bundled asset.',
-    valueType: 'string',
-    defaultValue: BRAND.logoSrc,
-    validation: { regex: '^\\/[^\\s]*$' },
-  },
-  {
-    key: 'general.favicon_url',
-    category: 'general',
-    displayName: 'Favicon URL',
-    description: 'Relative path to favicon (e.g. /logo.jpeg).',
-    valueType: 'string',
-    defaultValue: BRAND.logoSrc,
-    validation: { regex: '^\\/[^\\s]*$' },
-  },
-  {
-    key: 'general.copyright_text',
-    category: 'general',
-    displayName: 'Copyright text',
-    description: 'Footer copyright line.',
-    valueType: 'string',
-    defaultValue: BRAND.copyright,
+    subcategory: 'Access & safety',
+    displayName: 'Maintenance banner',
+    description:
+      'When On, non-admin users see a yellow banner (app + login) and mutating APIs return 503. Admins and Super Admins can still work and turn this off.',
+    valueType: 'boolean',
+    defaultValue: false,
   },
 
   // Attendance
@@ -783,7 +889,7 @@ export function requireSettingDefinition(key: string): SettingDefinition {
 
 export function listSettingCategories(): { id: SettingCategory; label: string; keys: string[] }[] {
   const order: { id: SettingCategory; label: string }[] = [
-    { id: 'general', label: 'General' },
+    { id: 'general', label: 'General settings' },
     { id: 'organization', label: 'Organization' },
     { id: 'users', label: 'User management' },
     { id: 'attendance', label: 'Attendance' },
@@ -825,7 +931,19 @@ export function validateSettingValue(def: SettingDefinition, value: unknown): st
     case 'string':
     case 'secret':
       if (typeof value !== 'string') return 'Expected string.';
-      if (v?.regex && !new RegExp(v.regex).test(value)) return 'Value does not match required pattern.';
+      if (
+        def.key === 'general.logo_url' ||
+        def.key === 'general.favicon_url'
+      ) {
+        const normalized = normalizeAssetUrl(value);
+        if (!normalized || !isAssetUrl(normalized)) {
+          return 'Use a public path like /logo.jpeg or a full https:// image URL.';
+        }
+        break;
+      }
+      if (v?.regex && !new RegExp(v.regex).test(value)) {
+        return 'Value does not match required pattern.';
+      }
       break;
     case 'enum':
       if (v?.allowedValues && !v.allowedValues.includes(value as string | number | boolean)) {

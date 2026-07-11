@@ -37,9 +37,9 @@ export function DemoBanner() {
       status?.ready ? 'bg-emerald-50/80 border-emerald-200 dark:bg-emerald-950/20 dark:border-emerald-900' : 'bg-amber-50/80 border-amber-200 dark:bg-amber-950/20 dark:border-amber-900'
     )}>
       <div className="flex items-start gap-2 min-w-0 flex-1">
-        <Sparkles className="h-4 w-4 shrink-0 mt-0.5 text-[#1A3C6E]" />
+        <Sparkles className="h-4 w-4 shrink-0 mt-0.5 text-brand" />
         <div className="min-w-0">
-          <p className="text-xs font-semibold text-[#1A3C6E]">Demo mode</p>
+          <p className="text-xs font-semibold text-brand">Demo mode</p>
           <p className="text-[10px] text-muted-foreground">
             {status?.ready
               ? `${status.codingProblems ?? 0} coding problems loaded · use avatar menu to switch roles`

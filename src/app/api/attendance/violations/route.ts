@@ -1,7 +1,7 @@
 import { rateLimitByUser } from '@/lib/api-rate-limit';
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
-import { getCampusScope, requireSection } from '@/lib/auth-helpers';
+import { getCampusScope, requireSection, requireWritableSection } from '@/lib/auth-helpers';
 import { logAudit, getClientIp } from '@/lib/audit';
 import { enqueueAnchor } from '@/lib/knuct/anchor-service';
 
@@ -59,7 +59,7 @@ export async function GET(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    const { error, session } = await requireSection('violations');
+    const { error, session } = await requireWritableSection('violations');
     if (error || !session) return error;
 
     const limited = await rateLimitByUser(request, session.user.id, 'violation-review', 30, 60_000);

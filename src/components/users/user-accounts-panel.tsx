@@ -149,14 +149,14 @@ export function UserAccountsPanel({ actorRole }: { actorRole: Role }) {
           <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
             <div>
               <CardTitle className="text-base flex items-center gap-2">
-                <Users className="h-4 w-4 text-[#1A3C6E]" />
+                <Users className="h-4 w-4 text-brand" />
                 User Accounts
               </CardTitle>
               <CardDescription>
                 Create teachers, students, and every campus role. A temporary password is generated on create.
               </CardDescription>
             </div>
-            <Button size="sm" className="bg-[#1A3C6E] hover:bg-[#1A3C6E]/90" onClick={() => openCreate()}>
+            <Button size="sm" className="bg-brand hover:bg-brand/90" onClick={() => openCreate()}>
               <UserPlus className="h-4 w-4 mr-1.5" />
               Create User
             </Button>

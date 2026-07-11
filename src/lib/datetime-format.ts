@@ -79,3 +79,11 @@ export function formatCampusCurrency(
     return `${opts.currency || 'INR'} ${amount.toFixed(2)}`;
   }
 }
+
+export function formatCampusNumber(value: number, locale = DEFAULT_GENERAL_SETTINGS.locale): string {
+  try {
+    return new Intl.NumberFormat(locale || 'en-IN').format(value);
+  } catch {
+    return String(value);
+  }
+}

@@ -20,8 +20,9 @@ import {
 } from '@/components/ui/select';
 import type { Role } from '@/lib/store';
 import { BUNDLED_CODING_PROBLEMS } from '@/data/leetcode-problems';
+import { DEFAULT_BRAND_PRIMARY } from '@/lib/brand-color';
 
-const NAVY = '#1A3C6E';
+const NAVY = DEFAULT_BRAND_PRIMARY;
 
 type InstructorCandidate = {
   id: string;

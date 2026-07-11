@@ -22,8 +22,9 @@ import {
 import { PublishSubjectDialog } from '@/components/lms/lms-dialogs';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
+import { DEFAULT_BRAND_PRIMARY } from '@/lib/brand-color';
 
-const NAVY = '#1A3C6E';
+const NAVY = DEFAULT_BRAND_PRIMARY;
 
 // ─── Shared Mutation Hook ────────────────────────────────────────────────────
 
@@ -236,7 +237,7 @@ function AcademicYearsTab({ academicYears, readOnly }: { academicYears: any[]; r
                   <TableRow key={ay.id}>
                     <TableCell className="font-medium">{ay.name}</TableCell>
                     <TableCell className="font-mono text-sm">{ay.code}</TableCell>
-                    <TableCell><Badge className="bg-[#1A3C6E] text-white text-xs">{ay.regulation || 'N/A'}</Badge></TableCell>
+                    <TableCell><Badge className="bg-brand text-white text-xs">{ay.regulation || 'N/A'}</Badge></TableCell>
                     <TableCell className="text-sm">{ay.startDate}</TableCell>
                     <TableCell className="text-sm">{ay.endDate}</TableCell>
                     <TableCell><Badge variant="secondary">{ay._count?.semesters || 0}</Badge></TableCell>
@@ -672,7 +673,7 @@ function SubjectsTab({ subjects, departments, semesters, programs, readOnly }: {
                       <TableCell>
                         <div className="flex items-center gap-1">
                           <Button variant="ghost" size="icon" className="h-8 w-8" title="Publish to LMS" onClick={() => { setPublishSubject(s); setPublishOpen(true); }}>
-                            <Rocket className="h-3.5 w-3.5 text-[#1A3C6E]" />
+                            <Rocket className="h-3.5 w-3.5 text-brand" />
                           </Button>
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(s)}><Pencil className="h-3.5 w-3.5" /></Button>
                           <DeleteConfirm onConfirm={() => deleteMut.mutate({ id: s.id })} isLoading={deleteMut.isPending} />

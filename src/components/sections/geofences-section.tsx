@@ -31,6 +31,7 @@ import {
   type GeofenceCheckResult,
 } from '@/lib/geofence-policy';
 import { cn } from '@/lib/utils';
+import { DEFAULT_BRAND_PRIMARY } from '@/lib/brand-color';
 import type { GeofenceItem } from '@/lib/types';
 
 async function fetchGeofences(includeInactive: boolean): Promise<{ geofences: GeofenceItem[]; defaults?: { radiusMeters: number } }> {
@@ -42,7 +43,7 @@ async function fetchGeofences(includeInactive: boolean): Promise<{ geofences: Ge
 }
 
 // ─── Constants ──────────────────────────────────────────────────────────────
-const NAVY = '#1A3C6E';
+const NAVY = DEFAULT_BRAND_PRIMARY;
 const DEFAULT_CENTER: [number, number] = [17.4563, 78.6698]; // AIMSCS approximate location
 const DEFAULT_ZOOM = 16;
 
@@ -311,7 +312,7 @@ function MapView({
       <div ref={mapRef} className="w-full h-[400px] md:h-[500px] rounded-lg z-0" />
       {!mapReady && (
         <div className="absolute inset-0 flex items-center justify-center bg-muted/30 rounded-lg">
-          <Loader2 className="h-6 w-6 animate-spin text-[#1A3C6E]" />
+          <Loader2 className="h-6 w-6 animate-spin text-brand" />
         </div>
       )}
       {userLocation && (
@@ -455,7 +456,7 @@ function StudentMarkPanel() {
                     className={cn(
                       'w-full text-left p-3 rounded-lg border transition-all hover:shadow-sm',
                       session.alreadyMarked ? 'opacity-50 cursor-not-allowed bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800' :
-                      selectedSession?.id === session.id ? 'ring-2 ring-[#1A3C6E] bg-[#1A3C6E]/5 border-[#1A3C6E]' : 'hover:border-[#1A3C6E]/30'
+                      selectedSession?.id === session.id ? 'ring-2 ring-brand bg-brand/5 border-brand' : 'hover:border-brand/30'
                     )}
                     disabled={session.alreadyMarked}
                   >
@@ -554,7 +555,7 @@ function StudentMarkPanel() {
             {/* Mark Button */}
             <div className="pt-2 border-t">
               <Button
-                className="w-full bg-[#1A3C6E] hover:bg-[#1A3C6E]/90 text-white gap-2"
+                className="w-full bg-brand hover:bg-brand/90 text-white gap-2"
                 disabled={
                   markMutation.isPending ||
                   !userLocation ||
@@ -752,13 +753,13 @@ export default function GeofencesSection() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[#1A3C6E]">Geofence Management</h1>
+          <h1 className="text-2xl font-bold text-brand">Geofence Management</h1>
           <p className="text-sm text-muted-foreground mt-1">
             {isStudent ? 'View geofence boundaries & mark attendance from map' : canManageGeofences ? 'Manage GPS geofence boundaries for attendance capture' : 'View campus geofence boundaries'}
           </p>
         </div>
         {canManageGeofences && (
-          <Button className="gap-2 bg-[#1A3C6E] hover:bg-[#1A3C6E]/90" onClick={() => setShowCreate(true)}>
+          <Button className="gap-2 bg-brand hover:bg-brand/90" onClick={() => setShowCreate(true)}>
             <Plus className="h-4 w-4" /> New Geofence
           </Button>
         )}
@@ -777,7 +778,7 @@ export default function GeofencesSection() {
       <div className="grid gap-4 grid-cols-2 md:grid-cols-4">
         <Card className="py-3">
           <CardContent className="p-3 flex items-center gap-3">
-            <div className="h-9 w-9 rounded-lg bg-[#1A3C6E]/10 flex items-center justify-center shrink-0"><MapPin className="h-4 w-4 text-[#1A3C6E]" /></div>
+            <div className="h-9 w-9 rounded-lg bg-brand/10 flex items-center justify-center shrink-0"><MapPin className="h-4 w-4 text-brand" /></div>
             <div><p className="text-[10px] text-muted-foreground">Total Geofences</p><p className="text-lg font-bold">{geofences.length}</p></div>
           </CardContent>
         </Card>
@@ -858,7 +859,7 @@ export default function GeofencesSection() {
                                 <div className="flex items-center gap-2 min-w-0">
                                   <div className={cn(
                                     'h-3 w-3 rounded-full shrink-0',
-                                    g.isActive ? (hasActive ? 'bg-green-500' : 'bg-[#1A3C6E]') : 'bg-gray-400'
+                                    g.isActive ? (hasActive ? 'bg-green-500' : 'bg-brand') : 'bg-gray-400'
                                   )} />
                                   <span className="text-sm font-medium truncate">{g.name}</span>
                                 </div>
@@ -940,7 +941,7 @@ export default function GeofencesSection() {
                         <TableRow key={g.id}>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <MapPin className="h-4 w-4 text-[#1A3C6E]" />
+                              <MapPin className="h-4 w-4 text-brand" />
                               <span className="font-medium text-sm">{g.name}</span>
                             </div>
                           </TableCell>
@@ -1019,7 +1020,7 @@ export default function GeofencesSection() {
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-[#1A3C6E]">Create New Geofence</DialogTitle>
+            <DialogTitle className="text-brand">Create New Geofence</DialogTitle>
             <DialogDescription>Define a geofence boundary for attendance capture</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -1033,7 +1034,7 @@ export default function GeofencesSection() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
-            <Button className="bg-[#1A3C6E] hover:bg-[#1A3C6E]/90" onClick={() => createMutation.mutate({
+            <Button className="bg-brand hover:bg-brand/90" onClick={() => createMutation.mutate({
               name: newFence.name, type: 'circle',
               centerLat: parseFloat(newFence.centerLat), centerLng: parseFloat(newFence.centerLng),
               radiusMtrs: parseFloat(newFence.radiusMtrs), building: newFence.building, isActive: true,
@@ -1049,7 +1050,7 @@ export default function GeofencesSection() {
       <Dialog open={!!editTarget} onOpenChange={(o) => !o && setEditTarget(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-[#1A3C6E]">Edit Geofence</DialogTitle>
+            <DialogTitle className="text-brand">Edit Geofence</DialogTitle>
             <DialogDescription>Update circle geofence boundary details</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -1072,7 +1073,7 @@ export default function GeofencesSection() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditTarget(null)}>Cancel</Button>
             <Button
-              className="bg-[#1A3C6E] hover:bg-[#1A3C6E]/90"
+              className="bg-brand hover:bg-brand/90"
               disabled={!editForm.name || !editTarget || updateMutation.isPending}
               onClick={() => {
                 if (!editTarget) return;

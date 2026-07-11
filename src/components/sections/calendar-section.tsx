@@ -19,6 +19,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
+import { useCampusFormat } from '@/hooks/use-campus-format';
+import { DEFAULT_BRAND_PRIMARY } from '@/lib/brand-color';
 import {
   CalendarDays, Clock, MapPin, User, GraduationCap,
   ChevronLeft, ChevronRight, AlertCircle, PartyPopper, BookOpen, Plus, Loader2, Trash2,
@@ -28,7 +30,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import type { Role } from '@/lib/store';
 import { cn } from '@/lib/utils';
 
-const NAVY = '#1A3C6E';
+const NAVY = DEFAULT_BRAND_PRIMARY;
 const AY_START = '2025-07-01';
 const AY_END = '2026-06-30';
 
@@ -161,15 +163,22 @@ function sortByStartDate(a: CalendarEvent, b: CalendarEvent) {
   return a.startDate.localeCompare(b.startDate) || (a.startTime || '').localeCompare(b.startTime || '');
 }
 
-function formatDisplayDate(startDate: string, endDate?: string | null) {
-  const fmt = (d: string, withYear = true) =>
-    new Date(`${d}T12:00:00`).toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'short',
-      ...(withYear ? { year: 'numeric' } : {}),
-    });
-  if (!endDate || endDate === startDate) return fmt(startDate);
-  return `${fmt(startDate, false)} – ${fmt(endDate)}`;
+import { formatCampusDateTime } from '@/lib/datetime-format';
+import { DEFAULT_GENERAL_SETTINGS } from '@/lib/settings/general-defaults';
+
+function formatDisplayDate(
+  startDate: string,
+  endDate?: string | null,
+  formatDate: (input: string | number | Date) => string = (d) =>
+    formatCampusDateTime(d, {
+      dateFormat: DEFAULT_GENERAL_SETTINGS.dateFormat,
+      locale: DEFAULT_GENERAL_SETTINGS.locale,
+      timezone: DEFAULT_GENERAL_SETTINGS.timezone,
+    }),
+) {
+  const a = formatDate(`${startDate}T12:00:00`);
+  if (!endDate || endDate === startDate) return a;
+  return `${a} – ${formatDate(`${endDate}T12:00:00`)}`;
 }
 
 function EventTypeBadge({ type }: { type: string }) {
@@ -190,6 +199,7 @@ function EventCard({
   onClick?: () => void;
   compact?: boolean;
 }) {
+  const { formatDate } = useCampusFormat();
   const config = EVENT_TYPE_CONFIG[event.type] || EVENT_TYPE_CONFIG.personal;
   const Icon = config.icon;
   return (
@@ -213,7 +223,7 @@ function EventCard({
       <div className="flex-1 min-w-0">
         <p className={cn('font-medium truncate', compact ? 'text-xs' : 'text-sm')}>{event.title}</p>
         <p className="text-[11px] text-muted-foreground mt-0.5">
-          {formatDisplayDate(event.startDate, event.endDate)}
+          {formatDisplayDate(event.startDate, event.endDate, formatDate)}
           {event.startTime && (
             <span> · {event.startTime}{event.endTime ? `–${event.endTime}` : ''}</span>
           )}
@@ -232,6 +242,7 @@ function EventCard({
 
 export default function CalendarSection() {
   const { currentUser } = useAppStore();
+  const { formatDate } = useCampusFormat();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -476,7 +487,7 @@ export default function CalendarSection() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
-            <CalendarDays className="h-6 w-6 text-[#1A3C6E]" />
+            <CalendarDays className="h-6 w-6 text-brand" />
             Academic Calendar
           </h1>
           <p className="text-sm text-muted-foreground mt-1">{aySubtitle}</p>
@@ -628,11 +639,11 @@ export default function CalendarSection() {
                               type="button"
                               className={cn(
                                 'min-h-[5.5rem] sm:min-h-[6.5rem] border rounded-md p-1.5 text-left text-xs overflow-hidden transition-colors hover:bg-muted/30',
-                                isToday(day) ? 'border-[#1A3C6E] bg-[#1A3C6E]/5 ring-1 ring-[#1A3C6E]/20' : 'border-border/50',
+                                isToday(day) ? 'border-brand bg-brand/5 ring-1 ring-brand/20' : 'border-border/50',
                               )}
                               onClick={() => setDayDialogDate(ds)}
                             >
-                              <div className={cn('font-semibold mb-1', isToday(day) && 'text-[#1A3C6E]')}>
+                              <div className={cn('font-semibold mb-1', isToday(day) && 'text-brand')}>
                                 {day}
                               </div>
                               <div className="space-y-0.5">
@@ -764,10 +775,7 @@ export default function CalendarSection() {
         <DialogContent className="sm:max-w-md max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {dayDialogDate &&
-                new Date(`${dayDialogDate}T12:00:00`).toLocaleDateString('en-IN', {
-                  weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-                })}
+              {dayDialogDate && formatDate(`${dayDialogDate}T12:00:00`)}
             </DialogTitle>
             <DialogDescription>
               {dayDialogEvents.length} event{dayDialogEvents.length !== 1 ? 's' : ''} on this day
@@ -808,7 +816,7 @@ export default function CalendarSection() {
               <div className="space-y-3 text-sm">
                 <div className="flex items-start gap-2 text-muted-foreground">
                   <CalendarDays className="h-4 w-4 mt-0.5 shrink-0" />
-                  <span>{formatDisplayDate(detailEvent.startDate, detailEvent.endDate)}</span>
+                  <span>{formatDisplayDate(detailEvent.startDate, detailEvent.endDate, formatDate)}</span>
                 </div>
                 {detailEvent.startTime && (
                   <div className="flex items-center gap-2 text-muted-foreground">

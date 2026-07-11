@@ -19,6 +19,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { formatCampusCurrency, formatCampusDateTime } from '@/lib/datetime-format';
+import { KnuctCampusDetailsCard } from '@/components/administration/knuct-campus-details';
 
 type EffectiveSetting = {
   key: string;
@@ -30,6 +32,7 @@ type EffectiveSetting = {
   definition: {
     key: string;
     category: string;
+    subcategory?: string;
     displayName: string;
     description: string;
     valueType: string;
@@ -38,7 +41,13 @@ type EffectiveSetting = {
     envOnly?: boolean;
     allowUserOverride?: boolean;
     allowDepartmentOverride?: boolean;
-    validation?: { allowedValues?: (string | number | boolean)[]; min?: number; max?: number };
+    validation?: {
+      allowedValues?: (string | number | boolean)[];
+      optionLabels?: Record<string, string>;
+      min?: number;
+      max?: number;
+      regex?: string;
+    };
   };
 };
 
@@ -73,24 +82,32 @@ function SettingEditor({
           disabled={disabled}
           onCheckedChange={(c) => onChange(c)}
         />
-        <span className="text-xs text-muted-foreground">{draft ? 'On' : 'Off'}</span>
+        <span className="text-xs text-muted-foreground">
+          {draft ? 'On — enabled' : 'Off — disabled'}
+        </span>
       </div>
     );
   }
 
   if (type === 'enum' && def.validation?.allowedValues) {
+    const labels = def.validation.optionLabels ?? {};
     return (
       <Select
         value={String(draft ?? '')}
         disabled={disabled}
-        onValueChange={(v) => onChange(v)}
+        onValueChange={(v) => {
+          const match = def.validation?.allowedValues?.find((x) => String(x) === v);
+          onChange(match !== undefined ? match : v);
+        }}
       >
-        <SelectTrigger className="h-9 max-w-xs">
+        <SelectTrigger className="h-9 max-w-lg">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
           {def.validation.allowedValues.map((v) => (
-            <SelectItem key={String(v)} value={String(v)}>{String(v)}</SelectItem>
+            <SelectItem key={String(v)} value={String(v)}>
+              {labels[String(v)] ?? String(v)}
+            </SelectItem>
           ))}
         </SelectContent>
       </Select>
@@ -98,16 +115,29 @@ function SettingEditor({
   }
 
   if (type === 'number' || type === 'decimal') {
+    const min = def.validation?.min;
+    const max = def.validation?.max;
+    const hint =
+      min != null && max != null
+        ? `Allowed range: ${min}–${max}`
+        : min != null
+          ? `Minimum: ${min}`
+          : max != null
+            ? `Maximum: ${max}`
+            : null;
     return (
-      <Input
-        type="number"
-        className="h-9 max-w-xs"
-        disabled={disabled}
-        value={typeof draft === 'number' ? draft : ''}
-        min={def.validation?.min}
-        max={def.validation?.max}
-        onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))}
-      />
+      <div className="space-y-1.5">
+        <Input
+          type="number"
+          className="h-9 max-w-xs"
+          disabled={disabled}
+          value={typeof draft === 'number' ? draft : ''}
+          min={min}
+          max={max}
+          onChange={(e) => onChange(e.target.value === '' ? '' : Number(e.target.value))}
+        />
+        {hint && <p className="text-[10px] text-muted-foreground">{hint}</p>}
+      </div>
     );
   }
 
@@ -122,14 +152,113 @@ function SettingEditor({
     );
   }
 
+  const isHexColor =
+    type === 'string' &&
+    def.validation?.regex === '^#[0-9A-Fa-f]{6}$';
+
+  if (isHexColor) {
+    const hex = String(draft ?? '#000000');
+    return (
+      <div className="flex flex-wrap items-center gap-3">
+        <input
+          type="color"
+          disabled={disabled}
+          value={/^#[0-9A-Fa-f]{6}$/.test(hex) ? hex : '#1A3C6E'}
+          onChange={(e) => onChange(e.target.value.toUpperCase())}
+          className="h-9 w-12 cursor-pointer rounded border bg-transparent p-0.5"
+          aria-label="Pick color"
+        />
+        <Input
+          className="h-9 max-w-[8rem] font-mono uppercase"
+          disabled={disabled}
+          value={hex}
+          placeholder="#1A3C6E"
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <span className="text-[10px] text-muted-foreground">Hex #RRGGBB</span>
+      </div>
+    );
+  }
+
   return (
-    <Input
-      className="h-9 max-w-md"
-      disabled={disabled}
-      type={type === 'secret' ? 'password' : 'text'}
-      value={String(draft ?? '')}
-      onChange={(e) => onChange(e.target.value)}
-    />
+    <div className="space-y-2 max-w-md">
+      <Input
+        className="h-9"
+        disabled={disabled}
+        type={type === 'secret' ? 'password' : 'text'}
+        value={String(draft ?? '')}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {(def.key === 'general.logo_url' || def.key === 'general.favicon_url') && !disabled && (
+        <LogoUploadField
+          target={def.key === 'general.favicon_url' ? 'favicon' : 'logo'}
+          onUploaded={(url) => onChange(url)}
+        />
+      )}
+    </div>
+  );
+}
+
+function LogoUploadField({
+  target,
+  onUploaded,
+}: {
+  target: 'logo' | 'favicon';
+  onUploaded: (url: string) => void;
+}) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Label className="text-[10px] text-muted-foreground sr-only">Upload {target}</Label>
+      <Input
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        className="h-9 max-w-xs text-xs"
+        disabled={busy}
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          e.target.value = '';
+          if (!file) return;
+          if (file.size > 2 * 1024 * 1024) {
+            toast({ title: 'Image too large', description: 'Max 2 MB', variant: 'destructive' });
+            return;
+          }
+          setBusy(true);
+          try {
+            const dataUrl = await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(String(reader.result));
+              reader.onerror = () => reject(new Error('Read failed'));
+              reader.readAsDataURL(file);
+            });
+            const res = await fetch('/api/settings/branding/upload', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ imageBase64: dataUrl, target }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Upload failed');
+            onUploaded(data.url as string);
+            toast({ title: `${target === 'favicon' ? 'Favicon' : 'Logo'} uploaded`, description: data.url });
+            void queryClient.invalidateQueries({ queryKey: ['settings-list'] });
+            void queryClient.invalidateQueries({ queryKey: ['platform-settings'] });
+          } catch (err) {
+            toast({
+              title: 'Upload failed',
+              description: err instanceof Error ? err.message : 'Unknown error',
+              variant: 'destructive',
+            });
+          } finally {
+            setBusy(false);
+          }
+        }}
+      />
+      {busy && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+      <span className="text-[10px] text-muted-foreground">Or paste a path / https URL above, then Save</span>
+    </div>
   );
 }
 
@@ -142,6 +271,49 @@ function parseDraft(setting: EffectiveSetting, draft: unknown): unknown {
     return Number(draft);
   }
   return draft;
+}
+
+function SettingLivePreview({ settingKey, draft }: { settingKey: string; draft: unknown }) {
+  const sample = new Date('2026-07-11T14:30:00');
+  if (settingKey === 'general.date_format' || settingKey === 'general.time_format' || settingKey === 'general.timezone' || settingKey === 'general.locale') {
+    const dateFormat = settingKey === 'general.date_format' ? String(draft ?? 'dd/MM/yyyy') : 'dd/MM/yyyy';
+    const timeFormat = settingKey === 'general.time_format' ? (draft === '24h' ? '24h' : '12h') : '12h';
+    const timezone = settingKey === 'general.timezone' ? String(draft ?? 'Asia/Kolkata') : 'Asia/Kolkata';
+    const locale = settingKey === 'general.locale' ? String(draft ?? 'en-IN') : 'en-IN';
+    const preview = formatCampusDateTime(sample, {
+      dateFormat,
+      timeFormat,
+      timezone,
+      locale,
+      includeTime: true,
+    });
+    return (
+      <p className="text-[11px] rounded-md border bg-muted/40 px-2.5 py-1.5 text-muted-foreground">
+        Preview: <span className="font-medium text-foreground">{preview}</span>
+      </p>
+    );
+  }
+  if (settingKey === 'general.currency') {
+    const preview = formatCampusCurrency(123456.78, {
+      currency: String(draft ?? 'INR'),
+      locale: 'en-IN',
+    });
+    return (
+      <p className="text-[11px] rounded-md border bg-muted/40 px-2.5 py-1.5 text-muted-foreground">
+        Preview: <span className="font-medium text-foreground">{preview}</span>
+      </p>
+    );
+  }
+  if (settingKey === 'general.branding_primary_color' && typeof draft === 'string') {
+    return (
+      <p className="text-[11px] rounded-md border bg-muted/40 px-2.5 py-1.5 text-muted-foreground flex items-center gap-2">
+        Preview accent
+        <span className="inline-block h-3.5 w-3.5 rounded-sm border" style={{ backgroundColor: draft }} />
+        <span className="font-mono text-foreground">{draft}</span>
+      </p>
+    );
+  }
+  return null;
 }
 
 export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
@@ -220,6 +392,22 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
     if (category === 'recent') return recentData?.settings ?? [];
     return listData?.settings ?? [];
   }, [category, favData, recentData, listData]);
+
+  const settingsByGroup = useMemo(() => {
+    const groups: { label: string; items: EffectiveSetting[] }[] = [];
+    const index = new Map<string, number>();
+    for (const s of settings) {
+      const label = s.definition.subcategory?.trim() || 'Other';
+      const existing = index.get(label);
+      if (existing === undefined) {
+        index.set(label, groups.length);
+        groups.push({ label, items: [s] });
+      } else {
+        groups[existing].items.push(s);
+      }
+    }
+    return groups;
+  }, [settings]);
 
   const selected = settings.find((s) => s.key === selectedKey) ?? settings[0] ?? null;
   const activeKey = selected?.key ?? null;
@@ -374,7 +562,7 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold text-[#1A3C6E] flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-brand flex items-center gap-2">
             <Shield className="h-5 w-5" /> Platform settings
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
@@ -424,7 +612,7 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
                 type="button"
                 className={cn(
                   'w-full text-left text-xs px-2 py-1.5 rounded-md flex items-center gap-2',
-                  category === 'favorites' ? 'bg-[#1A3C6E] text-white' : 'hover:bg-muted',
+                  category === 'favorites' ? 'bg-brand text-white' : 'hover:bg-muted',
                 )}
                 onClick={() => setCategory('favorites')}
               >
@@ -434,7 +622,7 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
                 type="button"
                 className={cn(
                   'w-full text-left text-xs px-2 py-1.5 rounded-md flex items-center gap-2',
-                  category === 'recent' ? 'bg-[#1A3C6E] text-white' : 'hover:bg-muted',
+                  category === 'recent' ? 'bg-brand text-white' : 'hover:bg-muted',
                 )}
                 onClick={() => setCategory('recent')}
               >
@@ -447,7 +635,7 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
                   type="button"
                   className={cn(
                     'w-full text-left text-xs px-2 py-1.5 rounded-md',
-                    category === c.id ? 'bg-[#1A3C6E] text-white' : 'hover:bg-muted',
+                    category === c.id ? 'bg-brand text-white' : 'hover:bg-muted',
                   )}
                   onClick={() => {
                     setCategory(c.id);
@@ -463,7 +651,7 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
                 type="button"
                 className={cn(
                   'w-full text-left text-xs px-2 py-1.5 rounded-md',
-                  category === 'runtime' ? 'bg-[#1A3C6E] text-white' : 'hover:bg-muted',
+                  category === 'runtime' ? 'bg-brand text-white' : 'hover:bg-muted',
                 )}
                 onClick={() => {
                   setCategory('runtime');
@@ -493,6 +681,11 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
           </div>
 
           <div className="grid gap-3 lg:grid-cols-[1fr_1.2fr]">
+            {category === 'general' && (
+              <div className="lg:col-span-2">
+                <KnuctCampusDetailsCard />
+              </div>
+            )}
             {category === 'runtime' && (
               <Card className="lg:col-span-2">
                 <CardHeader className="py-3">
@@ -531,8 +724,14 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
             <>
             <Card>
               <CardHeader className="py-3">
-                <CardTitle className="text-sm">Settings</CardTitle>
-                <CardDescription className="text-xs">{settings.length} keys</CardDescription>
+                <CardTitle className="text-sm">
+                  {category === 'general' ? 'Campus & experience' : 'Settings'}
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  {category === 'general'
+                    ? 'Branding, regional formats, home screen, and access'
+                    : `${settings.length} option${settings.length === 1 ? '' : 's'}`}
+                </CardDescription>
               </CardHeader>
               <CardContent className="p-0">
                 <ScrollArea className="h-[420px]">
@@ -543,31 +742,44 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
                   ) : settings.length === 0 ? (
                     <p className="p-4 text-xs text-muted-foreground">No settings in this view.</p>
                   ) : (
-                    <ul className="divide-y">
-                      {settings.map((s) => (
-                        <li key={s.key}>
-                          <button
-                            type="button"
-                            className={cn(
-                              'w-full text-left px-3 py-2.5 hover:bg-muted/50 transition-colors',
-                              activeKey === s.key && 'bg-muted',
-                            )}
-                            onClick={() => {
-                              setSelectedKey(s.key);
-                              setShowHistory(false);
-                            }}
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <p className="text-xs font-medium truncate">{s.definition.displayName}</p>
-                                <p className="text-[10px] font-mono text-muted-foreground truncate">{s.key}</p>
-                              </div>
-                              <Badge variant="outline" className="text-[9px] shrink-0">{s.source}</Badge>
-                            </div>
-                          </button>
-                        </li>
+                    <div>
+                      {settingsByGroup.map((group) => (
+                        <div key={group.label}>
+                          {(settingsByGroup.length > 1 || group.label !== 'Other') && (
+                            <p className="sticky top-0 z-[1] bg-muted/80 backdrop-blur px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground border-b">
+                              {group.label}
+                            </p>
+                          )}
+                          <ul className="divide-y">
+                            {group.items.map((s) => (
+                              <li key={s.key}>
+                                <button
+                                  type="button"
+                                  className={cn(
+                                    'w-full text-left px-3 py-2.5 hover:bg-muted/50 transition-colors',
+                                    activeKey === s.key && 'bg-muted',
+                                  )}
+                                  onClick={() => {
+                                    setSelectedKey(s.key);
+                                    setShowHistory(false);
+                                  }}
+                                >
+                                  <div className="flex items-start justify-between gap-2">
+                                    <div className="min-w-0">
+                                      <p className="text-xs font-medium truncate">{s.definition.displayName}</p>
+                                      <p className="text-[10px] text-muted-foreground line-clamp-2 mt-0.5">
+                                        {s.definition.description}
+                                      </p>
+                                    </div>
+                                    <Badge variant="outline" className="text-[9px] shrink-0">{s.source}</Badge>
+                                  </div>
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
                       ))}
-                    </ul>
+                    </div>
                   )}
                 </ScrollArea>
               </CardContent>
@@ -592,8 +804,12 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
                       </Button>
                     </div>
                     <div className="flex flex-wrap gap-1.5 pt-1">
-                      <Badge variant="outline" className="text-[10px] font-mono">{selected.key}</Badge>
-                      <Badge variant="outline" className="text-[10px]">{selected.definition.valueType}</Badge>
+                      {selected.definition.subcategory && (
+                        <Badge variant="secondary" className="text-[10px]">{selected.definition.subcategory}</Badge>
+                      )}
+                      <Badge variant="outline" className="text-[10px] font-mono" title={selected.key}>
+                        {selected.key}
+                      </Badge>
                       {selected.definition.envOnly && <Badge className="text-[10px] bg-amber-100 text-amber-800">env only</Badge>}
                       {selected.definition.allowDepartmentOverride && (
                         <Badge variant="outline" className="text-[10px]">dept override</Badge>
@@ -675,9 +891,14 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
                         disabled={!editable}
                         onChange={(v) => setDrafts((d) => ({ ...d, [selected.key]: v }))}
                       />
+                      <SettingLivePreview settingKey={selected.key} draft={draftValue} />
                       <p className="text-[10px] text-muted-foreground">
                         Effective source: <code className="font-mono">{selected.source}</code>
-                        {' · '}Default: <code className="font-mono">{JSON.stringify(selected.definition.defaultValue)}</code>
+                        {' · '}Default:{' '}
+                        <code className="font-mono">
+                          {selected.definition.validation?.optionLabels?.[String(selected.definition.defaultValue)]
+                            ?? JSON.stringify(selected.definition.defaultValue)}
+                        </code>
                         {selected.version != null && ` · v${selected.version}`}
                       </p>
                     </div>
@@ -686,7 +907,7 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
                       <div className="flex flex-wrap gap-2 pt-2 border-t">
                         <Button
                           size="sm"
-                          className="gap-1.5 bg-[#1A3C6E] hover:bg-[#1A3C6E]/90"
+                          className="gap-1.5 bg-brand hover:bg-brand/90"
                           disabled={!editable || saveMutation.isPending}
                           onClick={() => saveMutation.mutate()}
                         >

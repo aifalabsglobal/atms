@@ -6,6 +6,8 @@ import { ThemeProvider } from 'next-themes';
 import { useState } from 'react';
 import { SessionSync } from '@/components/session-sync';
 import { RbacSync } from '@/components/rbac-sync';
+import { CampusThemeSync } from '@/components/campus-theme-sync';
+import { CampusBrandingEffects } from '@/components/campus-branding-effects';
 import { Toaster } from '@/components/ui/toaster';
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -24,7 +26,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <SessionProvider refetchInterval={5 * 60} refetchOnWindowFocus={false}>
       <QueryClientProvider client={queryClient}>
-        <ThemeProvider attribute="class" defaultTheme="light" enableSystem>
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem disableTransitionOnChange>
+          <CampusBrandingEffects />
+          <CampusThemeSync />
           <SessionSync />
           <RbacSync />
           {children}

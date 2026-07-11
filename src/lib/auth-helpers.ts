@@ -5,6 +5,7 @@ import type { Role, Section } from '@/lib/store';
 import { canAccessSectionAsync } from '@/lib/rbac';
 import { STAFF_ROLES, CAMPUS_USER_ROLES } from '@/lib/user-management';
 import { db } from '@/lib/db';
+import { assertNotInMaintenance } from '@/lib/settings/maintenance';
 
 export { STAFF_ROLES, CAMPUS_USER_ROLES };
 
@@ -35,6 +36,33 @@ export async function requireRoles(allowedRoles: Role[]) {
     };
   }
   return { error: null, session };
+}
+
+/** Like requireRoles, but blocked for non-admins while maintenance mode is on. */
+export async function requireWritableRoles(allowedRoles: Role[]) {
+  const result = await requireRoles(allowedRoles);
+  if (result.error || !result.session) return result;
+  const blocked = await assertNotInMaintenance(result.session.user.role);
+  if (blocked) return { error: blocked, session: null };
+  return result;
+}
+
+/** Like requireSection, but blocked for non-admins while maintenance mode is on. */
+export async function requireWritableSection(section: Section) {
+  const result = await requireSection(section);
+  if (result.error || !result.session) return result;
+  const blocked = await assertNotInMaintenance(result.session.user.role);
+  if (blocked) return { error: blocked, session: null };
+  return result;
+}
+
+/** Like requireAuth, but blocked for non-admins while maintenance mode is on. */
+export async function requireWritableAuth() {
+  const result = await requireAuth();
+  if (result.error || !result.session) return result;
+  const blocked = await assertNotInMaintenance(result.session.user.role);
+  if (blocked) return { error: blocked, session: null };
+  return result;
 }
 
 
@@ -124,7 +152,7 @@ export async function requireUserManagement() {
 
 /** Staff-only mutation within a section (students may have read/mark access). */
 export async function requireStaffSection(section: Section) {
-  const { error, session } = await requireSection(section);
+  const { error, session } = await requireWritableSection(section);
   if (error || !session) return { error, session: null };
   const role = session.user.role as Role;
   if (!STAFF_ROLES.includes(role)) {

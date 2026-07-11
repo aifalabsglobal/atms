@@ -32,6 +32,8 @@ export interface SettingValidation {
   max?: number;
   regex?: string;
   allowedValues?: (string | number | boolean)[];
+  /** Human-readable labels for enum values (keyed by String(value)). */
+  optionLabels?: Record<string, string>;
 }
 
 export interface SettingDefinition {

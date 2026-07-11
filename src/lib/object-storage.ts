@@ -73,7 +73,7 @@ function publicUrlForKey(key: string): string {
  * - Local dev: writes under public/ when S3 env vars are not set.
  */
 export async function uploadImageFromBase64(
-  folder: 'profiles' | 'selfies',
+  folder: 'profiles' | 'selfies' | 'branding',
   filenameStem: string,
   base64: string,
 ): Promise<{ url: string; backend: ObjectStorageBackend }> {

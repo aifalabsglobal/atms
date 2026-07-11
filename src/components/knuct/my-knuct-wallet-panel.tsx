@@ -9,6 +9,7 @@ import { KnuctDIDAuthPanel } from '@/components/knuct/did-auth-panel';
 import { parseKnuctAccountView } from '@/lib/knuct/account-view';
 import { useAppStore } from '@/lib/store';
 import { useToast } from '@/hooks/use-toast';
+import { useCampusFormat } from '@/hooks/use-campus-format';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -57,6 +58,7 @@ const STATUS_STYLES: Record<string, string> = {
 export function MyKnuctWalletPanel({ className }: { className?: string }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { formatCurrency, currency: campusCurrency } = useCampusFormat();
   const { currentUser } = useAppStore();
   const isAdmin = currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
   const [open, setOpen] = useState(true);
@@ -168,12 +170,12 @@ export function MyKnuctWalletPanel({ className }: { className?: string }) {
           : 'Not provisioned';
 
   return (
-    <Card className={cn('border-[#1A3C6E]/20', className)}>
+    <Card className={cn('border-brand/20', className)}>
       <Collapsible open={open} onOpenChange={setOpen}>
         <CardHeader className="pb-3">
           <div className="flex items-start justify-between gap-3">
             <div className="space-y-1">
-              <CardTitle className="text-base flex items-center gap-2 text-[#1A3C6E]">
+              <CardTitle className="text-base flex items-center gap-2 text-brand">
                 <Wallet className="h-4 w-4" />
                 My Knuct Wallet
               </CardTitle>
@@ -243,8 +245,14 @@ export function MyKnuctWalletPanel({ className }: { className?: string }) {
                           <div className="space-y-2">
                             {accountView.balance && (
                               <p className="text-lg font-semibold">
-                                {accountView.balance}
-                                {accountView.currency ? ` ${accountView.currency}` : ''}
+                                {(() => {
+                                  const raw = String(accountView.balance).replace(/,/g, '');
+                                  const n = Number(raw);
+                                  if (!accountView.currency && Number.isFinite(n)) {
+                                    return formatCurrency(n);
+                                  }
+                                  return `${accountView.balance}${accountView.currency ? ` ${accountView.currency}` : ` ${campusCurrency}`}`;
+                                })()}
                               </p>
                             )}
                             {accountView.tokens.length > 0 && (

@@ -2,11 +2,13 @@
 
 import { useAppStore, ROLE_LABELS, type Role } from '@/lib/store';
 import { cn } from '@/lib/utils';
+import { DEFAULT_BRAND_PRIMARY } from '@/lib/brand-color';
 import type { GeofenceItem } from '@/lib/types';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { BrandLogo } from '@/components/brand-logo';
 import { MyKnuctWalletPanel } from '@/components/knuct/my-knuct-wallet-panel';
+import { useCampusFormat } from '@/hooks/use-campus-format';
 import {
   Users, GraduationCap, BookOpen, ScanLine, Activity,
   ShieldAlert, UserPlus, ArrowUpRight, ArrowDownRight,
@@ -138,7 +140,7 @@ interface DashboardData {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const NAVY = '#1A3C6E';
+const NAVY = DEFAULT_BRAND_PRIMARY;
 
 const captureMethodConfig: Record<string, { label: string; color: string; icon: React.ElementType }> = {
   face: { label: 'Face Recognition', color: '#1A3C6E', icon: Camera },
@@ -294,8 +296,9 @@ function StatCard({
   indicatorValue?: string;
   color?: string;
 }) {
+  const { formatNumber } = useCampusFormat();
   const isUp = indicator === 'up';
-  const displayValue = format === 'percent' ? `${value}%` : value.toLocaleString('en-IN');
+  const displayValue = format === 'percent' ? `${value}%` : formatNumber(value);
   const c = color || NAVY;
 
   return (
@@ -887,7 +890,7 @@ function KnuctOpsPanel({ knuct }: { knuct?: KnuctDashboardStats }) {
   }[health] ?? { label: 'Unknown', className: 'bg-muted text-muted-foreground border-border' };
 
   return (
-    <Card className="border-[#1A3C6E]/20 bg-gradient-to-br from-[#1A3C6E]/5 to-transparent">
+    <Card className="border-brand/20 bg-gradient-to-br from-brand/5 to-transparent">
       <CardHeader className="pb-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <CardTitle className="text-base flex items-center gap-2" style={{ color: NAVY }}>
@@ -1359,7 +1362,7 @@ function VisitorDashboard({ data }: { data: DashboardData }) {
           <div className="flex items-start gap-4">
             <BrandLogo size="md" className="shrink-0" />
             <div>
-              <h3 className="text-lg font-semibold text-[#1A3C6E]">AIMSCS</h3>
+              <h3 className="text-lg font-semibold text-brand">AIMSCS</h3>
               <p className="text-sm text-muted-foreground">Welcome to the AIMSCS Smart Campus. Explore campus zones and information below.</p>
             </div>
           </div>
@@ -1384,8 +1387,8 @@ function VisitorDashboard({ data }: { data: DashboardData }) {
               campusZones.map((zone) => (
                 <div key={zone.id} className="flex items-center justify-between rounded-lg border p-3">
                   <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-lg bg-[#1A3C6E]/10 flex items-center justify-center">
-                      <MapPin className="h-4 w-4 text-[#1A3C6E]" />
+                    <div className="h-9 w-9 rounded-lg bg-brand/10 flex items-center justify-center">
+                      <MapPin className="h-4 w-4 text-brand" />
                     </div>
                     <div>
                       <p className="text-sm font-medium">{zone.name}</p>

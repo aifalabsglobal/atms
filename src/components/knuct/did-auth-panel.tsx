@@ -197,7 +197,7 @@ export function KnuctDIDAuthPanel({
   return (
     <div className="rounded-lg border p-4 space-y-4">
       <div className="flex items-center gap-2">
-        <KeyRound className="h-4 w-4 text-[#1A3C6E]" />
+        <KeyRound className="h-4 w-4 text-brand" />
         <p className="text-sm font-medium">{title}</p>
         {step === 'done' && (
           <Badge className="bg-green-50 text-green-700 border-green-200 text-[10px]">verified</Badge>
@@ -212,7 +212,7 @@ export function KnuctDIDAuthPanel({
         ) : step === 'error' ? (
           <XCircle className="h-4 w-4 text-red-500 shrink-0" />
         ) : isLoading ? (
-          <Loader2 className="h-4 w-4 animate-spin text-[#1A3C6E] shrink-0" />
+          <Loader2 className="h-4 w-4 animate-spin text-brand shrink-0" />
         ) : (
           <ShieldCheck className="h-4 w-4 text-muted-foreground shrink-0" />
         )}
@@ -223,7 +223,7 @@ export function KnuctDIDAuthPanel({
               : step === 'error'
                 ? 'text-red-600'
                 : isLoading
-                  ? 'text-[#1A3C6E]'
+                  ? 'text-brand'
                   : 'text-muted-foreground'
           }
         >
@@ -243,7 +243,7 @@ export function KnuctDIDAuthPanel({
               <div
                 key={s}
                 className={`h-1 rounded-full transition-all ${
-                  isDone ? 'bg-green-500' : isCur ? 'bg-[#1A3C6E]' : 'bg-muted'
+                  isDone ? 'bg-green-500' : isCur ? 'bg-brand' : 'bg-muted'
                 }`}
               />
             );

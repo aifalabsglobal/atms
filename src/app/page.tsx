@@ -38,7 +38,7 @@ import { DemoBanner } from '@/components/demo-banner';
 function SectionFallback() {
   return (
     <div className="flex items-center justify-center py-24">
-      <Loader2 className="h-6 w-6 animate-spin text-[#1A3C6E]" />
+      <Loader2 className="h-6 w-6 animate-spin text-brand" />
     </div>
   );
 }
@@ -70,7 +70,7 @@ const allNavItems: { id: Section; label: string; icon: React.ElementType }[] = [
 function LoadingScreen({ message }: { message?: string }) {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center gap-3 bg-background">
-      <Loader2 className="h-8 w-8 animate-spin text-[#1A3C6E]" />
+      <Loader2 className="h-8 w-8 animate-spin text-brand" />
       {message && <p className="text-sm text-muted-foreground">{message}</p>}
     </div>
   );
@@ -92,11 +92,7 @@ function AppContent() {
     }
   }, [status, router]);
 
-  useEffect(() => {
-    if (typeof document !== 'undefined') {
-      document.title = `${general.appName} - ${general.tagline}`;
-    }
-  }, [general.appName, general.tagline]);
+  // document.title is applied by CampusBrandingEffects
 
   const { data: notifData } = useQuery({
     queryKey: ['notifications', currentUser?.id],
@@ -338,9 +334,10 @@ function AppContent() {
                           className={cn(
                             'flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors w-full text-left',
                             isActive
-                              ? 'bg-[#1A3C6E] text-white shadow-sm'
+                              ? 'text-white shadow-sm'
                               : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
                           )}
+                          style={isActive ? { backgroundColor: general.brandingPrimaryColor } : undefined}
                         >
                           <Icon className="h-4 w-4 shrink-0" />
                           <span className="truncate">{item.label}</span>

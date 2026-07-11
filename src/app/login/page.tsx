@@ -193,11 +193,16 @@ export default function LoginPage() {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center p-4 py-8"
+      className="min-h-screen flex flex-col items-center justify-center p-4 py-8"
       style={{
         background: `linear-gradient(to bottom right, color-mix(in srgb, ${general.brandingPrimaryColor} 5%, transparent), var(--background), color-mix(in srgb, ${general.brandingPrimaryColor} 10%, transparent))`,
       }}
     >
+      {general.maintenanceMode && (
+        <div className="w-full max-w-2xl mb-3 rounded-md bg-amber-500 text-amber-950 text-center text-xs sm:text-sm font-medium px-3 py-2">
+          Maintenance mode is on. Sign-in may be limited — contact your administrator if you need access.
+        </div>
+      )}
       <Card className="w-full max-w-2xl shadow-lg">
         <CardHeader className="text-center space-y-3 pb-2">
           <BrandLogo size="lg" className="mx-auto" priority src={general.logoUrl} alt={general.companyName} />
@@ -284,7 +289,12 @@ export default function LoginPage() {
                         </button>
                       </div>
                     )}
-                    <Button type="submit" className="w-full bg-[#1A3C6E] hover:bg-[#1A3C6E]/90" disabled={loading}>
+                    <Button
+                      type="submit"
+                      className="w-full text-white hover:opacity-90"
+                      style={{ backgroundColor: general.brandingPrimaryColor }}
+                      disabled={loading}
+                    >
                       {loadingEmail === email ? <Loader2 className="h-4 w-4 animate-spin" /> : mfaRequired ? 'Verify & sign in' : 'Sign in'}
                     </Button>
                     {googleSso && (
@@ -344,10 +354,10 @@ export default function LoginPage() {
                     <Button
                       type="button"
                       variant="outline"
-                      className="w-full gap-2 border-[#1A3C6E]/30"
+                      className="w-full gap-2 border-brand/30"
                       onClick={() => void handleCopyScript()}
                     >
-                      {scriptCopied ? <Check className="h-4 w-4 text-emerald-600" /> : <BookOpen className="h-4 w-4 text-[#1A3C6E]" />}
+                      {scriptCopied ? <Check className="h-4 w-4 text-emerald-600" /> : <BookOpen className="h-4 w-4 text-brand" />}
                       {scriptCopied ? 'Script copied!' : 'Copy 5-min demo script'}
                     </Button>
 
@@ -363,7 +373,7 @@ export default function LoginPage() {
                     {scriptOpen && (
                       <div className="rounded-lg border bg-muted/30 p-3 text-[10px] space-y-3 max-h-64 overflow-y-auto text-left">
                         <div>
-                          <p className="font-semibold text-[#1A3C6E] mb-1">Before demo (once)</p>
+                          <p className="font-semibold text-brand mb-1">Before demo (once)</p>
                           <ul className="list-disc pl-4 space-y-0.5 text-muted-foreground font-mono">
                             {DEMO_PREP_STEPS.map((s) => <li key={s}>{s}</li>)}
                           </ul>
@@ -426,7 +436,7 @@ export default function LoginPage() {
               </TabsContent>
               <p className="text-center text-sm text-muted-foreground">
                 New to SCMS?{' '}
-                <Link href="/register" className="text-[#1A3C6E] font-medium hover:underline">
+                <Link href="/register" className="text-brand font-medium hover:underline">
                   Register with Knuct
                 </Link>
               </p>

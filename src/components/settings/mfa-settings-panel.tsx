@@ -87,7 +87,7 @@ export function MfaSettingsPanel() {
     <Card>
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
-          <KeyRound className="h-4 w-4 text-[#1A3C6E]" /> Two-factor authentication (TOTP)
+          <KeyRound className="h-4 w-4 text-brand" /> Two-factor authentication (TOTP)
         </CardTitle>
         <CardDescription>
           Use Google Authenticator, Authy, or 1Password. Required after password login when enabled.
@@ -108,7 +108,7 @@ export function MfaSettingsPanel() {
         {!data?.enabled && !setup && (
           <Button
             size="sm"
-            className="gap-2 bg-[#1A3C6E] hover:bg-[#1A3C6E]/90"
+            className="gap-2 bg-brand hover:bg-brand/90"
             disabled={startMutation.isPending}
             onClick={() => startMutation.mutate()}
           >

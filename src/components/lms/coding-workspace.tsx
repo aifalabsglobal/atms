@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { cn } from '@/lib/utils';
+import { DEFAULT_BRAND_PRIMARY } from '@/lib/brand-color';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -25,7 +26,7 @@ import { DEMO_SOLUTIONS } from '@/lib/demo-walkthrough';
 
 const MonacoEditor = dynamic(() => import('@monaco-editor/react'), { ssr: false });
 
-const NAVY = '#1A3C6E';
+const NAVY = DEFAULT_BRAND_PRIMARY;
 
 export interface CodingProblem {
   id: string;
@@ -377,7 +378,7 @@ export function CodingWorkspace({
                     onClick={() => onSelect(p.id)}
                     className={cn(
                       'w-full text-left px-3 py-2.5 border-b text-xs transition-colors hover:bg-muted/50',
-                      active && 'bg-[#1A3C6E]/8 border-l-2 border-l-[#1A3C6E]'
+                      active && 'bg-brand/8 border-l-2 border-l-brand'
                     )}
                   >
                     <div className="flex items-center gap-1.5">
@@ -395,7 +396,7 @@ export function CodingWorkspace({
           </div>
         </Panel>
 
-        <PanelResizeHandle className="w-1.5 bg-border hover:bg-[#1A3C6E]/30 transition-colors" />
+        <PanelResizeHandle className="w-1.5 bg-border hover:bg-brand/30 transition-colors" />
 
         {/* Description */}
         <Panel defaultSize={32} minSize={22}>
@@ -404,7 +405,7 @@ export function CodingWorkspace({
           </div>
         </Panel>
 
-        <PanelResizeHandle className="w-1.5 bg-border hover:bg-[#1A3C6E]/30 transition-colors" />
+        <PanelResizeHandle className="w-1.5 bg-border hover:bg-brand/30 transition-colors" />
 
         {/* Editor + results */}
         <Panel defaultSize={50} minSize={35}>

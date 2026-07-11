@@ -182,7 +182,9 @@ if (isGoogleSsoConfigured()) {
 
 export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
-  session: { strategy: 'jwt' },
+  // Upper bound matches general.session_timeout_minutes max (7 days).
+  // Effective idle/session length is also enforced in the jwt callback from campus settings.
+  session: { strategy: 'jwt', maxAge: 60 * 60 * 24 * 7 },
   pages: { signIn: '/login', error: '/login' },
   providers,
   callbacks: {
@@ -224,6 +226,21 @@ export const authOptions: NextAuthOptions = {
         token.profileImageUrl = (user as { profileImageUrl?: string }).profileImageUrl;
         token.linkedStudentId = (user as { linkedStudentId?: string }).linkedStudentId;
         token.active = true;
+        token.iat = Math.floor(Date.now() / 1000);
+      }
+
+      // Align JWT lifetime with campus idle logout (general.session_timeout_minutes).
+      try {
+        const { getGlobalNumber } = await import('@/lib/settings/service');
+        const minutes = await getGlobalNumber('general.session_timeout_minutes', 480);
+        const maxAgeSec = Math.min(10080, Math.max(15, Math.round(minutes) || 480)) * 60;
+        const issuedAt = typeof token.iat === 'number' ? token.iat : 0;
+        if (issuedAt > 0 && Math.floor(Date.now() / 1000) - issuedAt > maxAgeSec) {
+          token.active = false;
+          return token;
+        }
+      } catch {
+        // Settings DB unavailable — keep token; client idle logout still applies.
       }
 
       if (token.id) {

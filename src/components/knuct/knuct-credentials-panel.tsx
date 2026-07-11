@@ -113,7 +113,7 @@ export function KnuctCredentialsPanel() {
     <Card>
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
-          <Award className="h-4 w-4 text-[#1A3C6E]" /> Verifiable credentials
+          <Award className="h-4 w-4 text-brand" /> Verifiable credentials
         </CardTitle>
         <CardDescription>
           Issue Knuct-backed credentials for students. Requires KNUCT_ENABLED and KNUCT_CREDENTIALS_ENABLED in .env;
@@ -199,7 +199,7 @@ export function KnuctCredentialsPanel() {
         <div className="flex flex-wrap gap-2">
           <Button
             size="sm"
-            className="gap-2 bg-[#1A3C6E] hover:bg-[#1A3C6E]/90"
+            className="gap-2 bg-brand hover:bg-brand/90"
             disabled={!selectedUserId || issueMutation.isPending}
             onClick={() => issueMutation.mutate()}
           >
@@ -259,14 +259,14 @@ export function KnuctCredentialsPanel() {
                       <Link
                         href={`/verify?hash=${c.payloadHash}`}
                         target="_blank"
-                        className="text-muted-foreground hover:text-[#1A3C6E] hover:underline"
+                        className="text-muted-foreground hover:text-brand hover:underline"
                       >
                         {c.payloadHash.slice(0, 10)}…
                       </Link>
                     </TableCell>
                     <TableCell className="text-xs">
                       {c.verifyUrl ? (
-                        <a href={c.verifyUrl} target="_blank" rel="noreferrer" className="text-[#1A3C6E] hover:underline">
+                        <a href={c.verifyUrl} target="_blank" rel="noreferrer" className="text-brand hover:underline">
                           Open
                         </a>
                       ) : (

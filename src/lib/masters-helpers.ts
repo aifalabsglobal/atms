@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireSection, ADMIN_ROLES } from '@/lib/auth-helpers';
+import { requireSection, requireWritableSection, ADMIN_ROLES } from '@/lib/auth-helpers';
 import type { Role } from '@/lib/store';
 import { logAudit, getClientIp } from '@/lib/audit';
 import { db } from '@/lib/db';
@@ -10,7 +10,7 @@ export async function requireMastersRead() {
 
 /** Mutations: admin / super_admin only. HOD has read-only masters. */
 export async function requireMastersWrite() {
-  const { error, session } = await requireSection('masters');
+  const { error, session } = await requireWritableSection('masters');
   if (error || !session) return { error, session: null };
   const role = session.user.role as Role;
   if (!ADMIN_ROLES.includes(role)) {

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireAuth, requireSection, requireRoles } from '@/lib/auth-helpers';
+import { requireAuth, requireSection, requireRoles, requireWritableRoles } from '@/lib/auth-helpers';
 import {
   getCredentialStats,
   getUserCredentials,
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
     const { error, session } = await requireSection('settings');
     if (error || !session) return error;
 
-    const roleError = (await requireRoles(['super_admin', 'admin'])).error;
+    const roleError = (await requireWritableRoles(['super_admin', 'admin'])).error;
     if (roleError) return roleError;
 
     const body = await request.json().catch(() => ({}));

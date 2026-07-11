@@ -8,6 +8,7 @@ import {
   validateSettingValue,
 } from './registry';
 import { settingsCacheGet, settingsCacheInvalidate, settingsCacheSet } from './cache';
+import { normalizeAssetUrl } from './asset-url';
 import { resolveEffectiveValue } from './resolve';
 import type {
   EffectiveSetting,
@@ -214,7 +215,22 @@ export async function setSetting(
   options: SetSettingOptions = {},
 ): Promise<EffectiveSetting> {
   const def = requireSettingDefinition(key);
-  const err = validateSettingValue(def, value);
+
+  let nextValue = value;
+  if (
+    (key === 'general.logo_url' || key === 'general.favicon_url') &&
+    typeof value === 'string'
+  ) {
+    const normalized = normalizeAssetUrl(value);
+    if (normalized) nextValue = normalized;
+  } else if (
+    (def.valueType === 'string' || def.valueType === 'secret') &&
+    typeof value === 'string'
+  ) {
+    nextValue = value.trim();
+  }
+
+  const err = validateSettingValue(def, nextValue);
   if (err) throw new Error(err);
 
   const scope = options.scope ?? GLOBAL_SCOPE;
@@ -237,7 +253,7 @@ export async function setSetting(
   });
 
   const nextVersion = (existing?.version ?? 0) + 1;
-  const jsonValue = value as Prisma.InputJsonValue;
+  const jsonValue = nextValue as Prisma.InputJsonValue;
 
   if (!options.skipHistory && existing) {
     await db.settingHistory.create({

@@ -10,8 +10,11 @@ import {
   FileText, BarChart3, Settings, Lock, Award, UserCog, Database, UserPlus
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { DEFAULT_BRAND_PRIMARY } from '@/lib/brand-color';
 import type { UserItem } from '@/lib/types';
 import { useAppStore, useRoleSections, type Role, type Section } from '@/lib/store';
+import { useCampusFormat } from '@/hooks/use-campus-format';
+import { useListPageSize } from '@/hooks/use-list-page-size';
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -47,7 +50,7 @@ import { STAFF_ROLES, CAMPUS_USER_ROLES } from '@/lib/user-management';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const UOH_NAVY = '#1A3C6E';
+const UOH_NAVY = DEFAULT_BRAND_PRIMARY;
 
 const ROLES = [
   { value: 'super_admin', label: 'Super Admin' },
@@ -150,7 +153,7 @@ function formatRoleLabel(role: string): string {
   return ROLES.find(r => r.value === role)?.label ?? role;
 }
 
-function formatLastLogin(dateStr: string | null): string {
+function formatLastLogin(dateStr: string | null, formatAbsolute: (d: Date) => string): string {
   if (!dateStr) return 'Never';
   const d = new Date(dateStr);
   const now = new Date();
@@ -162,7 +165,7 @@ function formatLastLogin(dateStr: string | null): string {
   if (diffHours < 24) return `${diffHours}h ago`;
   const diffDays = Math.floor(diffHours / 24);
   if (diffDays < 7) return `${diffDays}d ago`;
-  return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+  return formatAbsolute(d);
 }
 
 function getInitials(name: string): string {
@@ -240,6 +243,7 @@ function UserDetailDialog({ user, open, onOpenChange, canManage, onProvisionWall
   onProvisionWallet: (userId: string) => void;
   provisioning: boolean;
 }) {
+  const { formatDate } = useCampusFormat();
   if (!user) return null;
 
   return (
@@ -297,19 +301,19 @@ function UserDetailDialog({ user, open, onOpenChange, canManage, onProvisionWall
               <Clock className="h-4 w-4 text-muted-foreground" />
               <div>
                 <p className="text-[10px] text-muted-foreground">Last Login</p>
-                <p className="font-medium">{formatLastLogin(user.lastLoginAt)}</p>
+                <p className="font-medium">{formatLastLogin(user.lastLoginAt, formatDate)}</p>
               </div>
             </div>
           </div>
 
           <Separator />
 
-          {/* Knuct Wallet */}
+          {/* Knuct Wallet details */}
           <div>
             <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <Database className="h-3.5 w-3.5" /> Knuct Wallet
+              <Database className="h-3.5 w-3.5" /> Knuct details
             </h4>
-            <div className="rounded-lg border p-3 space-y-2">
+            <div className="rounded-lg border p-3 space-y-2.5">
               <div className="flex items-center justify-between gap-2">
                 <WalletBadge wallet={user.knuctWallet} />
                 {canManage && user.knuctWallet?.status !== 'active' && (
@@ -320,13 +324,44 @@ function UserDetailDialog({ user, open, onOpenChange, canManage, onProvisionWall
                     disabled={provisioning}
                     onClick={() => onProvisionWallet(user.id)}
                   >
-                    {provisioning ? 'Provisioning…' : 'Provision'}
+                    {provisioning ? 'Provisioning…' : 'Provision wallet'}
                   </Button>
                 )}
               </div>
-              {user.knuctWallet?.did && (
-                <p className="text-[10px] font-mono text-muted-foreground break-all">{user.knuctWallet.did}</p>
-              )}
+              <dl className="grid gap-1.5 text-[11px]">
+                <div className="flex justify-between gap-2">
+                  <dt className="text-muted-foreground">Status</dt>
+                  <dd className="font-medium capitalize">{user.knuctWallet?.status ?? 'none'}</dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt className="text-muted-foreground shrink-0">DID</dt>
+                  <dd className="font-mono text-right break-all">
+                    {user.knuctWallet?.did || '—'}
+                  </dd>
+                </div>
+                {user.knuctWallet?.createdAt && (
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-muted-foreground">Created</dt>
+                    <dd>{formatDate(user.knuctWallet.createdAt)}</dd>
+                  </div>
+                )}
+                {user.knuctWallet?.updatedAt && (
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-muted-foreground">Updated</dt>
+                    <dd>{formatDate(user.knuctWallet.updatedAt)}</dd>
+                  </div>
+                )}
+                {user.knuctWallet?.lastError && (
+                  <div className="rounded-md bg-destructive/10 text-destructive px-2 py-1.5 text-[10px]">
+                    Last error: {user.knuctWallet.lastError}
+                  </div>
+                )}
+                {!user.knuctWallet && (
+                  <p className="text-muted-foreground text-[10px]">
+                    No Knuct wallet linked. Admins can provision from here or Settings → Knuct.
+                  </p>
+                )}
+              </dl>
             </div>
           </div>
 
@@ -359,7 +394,7 @@ function UserDetailDialog({ user, open, onOpenChange, canManage, onProvisionWall
 
           {/* Account Info */}
           <div className="text-[10px] text-muted-foreground">
-            Account created: {new Date(user.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
+            Account created: {formatDate(user.createdAt)}
           </div>
         </div>
       </DialogContent>
@@ -466,6 +501,8 @@ function StatsSkeleton() {
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function UsersSection() {
+  const { formatDate } = useCampusFormat();
+  const pageSize = useListPageSize(10);
   const { currentUser, sectionContext, setSectionContext } = useAppStore();
   // Filter state
   const [search, setSearch] = useState('');
@@ -474,7 +511,7 @@ export default function UsersSection() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [departmentFilter, setDepartmentFilter] = useState<string>('all');
   const [page, setPage] = useState(1);
-  const limit = 10;
+  const limit = pageSize;
 
   // Dialog state
   const [selectedUser, setSelectedUser] = useState<UserItem | null>(null);
@@ -826,7 +863,7 @@ export default function UsersSection() {
                               <WalletBadge wallet={user.knuctWallet} />
                             </TableCell>
                             <TableCell className="hidden lg:table-cell">
-                              <span className="text-xs text-muted-foreground">{formatLastLogin(user.lastLoginAt)}</span>
+                              <span className="text-xs text-muted-foreground">{formatLastLogin(user.lastLoginAt, formatDate)}</span>
                             </TableCell>
                             <TableCell>
                               <DropdownMenu>

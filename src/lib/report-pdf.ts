@@ -6,6 +6,7 @@ export type ReportPdfBrand = {
   appName?: string;
   companyName?: string;
   locale?: string;
+  brandingPrimaryColor?: string;
 };
 
 function brandLabel(brand?: ReportPdfBrand) {
@@ -39,15 +40,24 @@ function ensureSpace(
   return 18;
 }
 
+function brandRgb(brand?: ReportPdfBrand): [number, number, number] {
+  const hex = brand?.brandingPrimaryColor?.trim() || '#1A3C6E';
+  const m = /^#?([0-9A-Fa-f]{6})$/.exec(hex);
+  if (!m) return [26, 60, 110];
+  const n = parseInt(m[1], 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
 export function exportStudentReportPdf(data: StudentExportData, brand?: ReportPdfBrand) {
   const doc = new jsPDF();
   const page = { n: 1 };
   let y = 18;
   const name = brandLabel(brand);
   const locale = brand?.locale || 'en-IN';
+  const [br, bg, bb] = brandRgb(brand);
 
   doc.setFontSize(16);
-  doc.setTextColor(26, 60, 110);
+  doc.setTextColor(br, bg, bb);
   doc.text(`${name} — Student Report`, 14, y);
   y += 8;
   doc.setFontSize(10);
@@ -76,7 +86,7 @@ export function exportStudentReportPdf(data: StudentExportData, brand?: ReportPd
   }
 
   doc.setFontSize(12);
-  doc.setTextColor(26, 60, 110);
+  doc.setTextColor(br, bg, bb);
   doc.text('Attendance', 14, y);
   y += 6;
   doc.setFontSize(10);
@@ -101,7 +111,7 @@ export function exportStudentReportPdf(data: StudentExportData, brand?: ReportPd
   y += 4;
   y = ensureSpace(doc, y, 30, page, brand);
   doc.setFontSize(11);
-  doc.setTextColor(26, 60, 110);
+  doc.setTextColor(br, bg, bb);
   doc.text('Academics', 14, y);
   y += 6;
   doc.setFontSize(10);
@@ -130,7 +140,7 @@ export function exportStudentReportPdf(data: StudentExportData, brand?: ReportPd
   if (data.violations.length > 0) {
     y = ensureSpace(doc, y, 20, page, brand);
     doc.setFontSize(11);
-    doc.setTextColor(26, 60, 110);
+    doc.setTextColor(br, bg, bb);
     doc.text('Violations', 14, y);
     y += 6;
     doc.setFontSize(9);
@@ -153,9 +163,10 @@ export function exportStaffReportPdf(data: StaffExportData, brand?: ReportPdfBra
   let y = 18;
   const name = brandLabel(brand);
   const locale = brand?.locale || 'en-IN';
+  const [br, bg, bb] = brandRgb(brand);
 
   doc.setFontSize(16);
-  doc.setTextColor(26, 60, 110);
+  doc.setTextColor(br, bg, bb);
   doc.text(`${name} — Analytics Report`, 14, y);
   y += 8;
   doc.setFontSize(10);
@@ -164,7 +175,7 @@ export function exportStaffReportPdf(data: StaffExportData, brand?: ReportPdfBra
   y += 10;
 
   doc.setFontSize(12);
-  doc.setTextColor(26, 60, 110);
+  doc.setTextColor(br, bg, bb);
   doc.text('KPIs', 14, y);
   y += 6;
   doc.setFontSize(10);
@@ -183,7 +194,7 @@ export function exportStaffReportPdf(data: StaffExportData, brand?: ReportPdfBra
   if (data.weeklyAttendanceTrend.length > 0) {
     y = ensureSpace(doc, y, 20, page, brand);
     doc.setFontSize(11);
-    doc.setTextColor(26, 60, 110);
+    doc.setTextColor(br, bg, bb);
     doc.text('Weekly attendance trend', 14, y);
     y += 6;
     doc.setFontSize(9);
@@ -199,7 +210,7 @@ export function exportStaffReportPdf(data: StaffExportData, brand?: ReportPdfBra
   if (data.departmentAnalytics.length > 0) {
     y = ensureSpace(doc, y, 20, page, brand);
     doc.setFontSize(11);
-    doc.setTextColor(26, 60, 110);
+    doc.setTextColor(br, bg, bb);
     doc.text('Department breakdown', 14, y);
     y += 6;
     doc.setFontSize(9);
@@ -215,7 +226,7 @@ export function exportStaffReportPdf(data: StaffExportData, brand?: ReportPdfBra
   if (data.atRiskStudents.length > 0) {
     y = ensureSpace(doc, y, 20, page, brand);
     doc.setFontSize(11);
-    doc.setTextColor(26, 60, 110);
+    doc.setTextColor(br, bg, bb);
     doc.text('At-risk students', 14, y);
     y += 6;
     doc.setFontSize(9);
@@ -235,7 +246,7 @@ export function exportStaffReportPdf(data: StaffExportData, brand?: ReportPdfBra
   if (data.lmsEngagement.topCourses.length > 0) {
     y = ensureSpace(doc, y, 20, page, brand);
     doc.setFontSize(11);
-    doc.setTextColor(26, 60, 110);
+    doc.setTextColor(br, bg, bb);
     doc.text('Top courses', 14, y);
     y += 6;
     doc.setFontSize(9);
