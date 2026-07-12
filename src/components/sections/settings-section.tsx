@@ -27,6 +27,8 @@ import { UserAccountsPanel } from '@/components/users/user-accounts-panel';
 import MastersSection from '@/components/sections/masters-section';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAppStore, ROLE_LABELS, useRoleSections, useSectionAccess, type Role, type Section, type SectionContext } from '@/lib/store';
+import { useIdentityMode } from '@/hooks/use-identity-mode';
+import { formatIdentityModePreview } from '@/lib/settings/identity-mode';
 import { ALL_ROLES, DEFAULT_ROLE_SECTIONS } from '@/lib/rbac-defaults';
 import { notifyRbacUpdated } from '@/components/rbac-sync';
 import { useToast } from '@/hooks/use-toast';
@@ -440,6 +442,7 @@ export default function SettingsSection() {
   const isAdmin = currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
   const isSuperAdmin = currentUser?.role === 'super_admin';
   const showSettingsAdminTabs = hasSettingsAccess && isAdmin;
+  const { identityMode, knuctUiEnabled } = useIdentityMode(!!currentUser && showSettingsAdminTabs);
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState(() => (hasMastersAccess && !hasSettingsAccess ? 'masters' : 'config'));
@@ -880,6 +883,36 @@ export default function SettingsSection() {
 
         {showSettingsAdminTabs && (
           <TabsContent value="knuct" className="space-y-4">
+            <Card className="border-dashed">
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">Campus identity mode</CardTitle>
+                <CardDescription className="text-xs">
+                  {formatIdentityModePreview(identityMode)}. Change this under Configuration → User management → Campus identity mode.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-0 flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => navigateToSection('settings', { settingsTab: 'config' })}
+                >
+                  Open Configuration
+                </Button>
+              </CardContent>
+            </Card>
+            {!knuctUiEnabled ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Link2 className="h-4 w-4 text-brand" /> Knuct disabled by policy
+                  </CardTitle>
+                  <CardDescription>
+                    Identity mode is Password only. DID login, wallet provisioning, and Knuct registration are hidden until Super Admin selects Hybrid or Knuct-based.
+                  </CardDescription>
+                </CardHeader>
+              </Card>
+            ) : (
+            <>
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
@@ -887,6 +920,11 @@ export default function SettingsSection() {
                 </CardTitle>
                 <CardDescription>
                   Live Knuct pilot — set KNUCT_ENABLED=true and optional KNUCT_API_KEY in .env
+                  {!knuctData?.config?.enabled && (
+                    <span className="block mt-1 text-amber-700 dark:text-amber-400">
+                      Vendor env is off — UI is allowed by campus policy, but live adapter traffic uses mock/off until KNUCT_ENABLED=true.
+                    </span>
+                  )}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -1116,6 +1154,8 @@ export default function SettingsSection() {
                   )}
                 </CardContent>
               </Card>
+            )}
+            </>
             )}
           </TabsContent>
         )}

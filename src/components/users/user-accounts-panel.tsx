@@ -26,6 +26,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { CreateUserDialog, EditUserDialog } from '@/components/users/user-management-dialogs';
 import { RegistrationRequestsPanel } from '@/components/users/registration-requests-panel';
 import { WalletProvisionRequestsPanel } from '@/components/users/wallet-provision-requests-panel';
+import { useIdentityMode } from '@/hooks/use-identity-mode';
 
 const ROLE_BADGE: Record<string, string> = {
   super_admin: 'bg-red-100 text-red-800',
@@ -78,6 +79,7 @@ type UsersApiResponse = {
 
 export function UserAccountsPanel({ actorRole }: { actorRole: Role }) {
   const queryClient = useQueryClient();
+  const { knuctUiEnabled } = useIdentityMode(true);
   const { toast } = useToast();
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
@@ -88,7 +90,7 @@ export function UserAccountsPanel({ actorRole }: { actorRole: Role }) {
   const [editOpen, setEditOpen] = useState(false);
 
   const assignableRoles = rolesForActor(actorRole);
-  const canProvisionWallet = ['super_admin', 'admin'].includes(actorRole);
+  const canProvisionWallet = knuctUiEnabled && ['super_admin', 'admin'].includes(actorRole);
   const limit = 15;
 
   const queryParams = useMemo(() => {
@@ -141,8 +143,8 @@ export function UserAccountsPanel({ actorRole }: { actorRole: Role }) {
 
   return (
     <div className="space-y-4">
-      <RegistrationRequestsPanel actorRole={actorRole} />
-      <WalletProvisionRequestsPanel actorRole={actorRole} />
+      {knuctUiEnabled && <RegistrationRequestsPanel actorRole={actorRole} />}
+      {knuctUiEnabled && <WalletProvisionRequestsPanel actorRole={actorRole} />}
 
       <Card>
         <CardHeader>

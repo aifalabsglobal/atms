@@ -6,6 +6,7 @@ import {
   queueWalletProvision,
 } from '@/lib/knuct';
 import { getKnuctPublicConfig } from '@/lib/knuct/config';
+import { rejectIfKnuctPolicyDisabled } from '@/lib/knuct/policy-gate';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { getClientIp } from '@/lib/audit';
 import { requireAuth, canAccessSection } from '@/lib/auth-helpers';
@@ -62,6 +63,9 @@ export async function POST(request: Request) {
   try {
     const limited = await enforceRateLimit(`knuct-provision:${getClientIp(request) ?? 'anon'}`, 10, 60_000);
     if (limited) return limited;
+
+    const policyBlock = await rejectIfKnuctPolicyDisabled();
+    if (policyBlock) return policyBlock;
 
     const { error, session } = await requireAuth();
     if (error || !session) return error;

@@ -6,6 +6,7 @@ import { getKnuctHealth } from '@/lib/knuct/stats';
 import { startPilotProvisioning } from '@/lib/knuct/pilot-service';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { getClientIp } from '@/lib/audit';
+import { rejectIfKnuctPolicyDisabled } from '@/lib/knuct/policy-gate';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -19,9 +20,13 @@ export async function GET() {
 
     const config = getKnuctConfig();
     const health = await getKnuctHealth();
+    const { getIdentityMode } = await import('@/lib/settings/identity-mode-server');
+    const { isKnuctUiEnabled } = await import('@/lib/settings/identity-mode');
+    const identityMode = await getIdentityMode();
 
     return NextResponse.json({
-      pilotReady: config.enabled,
+      pilotReady: config.enabled && isKnuctUiEnabled(identityMode),
+      identityMode,
       config: {
         enabled: config.enabled,
         baseUrl: config.baseUrl,
@@ -42,6 +47,9 @@ export async function POST(request: Request) {
   try {
     const limited = await enforceRateLimit(`knuct-pilot:${getClientIp(request) ?? 'anon'}`, 5, 60_000);
     if (limited) return limited;
+
+    const policyBlock = await rejectIfKnuctPolicyDisabled();
+    if (policyBlock) return policyBlock;
 
     const session = await getServerSession(authOptions);
     if (!session?.user?.id || session.user.role !== 'super_admin') {

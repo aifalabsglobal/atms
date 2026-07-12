@@ -47,6 +47,7 @@ import { RegistrationRequestsPanel } from '@/components/users/registration-reque
 import { WalletProvisionRequestsPanel } from '@/components/users/wallet-provision-requests-panel';
 import { useToast } from '@/hooks/use-toast';
 import { STAFF_ROLES, CAMPUS_USER_ROLES, canDeactivateUser, canResetUserPassword, canManageUsers } from '@/lib/user-management';
+import { useIdentityMode } from '@/hooks/use-identity-mode';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -527,7 +528,11 @@ export default function UsersSection() {
   const queryClient = useQueryClient();
 
   const canManage = currentUser ? canManageUsers(currentUser.role) : false;
-  const canProvisionWallet = currentUser ? ['super_admin', 'admin'].includes(currentUser.role) : false;
+  const { knuctUiEnabled } = useIdentityMode(!!currentUser);
+  const canProvisionWallet =
+    !!currentUser &&
+    knuctUiEnabled &&
+    ['super_admin', 'admin'].includes(currentUser.role);
 
   const provisionWallet = useMutation({
     mutationFn: async (userId: string) => {
@@ -677,7 +682,7 @@ export default function UsersSection() {
 
   return (
     <div className="space-y-4">
-      {canManage && <RegistrationRequestsPanel actorRole={currentUser.role} />}
+      {canManage && knuctUiEnabled && <RegistrationRequestsPanel actorRole={currentUser.role} />}
       {canProvisionWallet && <WalletProvisionRequestsPanel actorRole={currentUser.role} />}
 
       {/* Section Header */}

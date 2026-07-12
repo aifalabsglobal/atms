@@ -889,8 +889,27 @@ const defs: SettingDefinition[] = [
 
   // User management / auth
   {
+    key: 'auth.identity_mode',
+    category: 'users',
+    subcategory: 'Identity & login',
+    displayName: 'Campus identity mode',
+    description:
+      'How users sign in and whether Knuct wallets/DID are part of campus policy. Password-only hides Knuct. Hybrid keeps email/password primary with optional Knuct. Knuct-based opens DID login first; Super Admin password remains as break-glass. Live vendor calls still need KNUCT_ENABLED in the environment.',
+    valueType: 'enum',
+    defaultValue: 'password_only',
+    validation: {
+      allowedValues: ['password_only', 'hybrid', 'knuct_based'],
+      optionLabels: {
+        password_only: 'Password only (Postgres + next-auth)',
+        hybrid: 'Hybrid (password + Knuct)',
+        knuct_based: 'Knuct-based (DID primary)',
+      },
+    },
+  },
+  {
     key: 'users.password_min_length',
     category: 'users',
+    subcategory: 'Password policy',
     displayName: 'Password minimum length',
     description: 'Minimum characters required for new or reset passwords.',
     valueType: 'number',

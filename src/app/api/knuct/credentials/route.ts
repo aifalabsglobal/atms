@@ -58,6 +58,10 @@ export async function POST(request: Request) {
     const roleError = (await requireWritableRoles(['super_admin', 'admin'])).error;
     if (roleError) return roleError;
 
+    const { rejectIfKnuctPolicyDisabled } = await import('@/lib/knuct/policy-gate');
+    const policyBlock = await rejectIfKnuctPolicyDisabled();
+    if (policyBlock) return policyBlock;
+
     const body = await request.json().catch(() => ({}));
     const userId = body.userId as string | undefined;
     const type = body.type as CredentialType | undefined;
