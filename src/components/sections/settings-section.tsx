@@ -473,6 +473,9 @@ export default function SettingsSection() {
     enabled: !!currentUser && hasSettingsAccess,
   });
   const eligibilityPct = configData?.settings?.attendance?.eligibilityPct ?? 75;
+  const lowAttendanceWarning = configData?.settings?.notifications?.lowAttendanceWarningEnabled ?? true;
+  const lowAttendanceEmail = configData?.settings?.notifications?.lowAttendanceEmailEnabled ?? false;
+  const lowAttendanceSms = configData?.settings?.notifications?.lowAttendanceSmsEnabled ?? false;
 
   const [auditAnchorOnly, setAuditAnchorOnly] = useState(true);
 
@@ -1302,11 +1305,19 @@ export default function SettingsSection() {
             <CardContent>
               <div className="space-y-3">
                 {[
-                  { rule: `Low attendance warning (< ${eligibilityPct}%)`, channels: 'In-App + Email + SMS', target: 'Student + Parent + HOD' },
+                  {
+                    rule: `Low attendance warning (< ${eligibilityPct}%)`,
+                    channels: [
+                      lowAttendanceWarning ? 'In-App' : null,
+                      lowAttendanceEmail ? 'Email' : null,
+                      lowAttendanceSms ? 'SMS' : null,
+                    ].filter(Boolean).join(' + ') || 'Off',
+                    target: 'Student + linked parents',
+                  },
                   { rule: 'Attendance marked successfully', channels: 'In-App', target: 'Student' },
                   { rule: 'Assignment due reminder (3 days)', channels: 'In-App + Push', target: 'Student' },
                   { rule: 'Grade published', channels: 'In-App + Email', target: 'Student' },
-                  { rule: 'Violation detected', channels: 'In-App + Email + SMS', target: 'HOD + Admin + Security' },
+                  { rule: 'Violation / integrity alert', channels: 'In-App (+ Email when enabled)', target: 'Student + linked parents' },
                   { rule: 'New enrollment', channels: 'In-App + Email', target: 'Faculty' },
                 ].map(r => (
                   <div key={r.rule} className="flex items-center justify-between border-b pb-3">

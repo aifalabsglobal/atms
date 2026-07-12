@@ -62,10 +62,15 @@ export function MyProfileDialog({
       const res = await fetch('/api/users/me');
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Failed to load profile');
-      return json as { user: MyProfile };
+      return json as {
+        user: MyProfile;
+        policies?: { faceVerificationEnforced?: boolean };
+      };
     },
     enabled: open && !!currentUser?.id,
   });
+
+  const faceEnforced = data?.policies?.faceVerificationEnforced === true;
 
   useEffect(() => {
     const user = data?.user;
@@ -184,7 +189,11 @@ export function MyProfileDialog({
                     </span>
                   </Button>
                 </label>
-                <p className="text-[11px] text-muted-foreground">Used for display and face attendance.</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {faceEnforced
+                    ? 'Required for face-verified attendance — keep a clear front-facing photo.'
+                    : 'Used for display and face attendance.'}
+                </p>
               </div>
             </div>
 

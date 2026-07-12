@@ -291,14 +291,14 @@ const defs: SettingDefinition[] = [
     description: 'Minimum attendance percentage for exam eligibility.',
     valueType: 'number',
     defaultValue: 75,
-    validation: { min: 0, max: 100, required: true },
+    validation: { min: 50, max: 100, required: true },
     allowDepartmentOverride: true,
   },
   {
     key: 'attendance.condonation_pct',
     category: 'attendance',
     displayName: 'Condonation attendance %',
-    description: 'Lower bound for condonation consideration.',
+    description: 'Lower bound for condonation consideration (must be ≤ eligibility %).',
     valueType: 'number',
     defaultValue: 65,
     validation: { min: 0, max: 100, required: true },
@@ -1201,10 +1201,6 @@ export function validateSettingValue(def: SettingDefinition, value: unknown): st
     if (!v.allowedValues.includes(value as string | number | boolean)) {
       return `Allowed values: ${v.allowedValues.join(', ')}`;
     }
-  }
-
-  if (def.key === 'attendance.eligibility_pct' || def.key === 'attendance.condonation_pct') {
-    // Cross-field check happens in adapter when saving full config.
   }
 
   return null;

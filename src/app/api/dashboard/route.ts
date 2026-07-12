@@ -13,6 +13,7 @@ import {
 import { getKnuctDashboardStats } from '@/lib/knuct';
 import { getAttendanceThresholds } from '@/lib/system-config';
 import { getCachedJson, setCachedJson } from '@/lib/api-cache';
+import { attendancePercentageFromCounts } from '@/lib/attendance-percentage';
 
 async function buildStudentDashboard(studentId: string, thresholds: Awaited<ReturnType<typeof getAttendanceThresholds>>) {
   const [statusGroups, enrollments, records, activeSessionsList] = await Promise.all([
@@ -62,24 +63,25 @@ async function buildStudentDashboard(studentId: string, thresholds: Awaited<Retu
     else if (row.status === 'late') late = n;
   }
 
-  const overallAttendance = total > 0 ? Math.round((present / total) * 100) : 0;
+  const overallAttendance = attendancePercentageFromCounts({ present, late, total });
 
-  const courseMap = new Map<string, { id: string; name: string; code: string; present: number; total: number }>();
+  const courseMap = new Map<string, { id: string; name: string; code: string; present: number; late: number; total: number }>();
   records.forEach((r) => {
     const c = r.session.course;
-    if (!courseMap.has(c.id)) courseMap.set(c.id, { id: c.id, name: c.name, code: c.code, present: 0, total: 0 });
+    if (!courseMap.has(c.id)) courseMap.set(c.id, { id: c.id, name: c.name, code: c.code, present: 0, late: 0, total: 0 });
     const entry = courseMap.get(c.id)!;
     entry.total++;
     if (r.status === 'present') entry.present++;
+    else if (r.status === 'late') entry.late++;
   });
 
   const courseAttendance = Array.from(courseMap.values()).map((c) => ({
     id: c.id,
     name: c.name,
     code: c.code,
-    attendance: c.present,
+    attendance: c.present + c.late,
     expected: c.total,
-    percentage: c.total > 0 ? Math.round((c.present / c.total) * 100) : 0,
+    percentage: attendancePercentageFromCounts(c),
   }));
 
   const weeklyRateTrend = buildWeeklyTrend(
@@ -187,7 +189,9 @@ export async function GET() {
     }
 
     const scope = await getCampusScope(session);
-    const thresholds = await getAttendanceThresholds();
+    const thresholds = await getAttendanceThresholds({
+      departmentId: scope.level === 'department' ? scope.departmentId : undefined,
+    });
 
     let studentWhere: Record<string, unknown> = { role: 'student', status: 'active' };
     let facultyWhere: Record<string, unknown> = { role: { in: ['faculty', 'hod'] }, status: 'active' };
@@ -259,7 +263,7 @@ export async function GET() {
       }),
       db.course.findMany({
         where: courseWhere,
-        select: { id: true, name: true, code: true, attendanceSessions: { select: { presentCount: true, expectedCount: true }, take: 20 } },
+        select: { id: true, name: true, code: true, attendanceSessions: { select: { presentCount: true, lateCount: true, expectedCount: true }, take: 20 } },
         take: 8,
       }),
       db.attendanceSession.groupBy({
@@ -342,10 +346,11 @@ export async function GET() {
     const totalAbsent = completedAgg._sum.absentCount ?? 0;
     const totalLate = completedAgg._sum.lateCount ?? 0;
     const totalExpected = completedAgg._sum.expectedCount ?? 0;
-    const overallAttendance = totalExpected > 0 ? Math.round((totalPresent / totalExpected) * 100) : 0;
+    const overallAttendance =
+      totalExpected > 0 ? Math.round(((totalPresent + totalLate) / totalExpected) * 100) : 0;
 
     const courseAttendance = courses.map((c) => {
-      const attended = c.attendanceSessions.reduce((s, a) => s + a.presentCount, 0);
+      const attended = c.attendanceSessions.reduce((s, a) => s + a.presentCount + (a.lateCount ?? 0), 0);
       const expected = c.attendanceSessions.reduce((s, a) => s + a.expectedCount, 0);
       return { id: c.id, name: c.name, code: c.code, attendance: attended, expected, percentage: expected > 0 ? Math.round((attended / expected) * 100) : 0 };
     });

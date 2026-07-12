@@ -354,7 +354,7 @@ model AttendanceRecord {
 
 model AttendanceViolation {
   id           String   @id @default(cuid())
-  recordId     String   @unique
+  recordId     String?  @unique
   studentId    String
   type         String
   severity     String   @default("medium")
@@ -365,9 +365,9 @@ model AttendanceViolation {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  record    AttendanceRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
-  violator  User             @relation("Violator", fields: [studentId], references: [id])
-  reviewer  User?            @relation("Reviewer", fields: [reviewedBy], references: [id])
+  record    AttendanceRecord? @relation(fields: [recordId], references: [id], onDelete: Cascade)
+  violator  User              @relation("Violator", fields: [studentId], references: [id])
+  reviewer  User?             @relation("Reviewer", fields: [reviewedBy], references: [id])
 }
 
 // --- LMS: Learning Management System ---

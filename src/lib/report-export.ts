@@ -69,6 +69,7 @@ export type StudentExportData = {
 export type StaffExportData = {
   scopeLabel: string;
   analyticsScope: string;
+  thresholds?: { eligibilityPct: number; condonationPct: number };
   kpis: {
     totalStudents: number;
     avgAttendancePct: number;
@@ -150,6 +151,7 @@ export function exportStudentReportCsv(data: StudentExportData, brand?: ReportDo
 }
 
 export function exportStaffReportCsv(data: StaffExportData, brand?: ReportDocumentBrand) {
+  const eligibilityPct = data.thresholds?.eligibilityPct ?? 75;
   const rows: (string | number | null | undefined)[][] = [
     ...csvLetterhead(brand, 'Analytics Report'),
     ['Scope', data.scopeLabel],
@@ -157,7 +159,7 @@ export function exportStaffReportCsv(data: StaffExportData, brand?: ReportDocume
     ['KPIs'],
     ['Students', data.kpis.totalStudents],
     ['Avg attendance %', data.kpis.avgAttendancePct],
-    ['At risk (<75%)', data.kpis.atRiskCount],
+    [`At risk (<${eligibilityPct}%)`, data.kpis.atRiskCount],
     ['Avg grade %', data.kpis.avgGradePct],
     ['Quiz attempts', data.kpis.quizAttempts],
     ['Avg quiz %', data.kpis.avgQuizScore],

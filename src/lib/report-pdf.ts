@@ -203,7 +203,7 @@ export function exportStaffReportPdf(data: StaffExportData, brand?: ReportPdfBra
   doc.setFontSize(10);
   doc.setTextColor(0);
   const kpiLines = [
-    `Students: ${data.kpis.totalStudents} · Avg attendance: ${data.kpis.avgAttendancePct}% · At risk: ${data.kpis.atRiskCount}`,
+    `Students: ${data.kpis.totalStudents} · Avg attendance: ${data.kpis.avgAttendancePct}% · At risk (<${data.thresholds?.eligibilityPct ?? 75}%): ${data.kpis.atRiskCount}`,
     `Avg grade: ${data.kpis.avgGradePct}% · Quiz attempts: ${data.kpis.quizAttempts} · Avg quiz: ${data.kpis.avgQuizScore}%`,
     `Enrollments: ${data.kpis.totalEnrollments} · Submissions: ${data.kpis.submissions}`,
   ];

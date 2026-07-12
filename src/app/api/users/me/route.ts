@@ -5,6 +5,7 @@ import { requireAuth } from '@/lib/auth-helpers';
 import { logAudit, getClientIp } from '@/lib/audit';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { resolveDisplayAvatarUrl } from '@/lib/user-management';
+import { getSystemConfig } from '@/lib/system-config';
 
 const PROFILE_SELECT = {
   id: true,
@@ -40,15 +41,23 @@ export async function GET() {
     const { error, session } = await requireAuth();
     if (error || !session) return error;
 
-    const user = await db.user.findUnique({
-      where: { id: session.user.id },
-      select: PROFILE_SELECT,
-    });
+    const [user, systemConfig] = await Promise.all([
+      db.user.findUnique({
+        where: { id: session.user.id },
+        select: PROFILE_SELECT,
+      }),
+      getSystemConfig(),
+    ]);
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    return NextResponse.json({ user: shapeProfile(user) });
+    return NextResponse.json({
+      user: shapeProfile(user),
+      policies: {
+        faceVerificationEnforced: systemConfig.policies.faceVerificationEnforced,
+      },
+    });
   } catch (error) {
     console.error('My profile GET error:', error);
     return NextResponse.json({ error: 'Failed to load profile' }, { status: 500 });

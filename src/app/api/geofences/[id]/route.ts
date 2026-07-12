@@ -1,7 +1,11 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
 import { logAudit, getClientIp } from '@/lib/audit';
-import { requireGeofenceWrite } from '@/lib/geofence-api';
+import {
+  normalizeGeofenceWriteData,
+  requireGeofenceWrite,
+  validateGeofenceBody,
+} from '@/lib/geofence-api';
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -18,16 +22,16 @@ export async function PATCH(request: Request, context: RouteContext) {
       return NextResponse.json({ error: 'Geofence not found' }, { status: 404 });
     }
 
-    const data: Record<string, unknown> = {};
-    if (body.name !== undefined) data.name = body.name;
-    if (body.type !== undefined) data.type = body.type;
-    if (body.centerLat !== undefined) data.centerLat = body.centerLat;
-    if (body.centerLng !== undefined) data.centerLng = body.centerLng;
-    if (body.radiusMtrs !== undefined) data.radiusMtrs = body.radiusMtrs;
-    if (body.polygonData !== undefined) data.polygonData = body.polygonData;
-    if (body.building !== undefined) data.building = body.building;
-    if (body.floor !== undefined) data.floor = body.floor;
-    if (body.isActive !== undefined) data.isActive = body.isActive;
+    const validationError = validateGeofenceBody(body, {
+      partial: true,
+      existingType: existing.type,
+    });
+    if (validationError) return validationError;
+
+    const data = normalizeGeofenceWriteData(body);
+    if (Object.keys(data).length === 0) {
+      return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
+    }
 
     const geofence = await db.geofence.update({ where: { id }, data });
 
