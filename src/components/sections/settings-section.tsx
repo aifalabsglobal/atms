@@ -86,7 +86,13 @@ type UserRbacDetail = {
   override: { grant: Section[]; revoke: Section[] };
 };
 
-function UserRbacOverridesPanel({ isSuperAdmin }: { isSuperAdmin: boolean }) {
+function UserRbacOverridesPanel({
+  isSuperAdmin,
+  initialUserId,
+}: {
+  isSuperAdmin: boolean;
+  initialUserId?: string | null;
+}) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: allowOverridesData } = useQuery({
@@ -101,6 +107,10 @@ function UserRbacOverridesPanel({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const [selectedUserId, setSelectedUserId] = useState('');
   const [draftEffective, setDraftEffective] = useState<Section[] | null>(null);
   const [userDirty, setUserDirty] = useState(false);
+
+  useEffect(() => {
+    if (initialUserId) setSelectedUserId(initialUserId);
+  }, [initialUserId]);
 
   const { data: usersData } = useQuery({
     queryKey: ['rbac-user-picker'],
@@ -329,7 +339,7 @@ function SuperAdminControlCenter({ onNavigate }: { onNavigate: (section: Section
   ];
 
   const settingsShortcuts: { settingsTab: string; label: string; description: string; icon: typeof Shield }[] = [
-    { settingsTab: 'users', label: 'User Accounts', description: 'Create teachers, students, all roles', icon: Users },
+    { settingsTab: 'users', label: 'User Accounts', description: 'Quick create + queues (full directory in Users & RBAC)', icon: Users },
     { settingsTab: 'rbac', label: 'RBAC Matrix', description: 'Section access per role', icon: Shield },
     { settingsTab: 'config', label: 'Configuration', description: 'Attendance, policies, integrations', icon: SettingsIcon },
     { settingsTab: 'knuct', label: 'Knuct', description: 'Wallet provisioning and anchors', icon: Wallet },
@@ -433,13 +443,17 @@ export default function SettingsSection() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState(() => (hasMastersAccess && !hasSettingsAccess ? 'masters' : 'config'));
+  const [pendingRbacUserId, setPendingRbacUserId] = useState<string | null>(null);
 
   useEffect(() => {
     if (sectionContext?.settingsTab) {
       setActiveTab(sectionContext.settingsTab);
+      if (sectionContext.rbacUserId) {
+        setPendingRbacUserId(sectionContext.rbacUserId);
+      }
       setSectionContext(null);
     }
-  }, [sectionContext?.settingsTab, setSectionContext]);
+  }, [sectionContext, setSectionContext]);
 
   useEffect(() => {
     if (!hasSettingsAccess && hasMastersAccess && activeTab !== 'masters') {
@@ -824,7 +838,7 @@ export default function SettingsSection() {
             </CardContent>
           </Card>
 
-          <UserRbacOverridesPanel isSuperAdmin={isSuperAdmin} />
+          <UserRbacOverridesPanel isSuperAdmin={isSuperAdmin} initialUserId={pendingRbacUserId} />
 
           {/* Role Hierarchy */}
           <Card>
@@ -847,6 +861,19 @@ export default function SettingsSection() {
 
         {isSuperAdmin && (
           <TabsContent value="users" className="space-y-4">
+            <Card className="border-dashed">
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">Primary directory</CardTitle>
+                <CardDescription className="text-xs">
+                  Day-to-day user management lives in <strong>Users &amp; RBAC</strong>. This tab keeps quick-create shortcuts and approval queues for Super Admin.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <Button size="sm" variant="outline" onClick={() => navigateToSection('users')}>
+                  <Users className="h-3.5 w-3.5 mr-1.5" /> Open Users &amp; RBAC
+                </Button>
+              </CardContent>
+            </Card>
             <UserAccountsPanel actorRole={currentUser.role} />
           </TabsContent>
         )}

@@ -7,7 +7,7 @@ import {
   ChevronRight, Eye, MoreHorizontal, Mail, Phone, Building2,
   Clock, CheckCircle2, XCircle, AlertTriangle, ShieldCheck,
   GraduationCap, FlaskConical, BookOpen, MapPin, ClipboardList,
-  FileText, BarChart3, Settings, Lock, Award, UserCog, Database, UserPlus
+  FileText, BarChart3, Settings, Lock, Award, UserCog, Database, UserPlus, Download, Upload
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DEFAULT_BRAND_PRIMARY } from '@/lib/brand-color';
@@ -46,7 +46,7 @@ import { CreateUserDialog, EditUserDialog, useUserMutations } from '@/components
 import { RegistrationRequestsPanel } from '@/components/users/registration-requests-panel';
 import { WalletProvisionRequestsPanel } from '@/components/users/wallet-provision-requests-panel';
 import { useToast } from '@/hooks/use-toast';
-import { STAFF_ROLES, CAMPUS_USER_ROLES } from '@/lib/user-management';
+import { STAFF_ROLES, CAMPUS_USER_ROLES, canDeactivateUser, canResetUserPassword, canManageUsers } from '@/lib/user-management';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -145,6 +145,8 @@ interface UsersApiResponse {
   total: number;
   roleDistribution: { role: string; _count: number }[];
   departments?: string[];
+  statusCounts?: { active: number; inactive: number; suspended: number };
+  departmentBreakdown?: { department: string; count: number }[];
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -503,7 +505,7 @@ function StatsSkeleton() {
 export default function UsersSection() {
   const { formatDate } = useCampusFormat();
   const pageSize = useListPageSize(10);
-  const { currentUser, sectionContext, setSectionContext } = useAppStore();
+  const { currentUser, sectionContext, setSectionContext, navigateToSection } = useAppStore();
   // Filter state
   const [search, setSearch] = useState('');
   const [categoryTab, setCategoryTab] = useState<UserCategoryTab>('all');
@@ -524,7 +526,7 @@ export default function UsersSection() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const canManage = currentUser ? ['super_admin', 'admin', 'hod'].includes(currentUser.role) : false;
+  const canManage = currentUser ? canManageUsers(currentUser.role) : false;
   const canProvisionWallet = currentUser ? ['super_admin', 'admin'].includes(currentUser.role) : false;
 
   const provisionWallet = useMutation({
@@ -621,14 +623,16 @@ export default function UsersSection() {
     }
   }, [pendingUserId, users, isLoading]);
 
-  // Derived stats
-  const activeCount = useMemo(() => users.filter(u => u.status === 'active').length, [users]);
-  const suspendedCount = useMemo(() => users.filter(u => u.status === 'suspended').length, [users]);
+  const activeCount = data?.statusCounts?.active ?? 0;
+  const suspendedCount = data?.statusCounts?.suspended ?? 0;
 
-  // Department breakdown from user data
   const deptBreakdown = useMemo(() => {
+    const fromApi = data?.departmentBreakdown;
+    if (fromApi?.length) {
+      return fromApi.slice(0, 8).map((d) => [d.department, d.count] as [string, number]);
+    }
     const map: Record<string, number> = {};
-    users.forEach(u => {
+    users.forEach((u) => {
       if (u.department) {
         map[u.department] = (map[u.department] || 0) + 1;
       }
@@ -636,7 +640,7 @@ export default function UsersSection() {
     return Object.entries(map)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 8);
-  }, [users]);
+  }, [data?.departmentBreakdown, users]);
 
   // Pie chart data
   const pieData = useMemo(() => {
@@ -698,10 +702,100 @@ export default function UsersSection() {
         </div>
         <div className="flex items-center gap-2">
           {canManage && (
-            <Button size="sm" className="h-8" onClick={() => setCreateOpen(true)}>
-              <UserPlus className="h-4 w-4 mr-1.5" />
-              {isStaffView ? 'Add Staff' : 'Add User'}
-            </Button>
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8"
+                onClick={async () => {
+                  try {
+                    const params = new URLSearchParams(queryParams);
+                    params.set('limit', '500');
+                    params.set('page', '1');
+                    const res = await fetch(`/api/users?${params.toString()}`);
+                    if (!res.ok) throw new Error('Export failed');
+                    const json = await res.json() as UsersApiResponse;
+                    const header = ['email', 'name', 'role', 'status', 'employee_id', 'department', 'phone'];
+                    const lines = [
+                      header.join(','),
+                      ...(json.users ?? []).map((u) =>
+                        [
+                          u.email,
+                          `"${(u.name || '').replace(/"/g, '""')}"`,
+                          u.role,
+                          u.status,
+                          u.employeeId || '',
+                          `"${(u.department || '').replace(/"/g, '""')}"`,
+                          u.phone || '',
+                        ].join(','),
+                      ),
+                    ];
+                    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `users-export-${new Date().toISOString().slice(0, 10)}.csv`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  } catch (err) {
+                    toast({
+                      title: 'Export failed',
+                      description: err instanceof Error ? err.message : 'Unknown error',
+                      variant: 'destructive',
+                    });
+                  }
+                }}
+              >
+                <Download className="h-4 w-4 mr-1.5" />
+                Export CSV
+              </Button>
+              {['super_admin', 'admin'].includes(currentUser.role) && (
+                <label>
+                  <input
+                    type="file"
+                    accept=".csv,text/csv"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      try {
+                        const csv = await file.text();
+                        const res = await fetch('/api/users/import', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ csv }),
+                        });
+                        const data = await res.json();
+                        if (!res.ok) throw new Error(data.error || 'Import failed');
+                        queryClient.invalidateQueries({ queryKey: ['users'] });
+                        toast({
+                          title: 'Import complete',
+                          description: `Created ${data.created}, skipped ${data.skipped}`,
+                        });
+                      } catch (err) {
+                        toast({
+                          title: 'Import failed',
+                          description: err instanceof Error ? err.message : 'Unknown error',
+                          variant: 'destructive',
+                        });
+                      } finally {
+                        e.target.value = '';
+                      }
+                    }}
+                  />
+                  <Button size="sm" variant="outline" className="h-8" asChild>
+                    <span>
+                      <Upload className="h-4 w-4 mr-1.5" />
+                      Import CSV
+                    </span>
+                  </Button>
+                </label>
+              )}
+              <Button size="sm" className="h-8" onClick={() => setCreateOpen(true)}>
+                <UserPlus className="h-4 w-4 mr-1.5" />
+                {isStaffView ? 'Add Staff' : 'Add User'}
+              </Button>
+            </>
           )}
           <Badge variant="outline" className="w-fit text-xs font-semibold" style={{ borderColor: UOH_NAVY, color: UOH_NAVY }}>
             9-Role RBAC System
@@ -885,7 +979,7 @@ export default function UsersSection() {
                                       }}>
                                         <UserCog className="mr-2 h-3.5 w-3.5" /> Edit
                                       </DropdownMenuItem>
-                                      {user.status !== 'inactive' && (
+                                      {canDeactivateUser(currentUser.role, user.role as Role) && user.status !== 'inactive' && (
                                         <DropdownMenuItem
                                           className="text-destructive focus:text-destructive"
                                           onClick={(e) => {
@@ -896,12 +990,25 @@ export default function UsersSection() {
                                           <UserX className="mr-2 h-3.5 w-3.5" /> Deactivate
                                         </DropdownMenuItem>
                                       )}
-                                      <DropdownMenuItem onClick={(e) => {
-                                        e.stopPropagation();
-                                        updateUser.mutate({ id: user.id, resetPassword: true });
-                                      }}>
-                                        <Lock className="mr-2 h-3.5 w-3.5" /> Reset Password
-                                      </DropdownMenuItem>
+                                      {canResetUserPassword(currentUser.role, user.role as Role) && (
+                                        <DropdownMenuItem onClick={(e) => {
+                                          e.stopPropagation();
+                                          updateUser.mutate({ id: user.id, resetPassword: true });
+                                        }}>
+                                          <Lock className="mr-2 h-3.5 w-3.5" /> Reset Password
+                                        </DropdownMenuItem>
+                                      )}
+                                      {currentUser.role === 'super_admin' && (
+                                        <DropdownMenuItem onClick={(e) => {
+                                          e.stopPropagation();
+                                          navigateToSection('settings', {
+                                            settingsTab: 'rbac',
+                                            rbacUserId: user.id,
+                                          });
+                                        }}>
+                                          <Shield className="mr-2 h-3.5 w-3.5" /> RBAC override
+                                        </DropdownMenuItem>
+                                      )}
                                       {canProvisionWallet && user.knuctWallet?.status !== 'active' && (
                                         <DropdownMenuItem onClick={(e) => {
                                           e.stopPropagation();

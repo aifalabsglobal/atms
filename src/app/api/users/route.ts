@@ -15,6 +15,7 @@ import {
   STAFF_ROLES,
   canAssignRole,
   generateTempPassword,
+  resolveDisplayAvatarUrl,
 } from '@/lib/user-management';
 
 export async function GET(request: Request) {
@@ -61,8 +62,8 @@ export async function GET(request: Request) {
         where,
         select: {
           id: true, email: true, name: true, employeeId: true, department: true, departmentId: true,
-          phone: true, role: true, status: true, avatarUrl: true, linkedStudentId: true,
-          lastLoginAt: true, createdAt: true,
+          phone: true, role: true, status: true, avatarUrl: true, profileImageUrl: true,
+          linkedStudentId: true, lastLoginAt: true, createdAt: true,
           knuctWallet: { select: { did: true, status: true, lastError: true, updatedAt: true, createdAt: true } },
           _count: { select: { attendanceRecords: true, courseEnrollments: true, submissions: true, taughtCourses: true } },
         },
@@ -81,10 +82,15 @@ export async function GET(request: Request) {
         })
       : [];
     const linkedStudentMap = new Map(linkedStudents.map((s) => [s.id, s]));
-    const users = usersRaw.map((u) => ({
-      ...u,
-      linkedStudent: u.linkedStudentId ? linkedStudentMap.get(u.linkedStudentId) ?? null : null,
-    }));
+    const users = usersRaw.map((u) => {
+      const displayAvatar = resolveDisplayAvatarUrl(u.profileImageUrl, u.avatarUrl);
+      return {
+        ...u,
+        avatarUrl: displayAvatar,
+        profileImageUrl: displayAvatar,
+        linkedStudent: u.linkedStudentId ? linkedStudentMap.get(u.linkedStudentId) ?? null : null,
+      };
+    });
 
     const roleDistWhere: Record<string, unknown> =
       scope.level === 'department' ? { departmentId: scope.departmentId } : {};
@@ -93,13 +99,14 @@ export async function GET(request: Request) {
     } else if (category === 'campus') {
       roleDistWhere.role = { notIn: STAFF_ROLES };
     }
-    const [roleDistribution, departmentGroups] = await Promise.all([
+    const [roleDistribution, departmentGroups, statusGroups] = await Promise.all([
       db.user.groupBy({ by: ['role'], where: roleDistWhere, _count: true }),
       db.user.groupBy({
         by: ['department'],
         where: { ...roleDistWhere, department: { not: null } },
         _count: true,
       }),
+      db.user.groupBy({ by: ['status'], where: roleDistWhere, _count: true }),
     ]);
 
     const departments = departmentGroups
@@ -107,7 +114,32 @@ export async function GET(request: Request) {
       .filter((d): d is string => !!d)
       .sort((a, b) => a.localeCompare(b));
 
-    return NextResponse.json({ users, total, page, limit, roleDistribution, departments });
+    const statusCounts = {
+      active: 0,
+      inactive: 0,
+      suspended: 0,
+    };
+    for (const g of statusGroups) {
+      if (g.status === 'active' || g.status === 'inactive' || g.status === 'suspended') {
+        statusCounts[g.status] = g._count;
+      }
+    }
+
+    const departmentBreakdown = departmentGroups
+      .filter((g): g is { department: string; _count: number } => !!g.department)
+      .map((g) => ({ department: g.department, count: g._count }))
+      .sort((a, b) => b.count - a.count);
+
+    return NextResponse.json({
+      users,
+      total,
+      page,
+      limit,
+      roleDistribution,
+      departments,
+      statusCounts,
+      departmentBreakdown,
+    });
   } catch (error) {
     console.error('Users API error:', error);
     return NextResponse.json({ error: 'Failed to load users' }, { status: 500 });

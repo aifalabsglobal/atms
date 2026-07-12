@@ -135,6 +135,8 @@ export type SectionContext = {
   lmsCourseId?: string;
   attendanceSessionId?: string;
   settingsTab?: string;
+  /** Pre-select user in Settings → RBAC per-user overrides. */
+  rbacUserId?: string;
 };
 
 interface AppState {
