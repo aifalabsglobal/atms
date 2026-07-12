@@ -134,6 +134,7 @@ export type SectionContext = {
   lmsTab?: string;
   lmsCourseId?: string;
   attendanceSessionId?: string;
+  attendanceTab?: 'sessions' | 'timetable' | 'condonation' | 'mark' | 'history';
   settingsTab?: string;
 };
 

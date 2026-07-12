@@ -156,6 +156,26 @@ export async function sendRegistrationRejectedEmail(
   });
 }
 
+export async function sendCondonationDecisionEmail(
+  email: string,
+  name: string,
+  decision: 'approved' | 'rejected',
+  notes?: string,
+) {
+  const approved = decision === 'approved';
+  return sendEmail({
+    to: email,
+    subject: approved ? 'AIMSCS condonation request approved' : 'AIMSCS condonation request update',
+    html: `
+      <p>Hello ${name},</p>
+      <p>Your attendance condonation request was <strong>${approved ? 'approved' : 'not approved'}</strong>.</p>
+      ${notes ? `<p><strong>Notes:</strong> ${notes}</p>` : ''}
+      <p>You can review status under Attendance in AIMSCS.</p>
+    `,
+    text: `Hello ${name}. Your condonation request was ${approved ? 'approved' : 'not approved'}.${notes ? ` Notes: ${notes}` : ''}`,
+  });
+}
+
 export async function sendLowAttendanceEmail(
   email: string,
   name: string,

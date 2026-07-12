@@ -29,7 +29,7 @@ async function hasRecentNotification(userId: string, title: string): Promise<boo
   return !!existing;
 }
 
-async function getStudentAttendancePct(studentId: string): Promise<{ pct: number; total: number }> {
+export async function getStudentAttendancePct(studentId: string): Promise<{ pct: number; total: number }> {
   const grouped = await db.attendanceRecord.groupBy({
     by: ['status'],
     where: { studentId },
@@ -46,7 +46,7 @@ async function getStudentAttendancePct(studentId: string): Promise<{ pct: number
   return { pct, total };
 }
 
-async function notifyLinkedParents(studentId: string, title: string, message: string) {
+export async function notifyLinkedParents(studentId: string, title: string, message: string) {
   const parents = await db.user.findMany({
     where: { linkedStudentId: studentId, status: 'active' },
     select: { id: true },

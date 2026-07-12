@@ -16,7 +16,7 @@ import {
   Settings as SettingsIcon, Shield, Bell, Database, Server,
   ScanFace, MapPin, Clock, Lock, CheckCircle, X as XIcon, ScrollText,
   Link2, RefreshCw, Wallet, Save, RotateCcw, UserCircle, Trash2, Download,
-  Users, Building2, BookOpen, CalendarDays, MapPinned, BarChart3, Crown,
+  Users, Building2, BookOpen, CalendarDays, MapPinned, BarChart3, Crown, FileWarning,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { KnuctDIDAuthPanel } from '@/components/knuct/did-auth-panel';
@@ -312,7 +312,13 @@ function UserRbacOverridesPanel({ isSuperAdmin }: { isSuperAdmin: boolean }) {
 }
 
 
-function SuperAdminControlCenter({ onNavigate }: { onNavigate: (section: Section, ctx?: SectionContext) => void }) {
+function SuperAdminControlCenter({
+  onNavigate,
+  pendingCondonations = 0,
+}: {
+  onNavigate: (section: Section, ctx?: SectionContext) => void;
+  pendingCondonations?: number;
+}) {
   /** Tenant-specific catalog & admin modules — opened inside Administration, not main nav. */
   const tenantModules: { settingsTab?: string; section?: Section; label: string; description: string; icon: typeof Shield }[] = [
     { settingsTab: 'masters', label: 'Masters', description: 'Departments, programs, subjects, academic years (tenant catalog)', icon: Building2 },
@@ -321,8 +327,23 @@ function SuperAdminControlCenter({ onNavigate }: { onNavigate: (section: Section
     { section: 'calendar', label: 'Calendar', description: 'Academic events and holidays', icon: CalendarDays },
   ];
 
-  const operationalModules: { section: Section; label: string; description: string; icon: typeof Shield }[] = [
+  const operationalModules: {
+    section: Section;
+    label: string;
+    description: string;
+    icon: typeof Shield;
+    ctx?: SectionContext;
+    badge?: number;
+  }[] = [
     { section: 'attendance', label: 'Attendance', description: 'Sessions, timetable, capture rules', icon: Clock },
+    {
+      section: 'attendance',
+      label: 'Condonation',
+      description: 'Review watch-band attendance requests',
+      icon: FileWarning,
+      ctx: { attendanceTab: 'condonation' },
+      badge: pendingCondonations,
+    },
     { section: 'lms', label: 'Learning', description: 'Courses, assignments, quizzes', icon: BookOpen },
     { section: 'violations', label: 'Violations', description: 'Policy breaches and actions', icon: Shield },
     { section: 'reports', label: 'Reports', description: 'Analytics and exports', icon: BarChart3 },
@@ -380,14 +401,17 @@ function SuperAdminControlCenter({ onNavigate }: { onNavigate: (section: Section
               const Icon = mod.icon;
               return (
                 <Button
-                  key={mod.section}
+                  key={`${mod.section}-${mod.label}`}
                   variant="outline"
                   className="h-auto flex-col items-start gap-1 p-3 text-left whitespace-normal"
-                  onClick={() => onNavigate(mod.section)}
+                  onClick={() => onNavigate(mod.section, mod.ctx)}
                 >
                   <span className="flex items-center gap-2 font-medium text-sm">
                     <Icon className="h-4 w-4 text-brand shrink-0" />
                     {mod.label}
+                    {typeof mod.badge === 'number' && mod.badge > 0 && (
+                      <Badge variant="secondary" className="text-[10px] ml-auto">{mod.badge}</Badge>
+                    )}
                   </span>
                   <span className="text-[11px] text-muted-foreground font-normal leading-snug">{mod.description}</span>
                 </Button>
@@ -646,6 +670,18 @@ export default function SettingsSection() {
 
   if (!currentUser) return null;
 
+  const { data: condonationPending } = useQuery({
+    queryKey: ['condonation-requests', 'pending-count'],
+    queryFn: async () => {
+      const res = await fetch('/api/attendance/condonation?status=pending&limit=1');
+      const json = await res.json();
+      if (!res.ok) return { total: 0 };
+      return json as { total: number };
+    },
+    enabled: isSuperAdmin,
+    staleTime: 60_000,
+  });
+
   return (
     <div className="space-y-6">
       <div>
@@ -659,7 +695,12 @@ export default function SettingsSection() {
         </p>
       </div>
 
-      {isSuperAdmin && <SuperAdminControlCenter onNavigate={navigateToSection} />}
+      {isSuperAdmin && (
+        <SuperAdminControlCenter
+          onNavigate={navigateToSection}
+          pendingCondonations={condonationPending?.total ?? 0}
+        />
+      )}
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList

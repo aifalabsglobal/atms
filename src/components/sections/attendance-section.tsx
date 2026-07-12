@@ -61,6 +61,8 @@ import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useToast } from '@/hooks/use-toast';
+import { CondonationRequestForm } from '@/components/attendance/condonation-request-form';
+import { CondonationRequestsPanel } from '@/components/attendance/condonation-requests-panel';
 
 // ─── Types ──────────────────────────────────────────────────────
 interface CourseOption { id: string; name: string; code: string }
@@ -712,6 +714,40 @@ function StudentMarkAttendance() {
   );
 }
 
+// ─── Student / parent condonation tab ───────────────────────────
+function StudentCondonationView({ canSubmit }: { canSubmit: boolean }) {
+  const { currentUser } = useAppStore();
+  const { data, isLoading } = useQuery<{
+    summary: { total: number; present: number; percentage: number };
+    thresholds?: { eligibilityPct: number; condonationPct: number };
+    condonationClearance?: {
+      clearedForTerm: boolean;
+      clearedAt: string | null;
+      attendancePctSnapshot: number | null;
+    };
+  }>({
+    queryKey: ['attendance-my-records'],
+    queryFn: () => fetch('/api/attendance/my-records').then((r) => {
+      if (!r.ok) throw new Error('Failed to load records');
+      return r.json();
+    }),
+  });
+
+  if (isLoading || !currentUser) return <Skeleton className="h-48 w-full" />;
+
+  return (
+    <CondonationRequestForm
+      attendancePct={data?.summary.percentage ?? 0}
+      totalSessions={data?.summary.total ?? 0}
+      eligibilityPct={data?.thresholds?.eligibilityPct}
+      condonationPct={data?.thresholds?.condonationPct}
+      canSubmit={canSubmit}
+      role={currentUser.role}
+      clearance={data?.condonationClearance ?? null}
+    />
+  );
+}
+
 // ─── Student Records View ───────────────────────────────────────
 function StudentRecordsView() {
   const { data, isLoading } = useQuery<{
@@ -720,6 +756,8 @@ function StudentRecordsView() {
       session: { sessionDate: string; startTime: string; endTime: string; course: { name: string; code: string } };
     }>;
     summary: { total: number; present: number; percentage: number };
+    thresholds?: { eligibilityPct: number; condonationPct: number };
+    condonationClearance?: { clearedForTerm: boolean };
   }>({
     queryKey: ['attendance-my-records'],
     queryFn: () => fetch('/api/attendance/my-records').then((r) => {
@@ -732,11 +770,17 @@ function StudentRecordsView() {
 
   return (
     <div className="space-y-4">
+      {data?.condonationClearance?.clearedForTerm && (
+        <Badge className="bg-emerald-100 text-emerald-800 border-0">Condonation cleared for term</Badge>
+      )}
       <div className="grid grid-cols-3 gap-3">
         <Card><CardContent className="p-4 text-center"><p className="text-2xl font-bold">{data?.summary.total ?? 0}</p><p className="text-xs text-muted-foreground">Total Sessions</p></CardContent></Card>
         <Card><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-green-600">{data?.summary.present ?? 0}</p><p className="text-xs text-muted-foreground">Present</p></CardContent></Card>
         <Card><CardContent className="p-4 text-center"><p className="text-2xl font-bold">{data?.summary.percentage ?? 0}%</p><p className="text-xs text-muted-foreground">Attendance Rate</p></CardContent></Card>
       </div>
+      <p className="text-xs text-muted-foreground">
+        Need condonation? Open the <span className="font-medium text-foreground">Condonation</span> tab — request → HOD decides → Cleared.
+      </p>
       <Card>
         <CardHeader><CardTitle className="text-base">Attendance History</CardTitle></CardHeader>
         <CardContent>
@@ -1911,13 +1955,30 @@ function AdminSessionsView() {
 
 // ─── Main Component ─────────────────────────────────────────────
 export default function AttendanceSection() {
-  const { currentUser } = useAppStore();
+  const { currentUser, sectionContext, setSectionContext } = useAppStore();
   const canManageTimetable = useCanManageTimetable();
+  const initialTab =
+    sectionContext?.attendanceTab === 'condonation'
+      ? 'condonation'
+      : sectionContext?.attendanceTab === 'timetable'
+        ? 'timetable'
+        : sectionContext?.attendanceTab === 'history'
+          ? 'history'
+          : canManageTimetable
+            ? 'sessions'
+            : 'sessions';
+
+  useEffect(() => {
+    if (sectionContext?.attendanceTab) {
+      setSectionContext(null);
+    }
+  }, [sectionContext?.attendanceTab, setSectionContext]);
 
   if (!currentUser) return null;
 
   const isStudent = currentUser.role === 'student';
   const isParent = currentUser.role === 'parent';
+  const showCondonationTab = !['lab_assistant', 'security', 'visitor'].includes(currentUser.role);
 
   return (
     <div className="space-y-6">
@@ -1927,23 +1988,34 @@ export default function AttendanceSection() {
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
           {isStudent
-            ? 'Mark your attendance with geofence verification & selfie capture'
+            ? 'Mark attendance, view records, or request condonation if you are in the watch band'
             : isParent
-              ? "View your ward's attendance records"
+              ? "View your ward's attendance and condonation status"
               : canManageTimetable
-                ? 'Manage sessions, configure your weekly timetable, and track participation'
-                : 'Manage attendance sessions, track participation, and verify records'}
+                ? 'Manage sessions, timetable, and condonation requests'
+                : 'Manage attendance sessions and condonation requests'}
         </p>
       </div>
 
       {isStudent ? (
-        <Tabs defaultValue="mark">
+        <Tabs
+          defaultValue={
+            initialTab === 'condonation'
+              ? 'condonation'
+              : initialTab === 'history'
+                ? 'history'
+                : 'mark'
+          }
+        >
           <TabsList>
             <TabsTrigger value="mark" className="gap-1.5 text-xs">
               <ScanLine className="h-4 w-4" /> Mark Attendance
             </TabsTrigger>
             <TabsTrigger value="history" className="gap-1.5 text-xs">
               <Clock className="h-4 w-4" /> My Records
+            </TabsTrigger>
+            <TabsTrigger value="condonation" className="gap-1.5 text-xs">
+              <AlertTriangle className="h-4 w-4" /> Condonation
             </TabsTrigger>
           </TabsList>
           <TabsContent value="mark" className="mt-4">
@@ -1952,11 +2024,29 @@ export default function AttendanceSection() {
           <TabsContent value="history" className="mt-4">
             <StudentRecordsView />
           </TabsContent>
+          <TabsContent value="condonation" className="mt-4">
+            <StudentCondonationView canSubmit />
+          </TabsContent>
         </Tabs>
       ) : isParent ? (
-        <StudentRecordsView />
+        <Tabs defaultValue={initialTab === 'condonation' ? 'condonation' : 'history'}>
+          <TabsList>
+            <TabsTrigger value="history" className="gap-1.5 text-xs">
+              <Clock className="h-4 w-4" /> Records
+            </TabsTrigger>
+            <TabsTrigger value="condonation" className="gap-1.5 text-xs">
+              <AlertTriangle className="h-4 w-4" /> Condonation
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="history" className="mt-4">
+            <StudentRecordsView />
+          </TabsContent>
+          <TabsContent value="condonation" className="mt-4">
+            <StudentCondonationView canSubmit={false} />
+          </TabsContent>
+        </Tabs>
       ) : canManageTimetable ? (
-        <Tabs defaultValue="sessions">
+        <Tabs defaultValue={initialTab === 'condonation' && showCondonationTab ? 'condonation' : initialTab === 'timetable' ? 'timetable' : 'sessions'}>
           <TabsList>
             <TabsTrigger value="sessions" className="gap-1.5 text-xs">
               <Users className="h-4 w-4" /> Sessions
@@ -1964,6 +2054,11 @@ export default function AttendanceSection() {
             <TabsTrigger value="timetable" className="gap-1.5 text-xs">
               <Clock className="h-4 w-4" /> Weekly Timetable
             </TabsTrigger>
+            {showCondonationTab && (
+              <TabsTrigger value="condonation" className="gap-1.5 text-xs">
+                <AlertTriangle className="h-4 w-4" /> Condonation
+              </TabsTrigger>
+            )}
           </TabsList>
           <TabsContent value="sessions" className="mt-4">
             <AdminSessionsView />
@@ -1971,9 +2066,33 @@ export default function AttendanceSection() {
           <TabsContent value="timetable" className="mt-4">
             <FacultyTimetableEditor />
           </TabsContent>
+          {showCondonationTab && (
+            <TabsContent value="condonation" className="mt-4">
+              <CondonationRequestsPanel />
+            </TabsContent>
+          )}
         </Tabs>
       ) : (
-        <AdminSessionsView />
+        <Tabs defaultValue={initialTab === 'condonation' && showCondonationTab ? 'condonation' : 'sessions'}>
+          <TabsList>
+            <TabsTrigger value="sessions" className="gap-1.5 text-xs">
+              <Users className="h-4 w-4" /> Sessions
+            </TabsTrigger>
+            {showCondonationTab && (
+              <TabsTrigger value="condonation" className="gap-1.5 text-xs">
+                <AlertTriangle className="h-4 w-4" /> Condonation
+              </TabsTrigger>
+            )}
+          </TabsList>
+          <TabsContent value="sessions" className="mt-4">
+            <AdminSessionsView />
+          </TabsContent>
+          {showCondonationTab && (
+            <TabsContent value="condonation" className="mt-4">
+              <CondonationRequestsPanel />
+            </TabsContent>
+          )}
+        </Tabs>
       )}
     </div>
   );

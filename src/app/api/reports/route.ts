@@ -12,6 +12,7 @@ import {
 } from '@/lib/reports-analytics';
 import { getAttendanceThresholds } from '@/lib/system-config';
 import { rateLimitByUser } from '@/lib/api-rate-limit';
+import { getCondonationClearanceMap } from '@/lib/condonation-service';
 
 export async function GET(request: Request) {
   try {
@@ -389,9 +390,30 @@ export async function GET(request: Request) {
     const departmentAnalytics =
       analyticsScope === 'campus' ? buildDepartmentAnalytics(studentAttendanceReport, thresholds) : [];
 
-    const atRiskStudents = studentAttendanceReport
+    const clearanceMap = await getCondonationClearanceMap(
+      studentAttendanceReport.map((s) => s.id),
+    );
+
+    const studentAttendanceReportWithClearance = studentAttendanceReport.map((s) => ({
+      ...s,
+      condonationCleared: clearanceMap.get(s.id)?.clearedForTerm ?? false,
+    }));
+
+    const atRiskStudents = studentAttendanceReportWithClearance
       .filter((s) => s.stats.total > 0 && s.stats.percentage < thresholds.eligibilityPct)
+      .filter((s) => !s.condonationCleared)
       .slice(0, 20);
+
+    const clearedStudents = studentAttendanceReportWithClearance
+      .filter((s) => s.condonationCleared)
+      .map((s) => ({
+        id: s.id,
+        name: s.name,
+        employeeId: s.employeeId,
+        department: s.department,
+        stats: s.stats,
+        condonationCleared: true as const,
+      }));
 
     const topPerformers = [...studentAttendanceReport]
       .filter((s) => s.stats.total >= 3)
@@ -438,6 +460,7 @@ export async function GET(request: Request) {
       weeklyAttendanceTrend,
       departmentAnalytics,
       atRiskStudents,
+      clearedStudents,
       topPerformers,
       violationAnalytics,
       captureMethodBreakdown,
@@ -458,7 +481,7 @@ export async function GET(request: Request) {
           })),
       },
       attendanceSummary,
-      studentAttendanceReport,
+      studentAttendanceReport: studentAttendanceReportWithClearance,
       coursePerfReport,
       violationReport,
       gradeDistribution,

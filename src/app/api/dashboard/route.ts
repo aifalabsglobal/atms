@@ -13,6 +13,7 @@ import {
 import { getKnuctDashboardStats } from '@/lib/knuct';
 import { getAttendanceThresholds } from '@/lib/system-config';
 import { getCachedJson, setCachedJson } from '@/lib/api-cache';
+import { countPendingCondonations, getCondonationClearanceMap } from '@/lib/condonation-service';
 
 async function buildStudentDashboard(studentId: string, thresholds: Awaited<ReturnType<typeof getAttendanceThresholds>>) {
   const [statusGroups, enrollments, records, activeSessionsList] = await Promise.all([
@@ -241,6 +242,7 @@ export async function GET() {
       quizAgg,
       submissionCount,
       knuct,
+      pendingCondonations,
     ] = await Promise.all([
       db.user.count({ where: studentWhere }),
       db.user.count({ where: facultyWhere }),
@@ -336,6 +338,7 @@ export async function GET() {
         where: scope.level === 'all' ? {} : { assignment: { courseId: courseFilter } },
       }),
       role === 'super_admin' ? getKnuctDashboardStats() : Promise.resolve(undefined),
+      countPendingCondonations(scope),
     ]);
 
     const totalPresent = completedAgg._sum.presentCount ?? 0;
@@ -380,8 +383,15 @@ export async function GET() {
     const departmentAnalytics =
       analyticsScope === 'campus' ? buildDepartmentAnalytics(studentReport, thresholds) : [];
 
+    const clearanceMap = await getCondonationClearanceMap(studentReport.map((s) => s.id));
+
     const atRiskStudents = studentReport
       .filter((s) => s.stats.total > 0 && s.stats.percentage < thresholds.eligibilityPct)
+      .map((s) => ({
+        ...s,
+        condonationCleared: clearanceMap.get(s.id)?.clearedForTerm ?? false,
+      }))
+      .filter((s) => !s.condonationCleared)
       .slice(0, 8);
 
     const topPerformers = [...studentReport]
@@ -404,7 +414,7 @@ export async function GET() {
       scopeLabel: scopeLabelText,
       analyticsScope,
       knuct,
-      stats: { totalStudents, totalFaculty, totalCourses, totalSessions, activeSessions, pendingViolations: totalViolations, totalEnrollments, overallAttendance, totalPresent, totalAbsent, totalLate },
+      stats: { totalStudents, totalFaculty, totalCourses, totalSessions, activeSessions, pendingViolations: totalViolations, pendingCondonations, totalEnrollments, overallAttendance, totalPresent, totalAbsent, totalLate },
       analytics: {
         atRiskCount: atRiskStudents.length,
         avgGradePct,

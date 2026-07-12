@@ -1,6 +1,12 @@
 import { db } from '@/lib/db';
 import type { CampusScope } from '@/lib/auth-helpers';
-import { DEFAULT_ATTENDANCE_THRESHOLDS, type AttendanceThresholds } from '@/lib/system-config-defaults';
+import {
+  attendanceRiskStatus,
+  DEFAULT_ATTENDANCE_THRESHOLDS,
+  type AttendanceThresholds,
+} from '@/lib/system-config-defaults';
+
+export { attendanceRiskStatus };
 
 export type AnalyticsScope = 'campus' | 'department' | 'instructor';
 
@@ -132,17 +138,6 @@ export function buildViolationAnalytics(
   }
 
   return { byType, bySeverity, pending, confirmed, dismissed, total: violations.length };
-}
-
-export function attendanceRiskStatus(
-  pct: number,
-  total: number,
-  thresholds: AttendanceThresholds = DEFAULT_ATTENDANCE_THRESHOLDS,
-): 'on_track' | 'watch' | 'at_risk' | 'no_data' {
-  if (total === 0) return 'no_data';
-  if (pct >= thresholds.eligibilityPct) return 'on_track';
-  if (pct >= thresholds.condonationPct) return 'watch';
-  return 'at_risk';
 }
 
 export async function getDepartmentName(departmentId: string): Promise<string | undefined> {

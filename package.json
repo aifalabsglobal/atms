@@ -20,6 +20,7 @@
     "seed:calendar": "npx tsx scripts/seed-calendar-db.ts",
     "smoke:quick": "npx tsx scripts/quick-smoke.ts",
     "test:roles": "npx tsx scripts/role-test.ts",
+    "db:seed:condonation-demo": "npx tsx --env-file=.env scripts/seed-condonation-demo.ts",
     "test:knuct:anchor": "npx tsx scripts/test-knuct-anchor.ts",
     "test:knuct:live": "npx tsx scripts/test-knuct-live.ts",
     "test:timetable": "npx tsx scripts/test-timetable-helpers.ts",

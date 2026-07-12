@@ -114,6 +114,7 @@ Each role sees only permitted sidebar sections. APIs enforce the same scope serv
 | Feature | Description |
 |---------|-------------|
 | **Audit logging** | Login, user CRUD, violation reviews, geofence creation — view in Settings → Audit Log (admin only) |
+| **Condonation requests** | Students below eligibility but above the condonation threshold can request HOD/admin review; decisions are audit-logged and anchor-hashed. Demo watch-band student: `student.divya@aimscs.ac.in` / `demo123` (or `npm run db:seed:condonation-demo`). |
 | **User management** | Create users, suspend/activate, reset passwords with scoped RBAC (admin / HOD) |
 | **Global search** | Header search across users, courses, and attendance sessions (role-scoped) |
 | **Rate limiting** | Upstash Redis when `UPSTASH_REDIS_*` set; auth, coding, and demo routes protected |

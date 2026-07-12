@@ -870,6 +870,7 @@ interface StaffReportData {
   weeklyAttendanceTrend: { week: string; present: number; absent: number; late: number; sessions: number; rate: number }[];
   departmentAnalytics: { department: string; students: number; avgAttendance: number; atRisk: number }[];
   atRiskStudents: { id: string; name: string; employeeId: string | null; department: string | null; stats: { percentage: number; total: number } }[];
+  clearedStudents?: { id: string; name: string; employeeId: string | null; department: string | null; stats: { percentage: number; total: number }; condonationCleared: true }[];
   topPerformers: { id: string; name: string; employeeId: string | null; department: string | null; stats: { percentage: number; total: number } }[];
   violationAnalytics: { byType: Record<string, number>; bySeverity: Record<string, number>; pending: number; confirmed: number; dismissed: number; total: number };
   captureMethodBreakdown: Record<string, number>;
@@ -878,7 +879,7 @@ interface StaffReportData {
     topCourses: { id: string; code: string; name: string; enrollments: number; assignments: number; quizAttempts: number; avgGrade: number | null; instructor: string }[];
   };
   attendanceSummary: { id: string; sessionDate: string; presentCount: number; expectedCount: number; absentCount: number; lateCount: number; course: { name: string; code: string } }[];
-  studentAttendanceReport: { id: string; name: string; employeeId: string | null; department: string | null; stats: { present: number; absent: number; late: number; total: number; percentage: number } }[];
+  studentAttendanceReport: { id: string; name: string; employeeId: string | null; department: string | null; stats: { present: number; absent: number; late: number; total: number; percentage: number }; condonationCleared?: boolean }[];
   coursePerfReport: { id: string; code: string; name: string; _count: { enrollments: number }; avgGrade: number | null }[];
   violationReport: { id: string; type: string; severity: string; reviewStatus: string; violator: { name: string }; record: { session: { sessionDate: string; course: { name: string } } } }[];
   gradeDistribution: Record<string, number>;
@@ -897,7 +898,7 @@ function StaffAnalyticsView({ data }: { data: StaffReportData }) {
   const ayBadge = reportBrand.academicYearLabel ?? 'Academic year';
   const thresholds = data.thresholds ?? FALLBACK_THRESHOLDS;
   const {
-    kpis, weeklyAttendanceTrend, departmentAnalytics, atRiskStudents, topPerformers,
+    kpis, weeklyAttendanceTrend, departmentAnalytics, atRiskStudents, clearedStudents = [], topPerformers,
     violationAnalytics, captureMethodBreakdown, lmsEngagement, scopeLabel, analyticsScope,
     attendanceSummary, studentAttendanceReport, coursePerfReport, violationReport, gradeDistribution,
   } = data;
@@ -1235,7 +1236,9 @@ function StaffAnalyticsView({ data }: { data: StaffReportData }) {
                 <CardTitle className="text-base flex items-center gap-2 text-amber-800">
                   <AlertTriangle className="h-4 w-4" /> At-risk students ({atRiskStudents.length})
                 </CardTitle>
-                <CardDescription>Below {thresholds.eligibilityPct}% attendance — minimum eligibility threshold</CardDescription>
+                <CardDescription>
+                  Below {thresholds.eligibilityPct}% and not condonation-cleared — minimum eligibility threshold
+                </CardDescription>
               </CardHeader>
               <CardContent className="p-0">
                 <ScrollArea className="max-h-48">
@@ -1263,6 +1266,44 @@ function StaffAnalyticsView({ data }: { data: StaffReportData }) {
               </CardContent>
             </Card>
           )}
+          {clearedStudents.length > 0 && (
+            <Card className="border-emerald-200 bg-emerald-50/40 dark:bg-emerald-950/20">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2 text-emerald-800">
+                  <CheckCircle2 className="h-4 w-4" /> Condonation cleared ({clearedStudents.length})
+                </CardTitle>
+                <CardDescription>
+                  Raw % unchanged — campus accepted shortfall for the term (excluded from at-risk)
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ScrollArea className="max-h-40">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Student</TableHead>
+                        <TableHead>Dept</TableHead>
+                        <TableHead>Raw %</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {clearedStudents.map((s) => (
+                        <TableRow key={s.id}>
+                          <TableCell className="font-medium text-sm">{s.name}</TableCell>
+                          <TableCell className="text-xs">{s.department}</TableCell>
+                          <TableCell>{s.stats.percentage}%</TableCell>
+                          <TableCell>
+                            <Badge className="bg-emerald-100 text-emerald-800 border-0 text-[10px]">Cleared</Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          )}
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Student Attendance Report</CardTitle>
@@ -1281,10 +1322,11 @@ function StaffAnalyticsView({ data }: { data: StaffReportData }) {
                       <TableHead>Late</TableHead>
                       <TableHead>Total</TableHead>
                       <TableHead>Attendance %</TableHead>
+                      <TableHead>Condonation</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {(studentAttendanceReport || []).map((s: { id: string; name: string; employeeId: string | null; department: string | null; stats: { present: number; absent: number; late: number; total: number; percentage: number } }) => (
+                    {(studentAttendanceReport || []).map((s: { id: string; name: string; employeeId: string | null; department: string | null; stats: { present: number; absent: number; late: number; total: number; percentage: number }; condonationCleared?: boolean }) => (
                       <TableRow key={s.id}>
                         <TableCell className="font-medium">{s.name}</TableCell>
                         <TableCell className="text-sm text-muted-foreground">{s.employeeId}</TableCell>
@@ -1300,6 +1342,13 @@ function StaffAnalyticsView({ data }: { data: StaffReportData }) {
                               {s.stats.percentage}%
                             </span>
                           </div>
+                        </TableCell>
+                        <TableCell>
+                          {s.condonationCleared ? (
+                            <Badge className="bg-emerald-100 text-emerald-800 border-0 text-[10px]">Cleared</Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))}

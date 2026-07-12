@@ -46,6 +46,7 @@ model AcademicYear {
 
   semesters   Semester[]
   calendarEvents CalendarEvent[]
+  condonationRequests CondonationRequest[]
 }
 
 model Semester {
@@ -133,6 +134,8 @@ model User {
   rbacOverride       UserRbacOverride?
   knuctCredentials   KnuctCredential[]
   knuctWalletProvisionRequests KnuctWalletProvisionRequest[]
+  condonationRequests  CondonationRequest[] @relation("CondonationRequester")
+  condonationDecisions CondonationRequest[] @relation("CondonationDecider")
 }
 
 model KnuctWallet {
@@ -368,6 +371,38 @@ model AttendanceViolation {
   record    AttendanceRecord @relation(fields: [recordId], references: [id], onDelete: Cascade)
   violator  User             @relation("Violator", fields: [studentId], references: [id])
   reviewer  User?            @relation("Reviewer", fields: [reviewedBy], references: [id])
+}
+
+model CondonationRequest {
+  id               String    @id @default(cuid())
+  studentId        String
+  departmentId     String? // snapshot from student's User.departmentId at request time
+  attendancePct    Float
+  eligibilityPct   Float
+  condonationPct   Float
+  reason           String
+  supportingDocUrl String?
+  status           String    @default("pending") // pending | approved | rejected | withdrawn
+  decidedById      String?
+  decidedAt        DateTime?
+  decisionNotes    String?
+  /// Enterprise outcome: approve marks student cleared for the term (raw % unchanged).
+  clearedForTerm   Boolean   @default(false)
+  clearedAt        DateTime?
+  academicYearId   String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  student      User          @relation("CondonationRequester", fields: [studentId], references: [id], onDelete: Cascade)
+  decidedBy    User?         @relation("CondonationDecider", fields: [decidedById], references: [id])
+  academicYear AcademicYear? @relation(fields: [academicYearId], references: [id])
+
+  @@index([status])
+  @@index([studentId])
+  @@index([departmentId])
+  @@index([createdAt])
+  @@index([clearedForTerm])
+  @@index([academicYearId])
 }
 
 // --- LMS: Learning Management System ---

@@ -44,6 +44,8 @@ const ENDPOINTS: Endpoint[] = [
   { name: 'timetable', path: '/api/timetable?date=2026-07-06', section: 'attendance', expectAccess: (r) => hasAnySection(r, ['attendance', 'masters']) },
   { name: 'timetable-slots', path: '/api/masters/timetable-slots?limit=5', section: 'masters', expectAccess: (r) => hasAnySection(r, ['attendance', 'masters']) },
   { name: 'active-sessions', path: '/api/attendance/active-sessions', section: 'attendance', expectAccess: (r) => hasSection(r, 'attendance') },
+  { name: 'condonation', path: '/api/attendance/condonation?status=all&limit=5', section: 'attendance', expectAccess: (r) =>
+    ['super_admin', 'admin', 'hod', 'faculty', 'student', 'parent'].includes(r) },
 ];
 
 function collectCookies(res: Response, jar: string[]): string[] {
@@ -63,6 +65,248 @@ function collectCookies(res: Response, jar: string[]): string[] {
     }
   }
   return [...new Set(next)];
+}
+
+const VALID_REASON =
+  'Medical leave documentation attached for the mid-semester absence period.';
+
+async function runStudentCondonationChecks(label: string, cookie: string, rows: Row[]) {
+  // Cannot submit on behalf of another student (body studentId ignored / rejected).
+  {
+    const start = Date.now();
+    try {
+      const res = await fetch(`${BASE}/api/attendance/condonation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({ reason: VALID_REASON, studentId: 'someone-else' }),
+      });
+      if (res.status !== 403) {
+        rows.push({ role: label, check: 'condonation-no-proxy', ok: false, detail: `expected 403 got ${res.status}`, ms: Date.now() - start });
+      } else {
+        rows.push({ role: label, check: 'condonation-no-proxy', ok: true, detail: '403', ms: Date.now() - start });
+      }
+    } catch (e) {
+      rows.push({ role: label, check: 'condonation-no-proxy', ok: false, detail: e instanceof Error ? e.message : String(e), ms: Date.now() - start });
+    }
+  }
+
+  // Short reason rejected.
+  {
+    const start = Date.now();
+    try {
+      const res = await fetch(`${BASE}/api/attendance/condonation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({ reason: 'too short' }),
+      });
+      if (res.status !== 400) {
+        rows.push({ role: label, check: 'condonation-reason-min', ok: false, detail: `expected 400 got ${res.status}`, ms: Date.now() - start });
+      } else {
+        rows.push({ role: label, check: 'condonation-reason-min', ok: true, detail: '400', ms: Date.now() - start });
+      }
+    } catch (e) {
+      rows.push({ role: label, check: 'condonation-reason-min', ok: false, detail: e instanceof Error ? e.message : String(e), ms: Date.now() - start });
+    }
+  }
+
+  // GET lists only the caller's requests.
+  {
+    const start = Date.now();
+    try {
+      const sessionRes = await fetch(`${BASE}/api/auth/session`, { headers: { Cookie: cookie } });
+      const session = await sessionRes.json();
+      const me = session?.user?.id as string | undefined;
+      const res = await fetch(`${BASE}/api/attendance/condonation?status=all&limit=50`, { headers: { Cookie: cookie } });
+      const ms = Date.now() - start;
+      if (!res.ok || !me) {
+        rows.push({ role: label, check: 'condonation-own-only', ok: false, detail: `GET ${res.status}`, ms });
+      } else {
+        const data = await res.json();
+        const leaked = (data.requests as { studentId: string }[] | undefined)?.some((r) => r.studentId !== me);
+        rows.push({
+          role: label,
+          check: 'condonation-own-only',
+          ok: !leaked,
+          detail: leaked ? 'leaked other student requests' : 'scoped',
+          ms,
+        });
+      }
+    } catch (e) {
+      rows.push({ role: label, check: 'condonation-own-only', ok: false, detail: e instanceof Error ? e.message : String(e), ms: Date.now() - start });
+    }
+  }
+
+  // Create / band / duplicate / withdraw lifecycle.
+  let pendingId: string | undefined;
+  {
+    const start = Date.now();
+    try {
+      const res = await fetch(`${BASE}/api/attendance/condonation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({ reason: VALID_REASON }),
+      });
+      const body = await res.json().catch(() => ({}));
+      const ms = Date.now() - start;
+      if (res.status === 201 && typeof body.id === 'string') {
+        pendingId = body.id;
+        rows.push({ role: label, check: 'condonation-create', ok: true, detail: '201 in band', ms });
+      } else if (res.status === 409 && typeof body.existingRequestId === 'string') {
+        pendingId = body.existingRequestId;
+        rows.push({ role: label, check: 'condonation-create', ok: true, detail: '409 duplicate', ms });
+        rows.push({ role: label, check: 'condonation-duplicate', ok: true, detail: 'existingRequestId', ms: 0 });
+      } else if (res.status === 400 && typeof body.error === 'string') {
+        const bandMsg =
+          body.error.includes('eligible') || body.error.includes('condonable') || body.error.includes('Below');
+        rows.push({
+          role: label,
+          check: 'condonation-create',
+          ok: bandMsg,
+          detail: bandMsg ? `out of band: ${body.error}` : `unexpected 400: ${body.error}`,
+          ms,
+        });
+      } else if (res.status === 429) {
+        rows.push({
+          role: label,
+          check: 'condonation-create',
+          ok: true,
+          detail: '429 rate-limited after prior POSTs',
+          ms,
+        });
+      } else {
+        rows.push({ role: label, check: 'condonation-create', ok: false, detail: `unexpected ${res.status}`, ms });
+      }
+
+      if (pendingId && res.status === 201) {
+        const dupStart = Date.now();
+        const dup = await fetch(`${BASE}/api/attendance/condonation`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Cookie: cookie },
+          body: JSON.stringify({ reason: VALID_REASON }),
+        });
+        const dupBody = await dup.json().catch(() => ({}));
+        rows.push({
+          role: label,
+          check: 'condonation-duplicate',
+          ok: dup.status === 409 && !!dupBody.existingRequestId,
+          detail: dup.status === 409 ? '409 existingRequestId' : `got ${dup.status}`,
+          ms: Date.now() - dupStart,
+        });
+      }
+    } catch (e) {
+      rows.push({ role: label, check: 'condonation-create', ok: false, detail: e instanceof Error ? e.message : String(e), ms: Date.now() - start });
+    }
+  }
+
+  if (pendingId) {
+    const start = Date.now();
+    try {
+      const res = await fetch(`${BASE}/api/attendance/condonation/${pendingId}`, {
+        method: 'DELETE',
+        headers: { Cookie: cookie },
+      });
+      rows.push({
+        role: label,
+        check: 'condonation-withdraw',
+        ok: res.ok,
+        detail: res.ok ? 'withdrawn' : `got ${res.status}`,
+        ms: Date.now() - start,
+      });
+    } catch (e) {
+      rows.push({ role: label, check: 'condonation-withdraw', ok: false, detail: e instanceof Error ? e.message : String(e), ms: Date.now() - start });
+    }
+  }
+
+  // Cannot withdraw a non-owned / missing request.
+  {
+    const start = Date.now();
+    try {
+      const res = await fetch(`${BASE}/api/attendance/condonation/not-a-real-request-id`, {
+        method: 'DELETE',
+        headers: { Cookie: cookie },
+      });
+      rows.push({
+        role: label,
+        check: 'condonation-withdraw-missing',
+        ok: res.status === 404,
+        detail: `got ${res.status}`,
+        ms: Date.now() - start,
+      });
+    } catch (e) {
+      rows.push({ role: label, check: 'condonation-withdraw-missing', ok: false, detail: e instanceof Error ? e.message : String(e), ms: Date.now() - start });
+    }
+  }
+}
+
+async function runFacultyCondonationChecks(label: string, cookie: string, rows: Row[]) {
+  // Faculty cannot create requests.
+  {
+    const start = Date.now();
+    try {
+      const res = await fetch(`${BASE}/api/attendance/condonation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({ reason: VALID_REASON }),
+      });
+      rows.push({
+        role: label,
+        check: 'condonation-faculty-post',
+        ok: res.status === 403,
+        detail: `got ${res.status}`,
+        ms: Date.now() - start,
+      });
+    } catch (e) {
+      rows.push({ role: label, check: 'condonation-faculty-post', ok: false, detail: e instanceof Error ? e.message : String(e), ms: Date.now() - start });
+    }
+  }
+
+  // With requireHodForCondonation default true, faculty cannot decide (404 if none, else 403).
+  {
+    const start = Date.now();
+    try {
+      const list = await fetch(`${BASE}/api/attendance/condonation?status=pending&limit=1`, {
+        headers: { Cookie: cookie },
+      });
+      const data = list.ok ? await list.json() : { requests: [] };
+      const id = (data.requests as { id: string }[] | undefined)?.[0]?.id ?? 'missing-condonation-id';
+      const res = await fetch(`${BASE}/api/attendance/condonation/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Cookie: cookie },
+        body: JSON.stringify({ decision: 'approved' }),
+      });
+      const ok = res.status === 403 || res.status === 404;
+      rows.push({
+        role: label,
+        check: 'condonation-faculty-decide',
+        ok,
+        detail: `got ${res.status}`,
+        ms: Date.now() - start,
+      });
+    } catch (e) {
+      rows.push({ role: label, check: 'condonation-faculty-decide', ok: false, detail: e instanceof Error ? e.message : String(e), ms: Date.now() - start });
+    }
+  }
+}
+
+async function runAdminCondonationChecks(label: string, cookie: string, rows: Row[]) {
+  // Admin/super_admin can list pending (campus scope), including null-department rows if any.
+  {
+    const start = Date.now();
+    try {
+      const res = await fetch(`${BASE}/api/attendance/condonation?status=pending&limit=5`, {
+        headers: { Cookie: cookie },
+      });
+      rows.push({
+        role: label,
+        check: 'condonation-admin-list',
+        ok: res.ok,
+        detail: res.ok ? '200' : `got ${res.status}`,
+        ms: Date.now() - start,
+      });
+    } catch (e) {
+      rows.push({ role: label, check: 'condonation-admin-list', ok: false, detail: e instanceof Error ? e.message : String(e), ms: Date.now() - start });
+    }
+  }
 }
 
 async function login(email: string): Promise<string> {
@@ -175,6 +419,16 @@ async function main() {
       } catch (e) {
         rows.push({ role: account.label, check: 'lms-write-blocked', ok: false, detail: e instanceof Error ? e.message : String(e), ms: Date.now() - start });
       }
+    }
+
+    if (account.role === 'student') {
+      await runStudentCondonationChecks(account.label, cookie, rows);
+    }
+    if (account.role === 'faculty') {
+      await runFacultyCondonationChecks(account.label, cookie, rows);
+    }
+    if (account.role === 'admin' || account.role === 'super_admin') {
+      await runAdminCondonationChecks(account.label, cookie, rows);
     }
   }
 

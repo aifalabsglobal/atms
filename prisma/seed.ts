@@ -892,6 +892,32 @@ async function main() {
     update: { matrix: DEFAULT_ROLE_SECTIONS },
   });
 
+  // Condonation demo: put Divya in watch band (~70%) so Attendance → Condonation is usable
+  {
+    const divya = await db.user.findUnique({
+      where: { email: 'student.divya@aimscs.ac.in' },
+      select: { id: true },
+    });
+    if (divya) {
+      const divyaRecords = await db.attendanceRecord.findMany({
+        where: { studentId: divya.id },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true },
+      });
+      if (divyaRecords.length >= 5) {
+        const presentTarget = Math.max(1, Math.floor(divyaRecords.length * 0.7));
+        for (let i = 0; i < divyaRecords.length; i++) {
+          const present = i < presentTarget;
+          await db.attendanceRecord.update({
+            where: { id: divyaRecords[i].id },
+            data: { status: present ? 'present' : 'absent', markedAt: present ? new Date() : null },
+          });
+        }
+        console.log(`📦 Condonation demo: Divya set to ~${Math.round((presentTarget / divyaRecords.length) * 100)}% (watch band)`);
+      }
+    }
+  }
+
   console.log('✅ AIMSCS Seed completed successfully!');
   console.log(`   Departments: ${deptCount}`);
   console.log(`   Academic Years: 1`);

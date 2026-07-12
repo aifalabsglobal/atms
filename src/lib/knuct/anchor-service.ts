@@ -10,7 +10,8 @@ export type AnchorResourceType =
   | 'grade_publish'
   | 'geofence_policy'
   | 'calendar_event'
-  | 'subject_publish';
+  | 'subject_publish'
+  | 'condonation_decision';
 
 function stableStringify(value: unknown): string {
   if (value === null || typeof value !== 'object') {

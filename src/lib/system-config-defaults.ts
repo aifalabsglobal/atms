@@ -34,6 +34,18 @@ export const DEFAULT_ATTENDANCE_THRESHOLDS: AttendanceThresholds = {
   requireHodForCondonation: true,
 };
 
+/** Client-safe band helper — keep out of server-only modules (e.g. reports-analytics). */
+export function attendanceRiskStatus(
+  pct: number,
+  total: number,
+  thresholds: AttendanceThresholds = DEFAULT_ATTENDANCE_THRESHOLDS,
+): 'on_track' | 'watch' | 'at_risk' | 'no_data' {
+  if (total === 0) return 'no_data';
+  if (pct >= thresholds.eligibilityPct) return 'on_track';
+  if (pct >= thresholds.condonationPct) return 'watch';
+  return 'at_risk';
+}
+
 export const DEFAULT_SYSTEM_CONFIG: SystemConfigSettings = {
   attendance: DEFAULT_ATTENDANCE_THRESHOLDS,
   policies: {
