@@ -13,10 +13,10 @@ import {
 import { getKnuctDashboardStats } from '@/lib/knuct';
 import { getAttendanceThresholds } from '@/lib/system-config';
 import { getCachedJson, setCachedJson } from '@/lib/api-cache';
-import { countPendingCondonations, getCondonationClearanceMap } from '@/lib/condonation-service';
+import { countPendingCondonations, getCondonationClearanceMap, getStudentCondonationClearance } from '@/lib/condonation-service';
 
 async function buildStudentDashboard(studentId: string, thresholds: Awaited<ReturnType<typeof getAttendanceThresholds>>) {
-  const [statusGroups, enrollments, records, activeSessionsList] = await Promise.all([
+  const [statusGroups, enrollments, records, activeSessionsList, clearance] = await Promise.all([
     db.attendanceRecord.groupBy({
       by: ['status'],
       where: { studentId },
@@ -49,6 +49,7 @@ async function buildStudentDashboard(studentId: string, thresholds: Awaited<Retu
         timetableSlot: { select: { roomNumber: true, building: true } },
       },
     }),
+    getStudentCondonationClearance(studentId),
   ]);
 
   let present = 0;
@@ -114,6 +115,8 @@ async function buildStudentDashboard(studentId: string, thresholds: Awaited<Retu
     scope: 'student' as const,
     thresholds,
     riskStatus: attendanceRiskStatus(overallAttendance, total, thresholds),
+    condonationClearance: clearance,
+    examEligible: overallAttendance >= thresholds.eligibilityPct || clearance.clearedForTerm,
     weeklyRateTrend,
     stats: {
       totalStudents: 0,
@@ -380,17 +383,19 @@ export async function GET() {
       rate: w.rate,
     }));
 
-    const departmentAnalytics =
-      analyticsScope === 'campus' ? buildDepartmentAnalytics(studentReport, thresholds) : [];
-
     const clearanceMap = await getCondonationClearanceMap(studentReport.map((s) => s.id));
+    const studentReportWithClearance = studentReport.map((s) => ({
+      ...s,
+      condonationCleared: clearanceMap.get(s.id)?.clearedForTerm ?? false,
+    }));
 
-    const atRiskStudents = studentReport
+    const departmentAnalytics =
+      analyticsScope === 'campus'
+        ? buildDepartmentAnalytics(studentReportWithClearance, thresholds)
+        : [];
+
+    const atRiskStudents = studentReportWithClearance
       .filter((s) => s.stats.total > 0 && s.stats.percentage < thresholds.eligibilityPct)
-      .map((s) => ({
-        ...s,
-        condonationCleared: clearanceMap.get(s.id)?.clearedForTerm ?? false,
-      }))
       .filter((s) => !s.condonationCleared)
       .slice(0, 8);
 

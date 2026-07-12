@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, FileWarning, CheckCircle2, XCircle, Clock, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Loader2, FileWarning, CheckCircle2, XCircle, Clock, ArrowRight, ShieldCheck, Upload } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -105,6 +105,7 @@ export function CondonationRequestForm({
   const queryClient = useQueryClient();
   const [reason, setReason] = useState('');
   const [supportingDocUrl, setSupportingDocUrl] = useState('');
+  const [uploading, setUploading] = useState(false);
   const copy = condonationRoleCopy(role);
 
   const risk = attendanceRiskStatus(
@@ -292,18 +293,67 @@ export function CondonationRequestForm({
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label className="text-xs">Supporting document URL (optional)</Label>
+                <Label className="text-xs">Supporting evidence (optional)</Label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input
+                    type="file"
+                    accept="image/*,application/pdf"
+                    className="rounded-xl text-xs max-w-xs"
+                    disabled={uploading || createMutation.isPending}
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      if (file.size > 5 * 1024 * 1024) {
+                        toast({ title: 'File too large', description: 'Max 5 MB', variant: 'destructive' });
+                        return;
+                      }
+                      setUploading(true);
+                      try {
+                        const reader = new FileReader();
+                        const dataUrl = await new Promise<string>((resolve, reject) => {
+                          reader.onload = () => resolve(String(reader.result));
+                          reader.onerror = () => reject(new Error('Failed to read file'));
+                          reader.readAsDataURL(file);
+                        });
+                        const res = await fetch('/api/attendance/condonation/upload', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ fileBase64: dataUrl }),
+                        });
+                        const json = await res.json();
+                        if (!res.ok) throw new Error(json.error || 'Upload failed');
+                        setSupportingDocUrl(json.url);
+                        toast({ title: 'Evidence uploaded' });
+                      } catch (err) {
+                        toast({
+                          title: 'Upload failed',
+                          description: err instanceof Error ? err.message : 'Try again',
+                          variant: 'destructive',
+                        });
+                      } finally {
+                        setUploading(false);
+                        e.target.value = '';
+                      }
+                    }}
+                  />
+                  {uploading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                  {supportingDocUrl && !uploading && (
+                    <a href={supportingDocUrl} target="_blank" rel="noreferrer" className="text-xs text-brand underline flex items-center gap-1">
+                      <Upload className="h-3 w-3" /> View uploaded file
+                    </a>
+                  )}
+                </div>
                 <Input
                   type="url"
                   value={supportingDocUrl}
                   onChange={(e) => setSupportingDocUrl(e.target.value)}
-                  placeholder="https://…"
+                  placeholder="Or paste a document URL…"
                   className="rounded-xl"
                 />
               </div>
               <Button
                 className="bg-brand hover:bg-brand/90 text-white"
-                disabled={createMutation.isPending || reason.trim().length < 20}
+                disabled={createMutation.isPending || uploading || reason.trim().length < 20}
                 onClick={() => createMutation.mutate()}
               >
                 {createMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-1" />}

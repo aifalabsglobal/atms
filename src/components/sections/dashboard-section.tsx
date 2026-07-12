@@ -123,6 +123,9 @@ interface DashboardData {
   scopeLabel?: string;
   analyticsScope?: 'campus' | 'department' | 'instructor';
   riskStatus?: 'on_track' | 'watch' | 'at_risk' | 'no_data';
+  thresholds?: { eligibilityPct: number; condonationPct: number; requireHodForCondonation?: boolean };
+  examEligible?: boolean;
+  condonationClearance?: { clearedForTerm: boolean; clearedAt: string | null; attendancePctSnapshot: number | null };
   analytics?: DashboardAnalytics;
   knuct?: KnuctDashboardStats;
   weeklyRateTrend?: { week: string; present: number; absent: number; late: number; sessions: number; rate: number }[];
@@ -1152,12 +1155,14 @@ function LabAssistantDashboard({ data }: { data: DashboardData }) {
 // ─── Student Dashboard ───────────────────────────────────────────────────────
 
 function StudentDashboard({ data }: { data: DashboardData }) {
-  const { stats, courseAttendance, weeklyTrend, riskStatus, weeklyRateTrend } = data;
-  const attendanceColor = stats.overallAttendance >= 75 ? '#0E7490' : stats.overallAttendance >= 50 ? '#B45309' : '#E74C3C';
+  const { stats, courseAttendance, weeklyTrend, riskStatus, weeklyRateTrend, thresholds, examEligible, condonationClearance } = data;
+  const eligibilityPct = thresholds?.eligibilityPct ?? 75;
+  const eligible = examEligible ?? stats.overallAttendance >= eligibilityPct;
+  const attendanceColor = eligible ? '#0E7490' : stats.overallAttendance >= 50 ? '#B45309' : '#E74C3C';
   const riskBadge = {
     on_track: { label: 'On track', className: 'bg-emerald-100 text-emerald-800' },
     watch: { label: 'Watch list', className: 'bg-amber-100 text-amber-800' },
-    at_risk: { label: 'At risk (<75%)', className: 'bg-red-100 text-red-800' },
+    at_risk: { label: `At risk (<${eligibilityPct}%)`, className: 'bg-red-100 text-red-800' },
     no_data: { label: 'No attendance yet', className: 'bg-muted text-muted-foreground' },
   }[riskStatus ?? 'no_data'] ?? { label: 'Unknown', className: 'bg-muted text-muted-foreground' };
   const rateTrend = weeklyRateTrend ?? weeklyTrend.map((w) => ({ week: w.date, rate: w.rate ?? 0 }));
@@ -1166,6 +1171,9 @@ function StudentDashboard({ data }: { data: DashboardData }) {
     <div className="space-y-6">
       <div className="flex items-center gap-2 flex-wrap">
         <Badge className={riskBadge.className}>{riskBadge.label}</Badge>
+        {condonationClearance?.clearedForTerm && (
+          <Badge className="bg-emerald-100 text-emerald-800 border-0">Condonation cleared</Badge>
+        )}
         <Badge variant="outline" className="gap-1"><BarChart2 className="h-3 w-3" /> Personal analytics</Badge>
       </div>
       {/* Attendance Ring + Stats */}
@@ -1184,10 +1192,17 @@ function StudentDashboard({ data }: { data: DashboardData }) {
               </div>
             </div>
             <p className="text-sm font-medium mt-2">
-              {stats.overallAttendance >= 75 ? (
-                <span className="text-green-600 flex items-center gap-1"><CheckCircle2 className="h-4 w-4" /> Eligible for exams</span>
+              {eligible ? (
+                <span className="text-green-600 flex items-center gap-1">
+                  <CheckCircle2 className="h-4 w-4" />
+                  {condonationClearance?.clearedForTerm
+                    ? 'Exam eligible (condonation cleared)'
+                    : 'Eligible for exams'}
+                </span>
               ) : (
-                <span className="text-red-600 flex items-center gap-1"><AlertTriangle className="h-4 w-4" /> Below 75% requirement</span>
+                <span className="text-red-600 flex items-center gap-1">
+                  <AlertTriangle className="h-4 w-4" /> Below {eligibilityPct}% requirement
+                </span>
               )}
             </p>
           </CardContent>

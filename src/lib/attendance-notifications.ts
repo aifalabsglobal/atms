@@ -66,6 +66,11 @@ export async function maybeNotifyLowAttendance(studentId: string): Promise<void>
   const { pct, total } = await getStudentAttendancePct(studentId);
   if (total < 3 || pct >= config.attendance.eligibilityPct) return;
 
+  // Enterprise: cleared-for-term students are exam-eligible — do not nag.
+  const { getStudentCondonationClearance } = await import('@/lib/condonation-service');
+  const clearance = await getStudentCondonationClearance(studentId);
+  if (clearance.clearedForTerm) return;
+
   if (await hasRecentNotification(studentId, LOW_ATTENDANCE_TITLE)) return;
 
   const message = `Your attendance is ${pct}% (${total} sessions recorded), below the ${config.attendance.eligibilityPct}% minimum. Contact faculty or HOD if you need support.`;

@@ -50,12 +50,18 @@ async function resolveActiveAcademicYearId(): Promise<string | null> {
   return active?.id ?? null;
 }
 
-/** Latest approved clearance for a student (enterprise outcome). */
+/** Latest approved clearance for a student for the active academic year (enterprise term scope). */
 export async function getStudentCondonationClearance(
   studentId: string,
 ): Promise<StudentCondonationClearance> {
+  const academicYearId = await resolveActiveAcademicYearId();
   const row = await db.condonationRequest.findFirst({
-    where: { studentId, status: 'approved', clearedForTerm: true },
+    where: {
+      studentId,
+      status: 'approved',
+      clearedForTerm: true,
+      ...(academicYearId ? { academicYearId } : {}),
+    },
     orderBy: { clearedAt: 'desc' },
     select: {
       id: true,
@@ -89,11 +95,13 @@ export async function getCondonationClearanceMap(
   const map = new Map<string, StudentCondonationClearance>();
   if (studentIds.length === 0) return map;
 
+  const academicYearId = await resolveActiveAcademicYearId();
   const rows = await db.condonationRequest.findMany({
     where: {
       studentId: { in: studentIds },
       status: 'approved',
       clearedForTerm: true,
+      ...(academicYearId ? { academicYearId } : {}),
     },
     orderBy: { clearedAt: 'desc' },
     select: {

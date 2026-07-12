@@ -65,6 +65,11 @@ const ROLE_COLORS: Record<string, string> = {
 interface StudentReportData {
   isStudent: true;
   isParent?: boolean;
+  analyticsScope?: 'student';
+  riskStatus?: 'on_track' | 'watch' | 'at_risk' | 'no_data';
+  thresholds?: ReportThresholds;
+  examEligible?: boolean;
+  condonationClearance?: { clearedForTerm: boolean; clearedAt: string | null; attendancePctSnapshot: number | null };
   student: { id: string; name: string; email: string; employeeId: string | null; department: string | null };
   enrolledCourses: { id: string; name: string; code: string; credits: number; type: string; semester: number; instructor: { name: string } | null; _count: { assignments: number; modules: number; enrollments: number } }[];
   attendance: {
@@ -74,9 +79,6 @@ interface StudentReportData {
     recentSessions: { id: string; sessionDate: string; presentCount: number; expectedCount: number; absentCount: number; lateCount: number; course: { name: string; code: string } }[];
     weeklyTrend?: { week: string; present: number; absent: number; late: number; sessions: number; rate: number }[];
   };
-  analyticsScope?: 'student';
-  riskStatus?: 'on_track' | 'watch' | 'at_risk' | 'no_data';
-  thresholds?: ReportThresholds;
   assignments: {
     total: number; graded: number; pending: number; avgScore: number | null;
     recent: { id: string; title: string; course: { id: string; name: string; code: string }; score: number | null; maxScore: number; status: string; feedback: string | null; submittedAt: string; gradedAt: string | null }[];
@@ -105,6 +107,8 @@ function StudentReportView({ data }: { data: StudentReportData }) {
   const ayBadge = reportBrand.academicYearLabel ?? 'Academic year';
   const { student, enrolledCourses, attendance, assignments, quizzes, grades, violations, riskStatus } = data;
   const thresholds = data.thresholds ?? FALLBACK_THRESHOLDS;
+  const examEligible = data.examEligible ?? attendance.overallPercentage >= thresholds.eligibilityPct;
+  const cleared = data.condonationClearance?.clearedForTerm ?? false;
   const isWardView = !!data.isParent;
 
   const riskBadge = {
@@ -234,8 +238,24 @@ function StudentReportView({ data }: { data: StudentReportData }) {
         </Card>
       </div>
 
-      {/* Attendance Warning */}
-      {attendance.overallPercentage < thresholds.eligibilityPct && attendance.totalSessions > 0 && (
+      {/* Attendance / exam eligibility */}
+      {attendance.totalSessions > 0 && cleared && (
+        <Card className="border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20">
+          <CardContent className="flex items-start gap-3 p-4">
+            <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+                Exam eligible — condonation cleared for term
+              </p>
+              <p className="text-xs text-emerald-600/80 dark:text-emerald-300/80 mt-0.5">
+                Raw attendance is {attendance.overallPercentage}% (below {thresholds.eligibilityPct}%). Campus accepted the shortfall for this academic year.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {attendance.overallPercentage < thresholds.eligibilityPct && attendance.totalSessions > 0 && !cleared && (
         <Card className="border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20">
           <CardContent className="flex items-start gap-3 p-4">
             <AlertTriangle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
@@ -245,7 +265,7 @@ function StudentReportView({ data }: { data: StudentReportData }) {
               </p>
               <p className="text-xs text-red-600/80 dark:text-red-300/80 mt-0.5">
                 Your attendance is {attendance.overallPercentage}%, below the mandated {thresholds.eligibilityPct}% minimum.
-                You may be detained from appearing for examinations. Please attend classes regularly.
+                You may be detained from appearing for examinations. Use Attendance → Condonation if you are in the watch band, or contact your HOD.
               </p>
               <div className="mt-2 flex items-center gap-2">
                 <Progress value={attendance.overallPercentage} className="h-2 flex-1 max-w-48" />
@@ -256,7 +276,7 @@ function StudentReportView({ data }: { data: StudentReportData }) {
         </Card>
       )}
 
-      {attendance.overallPercentage >= thresholds.eligibilityPct && attendance.totalSessions > 0 && (
+      {examEligible && !cleared && attendance.overallPercentage >= thresholds.eligibilityPct && attendance.totalSessions > 0 && (
         <Card className="border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20">
           <CardContent className="flex items-start gap-3 p-4">
             <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
@@ -1175,7 +1195,7 @@ function StaffAnalyticsView({ data }: { data: StaffReportData }) {
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
                   <div className="h-10 w-10 rounded-lg bg-red-100 flex items-center justify-center"><TrendingDown className="h-5 w-5 text-red-600" /></div>
-                  <div><p className="text-xs text-muted-foreground">Below {thresholds.eligibilityPct}%</p><p className="text-xl font-bold">{(studentAttendanceReport || []).filter((s: { stats: { percentage: number } }) => s.stats.percentage < thresholds.eligibilityPct).length}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Below {thresholds.eligibilityPct}% (not cleared)</p><p className="text-xl font-bold">{(studentAttendanceReport || []).filter((s: { stats: { percentage: number }; condonationCleared?: boolean }) => s.stats.percentage < thresholds.eligibilityPct && !s.condonationCleared).length}</p></div>
                 </div>
               </CardContent>
             </Card>

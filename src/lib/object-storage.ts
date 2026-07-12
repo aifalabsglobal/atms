@@ -85,6 +85,51 @@ export async function uploadImageFromBase64(
     throw new Error('Invalid or empty image data');
   }
 
+  return putObjectBuffer(folder, filenameStem, ext, buffer, contentType);
+}
+
+/**
+ * Upload supporting evidence for condonation (image scan or PDF).
+ * Max size enforced by callers.
+ */
+export async function uploadDocumentFromBase64(
+  folder: 'condonation-docs',
+  filenameStem: string,
+  base64: string,
+): Promise<{ url: string; backend: ObjectStorageBackend; contentType: string }> {
+  const match = base64.match(/^data:([a-zA-Z0-9/+.-]+);base64,/);
+  const contentType = match?.[1] ?? '';
+  const allowed =
+    contentType.startsWith('image/') ||
+    contentType === 'application/pdf';
+  if (!allowed) {
+    throw new Error('Only image or PDF documents are allowed');
+  }
+
+  const raw = base64.replace(/^data:[^;]+;base64,/, '');
+  const buffer = Buffer.from(raw, 'base64');
+  if (buffer.length < 16) {
+    throw new Error('Invalid or empty document data');
+  }
+
+  let ext = 'bin';
+  if (contentType === 'application/pdf') ext = 'pdf';
+  else if (contentType.includes('jpeg') || contentType.includes('jpg')) ext = 'jpg';
+  else if (contentType.includes('png')) ext = 'png';
+  else if (contentType.includes('webp')) ext = 'webp';
+  else if (contentType.includes('gif')) ext = 'gif';
+
+  const result = await putObjectBuffer(folder, filenameStem, ext, buffer, contentType);
+  return { ...result, contentType };
+}
+
+async function putObjectBuffer(
+  folder: string,
+  filenameStem: string,
+  ext: string,
+  buffer: Buffer,
+  contentType: string,
+): Promise<{ url: string; backend: ObjectStorageBackend }> {
   const backend = getObjectStorageBackend();
   const key = `${folder}/${filenameStem}.${ext}`;
 

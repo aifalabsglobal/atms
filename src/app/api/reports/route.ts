@@ -12,7 +12,7 @@ import {
 } from '@/lib/reports-analytics';
 import { getAttendanceThresholds } from '@/lib/system-config';
 import { rateLimitByUser } from '@/lib/api-rate-limit';
-import { getCondonationClearanceMap } from '@/lib/condonation-service';
+import { getCondonationClearanceMap, getStudentCondonationClearance } from '@/lib/condonation-service';
 
 export async function GET(request: Request) {
   try {
@@ -66,6 +66,9 @@ export async function GET(request: Request) {
         db.attendanceRecord.count({ where: { studentId } }),
       ]);
       const overallPercentage = totalSessions > 0 ? Math.round((presentCount / totalSessions) * 100) : 0;
+      const clearance = await getStudentCondonationClearance(studentId);
+      const examEligible =
+        overallPercentage >= thresholds.eligibilityPct || clearance.clearedForTerm;
 
       const attendanceRecords = await db.attendanceRecord.findMany({
         where: { studentId },
@@ -210,6 +213,8 @@ export async function GET(request: Request) {
         analyticsScope: 'student' as const,
         thresholds,
         riskStatus: attendanceRiskStatus(overallPercentage, totalSessions, thresholds),
+        condonationClearance: clearance,
+        examEligible,
         student: {
           id: student.id,
           name: student.name,
@@ -387,9 +392,6 @@ export async function GET(request: Request) {
     });
 
     const weeklyAttendanceTrend = buildWeeklyTrend(attendanceSummary);
-    const departmentAnalytics =
-      analyticsScope === 'campus' ? buildDepartmentAnalytics(studentAttendanceReport, thresholds) : [];
-
     const clearanceMap = await getCondonationClearanceMap(
       studentAttendanceReport.map((s) => s.id),
     );
@@ -398,6 +400,11 @@ export async function GET(request: Request) {
       ...s,
       condonationCleared: clearanceMap.get(s.id)?.clearedForTerm ?? false,
     }));
+
+    const departmentAnalytics =
+      analyticsScope === 'campus'
+        ? buildDepartmentAnalytics(studentAttendanceReportWithClearance, thresholds)
+        : [];
 
     const atRiskStudents = studentAttendanceReportWithClearance
       .filter((s) => s.stats.total > 0 && s.stats.percentage < thresholds.eligibilityPct)

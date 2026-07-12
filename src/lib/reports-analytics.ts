@@ -91,7 +91,11 @@ export async function buildStudentAttendanceStats(studentWhere: Record<string, u
 }
 
 export function buildDepartmentAnalytics(
-  studentReport: { department: string | null; stats: { percentage: number; total: number } }[],
+  studentReport: {
+    department: string | null;
+    stats: { percentage: number; total: number };
+    condonationCleared?: boolean;
+  }[],
   thresholds: AttendanceThresholds = DEFAULT_ATTENDANCE_THRESHOLDS,
 ) {
   const map = new Map<string, { department: string; students: number; totalPct: number; withRecords: number }>();
@@ -114,7 +118,8 @@ export function buildDepartmentAnalytics(
         (s) =>
           (s.department || 'Unassigned') === d.department &&
           s.stats.percentage < thresholds.eligibilityPct &&
-          s.stats.total > 0
+          s.stats.total > 0 &&
+          !s.condonationCleared,
       ).length,
     }))
     .sort((a, b) => b.students - a.students);
