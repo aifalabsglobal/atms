@@ -17,7 +17,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   MapPin, Plus, Building2, Circle, Pentagon, ToggleLeft, ToggleRight,
   Navigation, CheckCircle2, XCircle, Clock, Loader2, Crosshair, Maximize2,
-  Pencil, Trash2,
+  Pencil, Trash2, AlertTriangle,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAppStore, GEOFENCE_WRITE_ROLES, useEffectiveSections } from '@/lib/store';
