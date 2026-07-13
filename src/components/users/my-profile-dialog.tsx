@@ -159,8 +159,8 @@ export function MyProfileDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-md max-h-[85vh] flex flex-col gap-4 overflow-hidden">
+        <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <UserCircle className="h-5 w-5" />
             My Profile
@@ -173,7 +173,7 @@ export function MyProfileDialog({
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <div className="grid gap-4 py-1">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain -mx-1 px-1 grid gap-4 py-1">
             <div className="flex items-center gap-3">
               <Avatar className="h-14 w-14 border-2">
                 {photoUrl && <AvatarImage src={photoUrl} alt={name} />}
@@ -265,7 +265,7 @@ export function MyProfileDialog({
           </div>
         )}
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button
             onClick={() => saveMutation.mutate()}
