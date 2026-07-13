@@ -33,6 +33,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   ChartContainer, ChartTooltip, ChartTooltipContent,
   ChartLegend, ChartLegendContent,
@@ -358,16 +359,26 @@ function WelcomeBanner() {
     <Card className="border-l-4 overflow-hidden" style={{ borderLeftColor: roleColor }}>
       <CardContent className="p-4 md:p-5">
         <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-lg md:text-xl font-bold" style={{ color: roleColor }}>
-              {getGreeting()}, {currentUser.name.split(' ')[0]}!
-            </h2>
-            <p className="text-sm text-muted-foreground mt-1">{roleDescriptions[role]}</p>
-            {currentUser.department && (
-              <Badge variant="secondary" className="mt-2 text-[10px] gap-1">
-                <Building2 className="h-3 w-3" /> {currentUser.department}
-              </Badge>
-            )}
+          <div className="flex items-start gap-3 min-w-0">
+            <Avatar className="h-12 w-12 md:h-14 md:w-14 border-2 shrink-0 shadow-sm" style={{ borderColor: roleColor }}>
+              {currentUser.profileImageUrl && (
+                <AvatarImage src={currentUser.profileImageUrl} alt={currentUser.name} />
+              )}
+              <AvatarFallback className="text-sm font-bold text-white" style={{ backgroundColor: roleColor }}>
+                {currentUser.avatar}
+              </AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              <h2 className="text-lg md:text-xl font-bold leading-snug" style={{ color: roleColor }}>
+                {getGreeting()}, {currentUser.name}!
+              </h2>
+              <p className="text-sm text-muted-foreground mt-1">{roleDescriptions[role]}</p>
+              {currentUser.department && (
+                <Badge variant="secondary" className="mt-2 text-[10px] gap-1">
+                  <Building2 className="h-3 w-3" /> {currentUser.department}
+                </Badge>
+              )}
+            </div>
           </div>
           <Badge className="text-white shrink-0" style={{ backgroundColor: roleColor }}>
             {ROLE_LABELS[role]}

@@ -36,6 +36,7 @@ export const ROLE_PRESETS: Record<Role, CurrentUser> = {
     role: 'super_admin',
     department: 'Administration',
     avatar: 'KS',
+    profileImageUrl: '/profiles/staff-male-admin.png',
   },
   admin: {
     id: 'u2',
@@ -44,6 +45,7 @@ export const ROLE_PRESETS: Record<Role, CurrentUser> = {
     role: 'admin',
     department: 'Administration',
     avatar: 'MM',
+    profileImageUrl: '/profiles/staff-male-admin.png',
   },
   hod: {
     id: 'u3',
@@ -52,6 +54,7 @@ export const ROLE_PRESETS: Record<Role, CurrentUser> = {
     role: 'hod',
     department: 'Computer Science & Engineering',
     avatar: 'AV',
+    profileImageUrl: '/profiles/staff-male-faculty.png',
   },
   faculty: {
     id: 'u6',
@@ -60,6 +63,7 @@ export const ROLE_PRESETS: Record<Role, CurrentUser> = {
     role: 'faculty',
     department: 'Computer Science & Engineering',
     avatar: 'PV',
+    profileImageUrl: '/profiles/staff-male-faculty.png',
   },
   lab_assistant: {
     id: 'u8',
@@ -68,6 +72,7 @@ export const ROLE_PRESETS: Record<Role, CurrentUser> = {
     role: 'lab_assistant',
     department: 'Computer Science & Engineering',
     avatar: 'RT',
+    profileImageUrl: '/profiles/staff-male-faculty.png',
   },
   student: {
     id: 'u10',
@@ -85,6 +90,7 @@ export const ROLE_PRESETS: Record<Role, CurrentUser> = {
     role: 'parent',
     avatar: 'RK',
     linkedStudentId: 'u10',
+    profileImageUrl: '/profiles/staff-male-admin.png',
   },
   visitor: {
     id: 'u19',
@@ -92,6 +98,7 @@ export const ROLE_PRESETS: Record<Role, CurrentUser> = {
     email: 'visitor.john@aimscs.ac.in',
     role: 'visitor',
     avatar: 'JS',
+    profileImageUrl: '/profiles/staff-male-faculty.png',
   },
   security: {
     id: 'u20',
@@ -99,6 +106,7 @@ export const ROLE_PRESETS: Record<Role, CurrentUser> = {
     email: 'security.murthy@aimscs.ac.in',
     role: 'security',
     avatar: 'MG',
+    profileImageUrl: '/profiles/staff-male-faculty.png',
   },
 };
 
