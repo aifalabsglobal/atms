@@ -9,6 +9,7 @@ import {
   rejectWalletProvisionRequest,
   type WalletProvisionRequestType,
 } from '@/lib/knuct/wallet-provision-request-service';
+import { rejectIfKnuctPolicyDisabled } from '@/lib/knuct/policy-gate';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -35,6 +36,9 @@ export async function POST(req: Request) {
       60_000
     );
     if (limited) return limited;
+
+    const policyBlock = await rejectIfKnuctPolicyDisabled();
+    if (policyBlock) return policyBlock;
 
     const { error, session } = await requireAuth();
     if (error || !session) return error;

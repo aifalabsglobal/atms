@@ -10,6 +10,12 @@ import { BrandLogo } from '@/components/brand-logo';
 import { MyKnuctWalletPanel } from '@/components/knuct/my-knuct-wallet-panel';
 import { useCampusFormat } from '@/hooks/use-campus-format';
 import {
+  attendancePctHexColor,
+  attendancePctTextClass,
+  DEFAULT_ATTENDANCE_THRESHOLDS_LITE,
+  sessionAttendanceRate,
+} from '@/lib/attendance-percentage';
+import {
   Users, GraduationCap, BookOpen, ScanLine, Activity,
   ShieldAlert, UserPlus, ArrowUpRight, ArrowDownRight,
   Clock, MapPin, Fingerprint, Camera, QrCode, Hand,
@@ -99,6 +105,7 @@ interface ActiveSession {
   captureMethod: string;
   expectedCount: number;
   presentCount: number;
+  lateCount?: number;
   timetableSlotId: string | null;
   course: { name: string; code: string };
   creator: { name: string };
@@ -411,7 +418,8 @@ function ActiveSessionsCard({ sessions }: { sessions: ActiveSession[] }) {
         <ScrollArea className="max-h-64">
           <div className="space-y-3">
             {sessions.map((session) => {
-              const pct = session.expectedCount > 0 ? Math.round((session.presentCount / session.expectedCount) * 100) : 0;
+              const pct = sessionAttendanceRate(session);
+              const attended = session.presentCount + (session.lateCount ?? 0);
               const MethodIcon = getMethodIcon(session.captureMethod);
               return (
                 <div key={session.id} className="rounded-lg border bg-muted/30 p-3 space-y-2">
@@ -444,7 +452,7 @@ function ActiveSessionsCard({ sessions }: { sessions: ActiveSession[] }) {
                   <div className="space-y-1">
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-muted-foreground">Attendance</span>
-                      <span className="font-medium">{session.presentCount}/{session.expectedCount} ({pct}%)</span>
+                      <span className="font-medium">{attended}/{session.expectedCount} ({pct}%)</span>
                     </div>
                     <Progress value={pct} className="h-1.5" />
                   </div>
@@ -471,7 +479,13 @@ function ChartBox({ height, children }: { height: number; children: React.ReactN
 
 const chartContainerClass = 'aspect-auto h-64 w-full min-h-64 shrink-0 overflow-hidden';
 
-function CourseAttendanceChart({ data }: { data: CourseAttendance[] }) {
+function CourseAttendanceChart({
+  data,
+  thresholds = DEFAULT_ATTENDANCE_THRESHOLDS_LITE,
+}: {
+  data: CourseAttendance[];
+  thresholds?: { eligibilityPct: number; condonationPct: number };
+}) {
   const chartData = data.map((c) => ({ code: c.code, percentage: c.percentage, name: c.name }));
   return (
     <Card className="overflow-hidden min-w-0">
@@ -507,7 +521,7 @@ function CourseAttendanceChart({ data }: { data: CourseAttendance[] }) {
                       </div>
                       <span className={cn(
                         'text-xs font-semibold shrink-0',
-                        course.percentage >= 75 ? 'text-green-600' : course.percentage >= 50 ? 'text-amber-600' : 'text-red-600'
+                        attendancePctTextClass(course.percentage, thresholds),
                       )}>{course.percentage}%</span>
                     </div>
                     <Progress value={course.percentage} className="h-2" />
@@ -605,6 +619,7 @@ function AnalyticsInsightsPanel({ data }: { data: DashboardData }) {
   const analytics = data.analytics;
   if (!analytics) return null;
 
+  const thresholds = data.thresholds ?? DEFAULT_ATTENDANCE_THRESHOLDS_LITE;
   const rateData = analytics.weeklyRateTrend ?? [];
 
   return (
@@ -618,7 +633,7 @@ function AnalyticsInsightsPanel({ data }: { data: DashboardData }) {
 
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
         {[
-          { label: 'At risk (<75%)', value: analytics.atRiskCount, icon: AlertTriangle, color: '#E74C3C' },
+          { label: `At risk (<${thresholds.eligibilityPct}%)`, value: analytics.atRiskCount, icon: AlertTriangle, color: '#E74C3C' },
           { label: 'Avg grade', value: `${analytics.avgGradePct}%`, icon: Award, color: NAVY },
           { label: 'Quiz attempts', value: analytics.quizAttempts, icon: ClipboardCheck, color: '#7C3AED' },
           { label: 'Avg quiz score', value: `${analytics.avgQuizScore}%`, icon: Target, color: '#1B6B4A' },
@@ -690,7 +705,7 @@ function AnalyticsInsightsPanel({ data }: { data: DashboardData }) {
         <Card className="border-amber-200 bg-amber-50/50 dark:bg-amber-950/20">
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2 text-amber-800">
-              <AlertTriangle className="h-4 w-4" /> Students below 75% ({analytics.atRiskCount})
+              <AlertTriangle className="h-4 w-4" /> Students below {thresholds.eligibilityPct}% ({analytics.atRiskCount})
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
@@ -1019,7 +1034,7 @@ function AdminDashboard({ data, role }: { data: DashboardData; role: Role }) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-        <div className="min-w-0"><CourseAttendanceChart data={courseAttendance} /></div>
+        <div className="min-w-0"><CourseAttendanceChart data={courseAttendance} thresholds={data.thresholds} /></div>
         <div className="min-w-0"><CaptureMethodsChart data={captureMethods} /></div>
       </div>
       <WeeklyTrendChart data={weeklyTrend} />
@@ -1048,7 +1063,7 @@ function HODDashboard({ data }: { data: DashboardData }) {
         <div className="min-w-0"><ViolationsChart byType={violationByType} bySeverity={violationBySeverity} /></div>
       </div>
 
-      <div className="min-w-0"><CourseAttendanceChart data={courseAttendance} /></div>
+      <div className="min-w-0"><CourseAttendanceChart data={courseAttendance} thresholds={data.thresholds} /></div>
       <WeeklyTrendChart data={weeklyTrend} />
       <RecentActivityFeed activities={data.recentActivity} />
     </div>
@@ -1073,7 +1088,7 @@ function FacultyDashboard({ data }: { data: DashboardData }) {
       <ActiveSessionsCard sessions={activeSessionsList} />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-        <div className="min-w-0"><CourseAttendanceChart data={courseAttendance} /></div>
+        <div className="min-w-0"><CourseAttendanceChart data={courseAttendance} thresholds={data.thresholds} /></div>
         <div className="min-w-0">
         <Card className="overflow-hidden">
           <CardHeader className="pb-2"><CardTitle className="text-base">Quick Actions</CardTitle></CardHeader>
@@ -1155,14 +1170,14 @@ function LabAssistantDashboard({ data }: { data: DashboardData }) {
 // ─── Student Dashboard ───────────────────────────────────────────────────────
 
 function StudentDashboard({ data }: { data: DashboardData }) {
-  const { stats, courseAttendance, weeklyTrend, riskStatus, weeklyRateTrend, thresholds, examEligible, condonationClearance } = data;
-  const eligibilityPct = thresholds?.eligibilityPct ?? 75;
-  const eligible = examEligible ?? stats.overallAttendance >= eligibilityPct;
-  const attendanceColor = eligible ? '#0E7490' : stats.overallAttendance >= 50 ? '#B45309' : '#E74C3C';
+  const { stats, courseAttendance, weeklyTrend, riskStatus, weeklyRateTrend, examEligible, condonationClearance } = data;
+  const thresholds = data.thresholds ?? DEFAULT_ATTENDANCE_THRESHOLDS_LITE;
+  const eligible = examEligible ?? stats.overallAttendance >= thresholds.eligibilityPct;
+  const attendanceColor = attendancePctHexColor(stats.overallAttendance, thresholds);
   const riskBadge = {
     on_track: { label: 'On track', className: 'bg-emerald-100 text-emerald-800' },
     watch: { label: 'Watch list', className: 'bg-amber-100 text-amber-800' },
-    at_risk: { label: `At risk (<${eligibilityPct}%)`, className: 'bg-red-100 text-red-800' },
+    at_risk: { label: `At risk (<${thresholds.eligibilityPct}%)`, className: 'bg-red-100 text-red-800' },
     no_data: { label: 'No attendance yet', className: 'bg-muted text-muted-foreground' },
   }[riskStatus ?? 'no_data'] ?? { label: 'Unknown', className: 'bg-muted text-muted-foreground' };
   const rateTrend = weeklyRateTrend ?? weeklyTrend.map((w) => ({ week: w.date, rate: w.rate ?? 0 }));
@@ -1201,15 +1216,15 @@ function StudentDashboard({ data }: { data: DashboardData }) {
                 </span>
               ) : (
                 <span className="text-red-600 flex items-center gap-1">
-                  <AlertTriangle className="h-4 w-4" /> Below {eligibilityPct}% requirement
+                  <AlertTriangle className="h-4 w-4" /> Below {thresholds.eligibilityPct}% requirement
                 </span>
               )}
             </p>
           </CardContent>
         </Card>
         <StatCard label="My Courses" value={stats.totalCourses} icon={BookOpen} format="number" color="#0E7490" />
-        <StatCard label="Classes Attended" value={stats.totalPresent} icon={CheckCircle2} format="number" color="#0E7490" />
-        <StatCard label="Classes Missed" value={stats.totalAbsent + stats.totalLate} icon={XCircle} format="number" color="#E74C3C" />
+        <StatCard label="Classes Attended" value={stats.totalPresent + stats.totalLate} icon={CheckCircle2} format="number" color="#0E7490" />
+        <StatCard label="Classes Missed" value={stats.totalAbsent} icon={XCircle} format="number" color="#E74C3C" />
       </div>
 
       {/* Course Performance */}
@@ -1224,11 +1239,11 @@ function StudentDashboard({ data }: { data: DashboardData }) {
                     <Badge variant="secondary" className="text-[10px] font-mono">{course.code}</Badge>
                     <span className="font-medium text-xs truncate max-w-[140px]">{course.name}</span>
                   </div>
-                  <span className={`text-xs font-semibold ${course.percentage >= 75 ? 'text-green-600' : course.percentage >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
+                  <span className={cn('text-xs font-semibold', attendancePctTextClass(course.percentage, thresholds))}>
                     {course.percentage}%
                   </span>
                 </div>
-                <Progress value={course.percentage} className={`h-2 ${course.percentage >= 75 ? '' : course.percentage >= 50 ? '[&>[data-slot=progress-indicator]]:bg-amber-500' : '[&>[data-slot=progress-indicator]]:bg-red-500'}`} />
+                <Progress value={course.percentage} className={`h-2 ${course.percentage >= thresholds.eligibilityPct ? '' : course.percentage >= thresholds.condonationPct ? '[&>[data-slot=progress-indicator]]:bg-amber-500' : '[&>[data-slot=progress-indicator]]:bg-red-500'}`} />
               </div>
             ))}
           </CardContent>
@@ -1271,9 +1286,11 @@ function StudentDashboard({ data }: { data: DashboardData }) {
 
 function ParentDashboard({ data }: { data: DashboardData }) {
   const { stats, courseAttendance, weeklyTrend, ward } = data;
+  const thresholds = data.thresholds ?? DEFAULT_ATTENDANCE_THRESHOLDS_LITE;
   const wardName = ward?.name ?? 'Your ward';
   const wardDept = ward?.department ?? '—';
   const initials = wardName.split(' ').map((p) => p[0]).join('').slice(0, 2).toUpperCase();
+  const eligible = stats.overallAttendance >= thresholds.eligibilityPct;
 
   return (
     <div className="space-y-6">
@@ -1287,11 +1304,11 @@ function ParentDashboard({ data }: { data: DashboardData }) {
               <h3 className="text-lg font-semibold">{wardName}</h3>
               <p className="text-sm text-muted-foreground">{wardDept}</p>
               <div className="flex items-center gap-2 mt-1">
-                <Badge variant="outline" className={`text-[10px] ${stats.overallAttendance >= 75 ? 'text-green-600 border-green-200' : 'text-red-600 border-red-200'}`}>
-                  {stats.overallAttendance >= 75 ? <CheckCircle2 className="h-3 w-3 mr-1" /> : <AlertTriangle className="h-3 w-3 mr-1" />}
+                <Badge variant="outline" className={`text-[10px] ${eligible ? 'text-green-600 border-green-200' : 'text-red-600 border-red-200'}`}>
+                  {eligible ? <CheckCircle2 className="h-3 w-3 mr-1" /> : <AlertTriangle className="h-3 w-3 mr-1" />}
                   {stats.overallAttendance}% Attendance
                 </Badge>
-                <Badge variant="outline" className="text-[10px]"><Award className="h-3 w-3 mr-1" />Good Standing</Badge>
+                <Badge variant="outline" className="text-[10px]"><Award className="h-3 w-3 mr-1" />{eligible ? 'On track' : `Below ${thresholds.eligibilityPct}%`}</Badge>
               </div>
             </div>
           </div>
@@ -1300,7 +1317,7 @@ function ParentDashboard({ data }: { data: DashboardData }) {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Overall Attendance" value={stats.overallAttendance} icon={Activity} format="percent" color="#BE185D" />
-        <StatCard label="Classes Attended" value={stats.totalPresent} icon={CheckCircle2} format="number" color="#BE185D" />
+        <StatCard label="Classes Attended" value={stats.totalPresent + stats.totalLate} icon={CheckCircle2} format="number" color="#BE185D" />
         <StatCard label="Classes Missed" value={stats.totalAbsent} icon={XCircle} format="number" color="#E74C3C" />
         <StatCard label="Late Arrivals" value={stats.totalLate} icon={Timer} format="number" color="#B45309" />
       </div>
@@ -1316,11 +1333,11 @@ function ParentDashboard({ data }: { data: DashboardData }) {
                     <Badge variant="secondary" className="text-[10px] font-mono">{course.code}</Badge>
                     <span className="font-medium text-xs truncate max-w-[140px]">{course.name}</span>
                   </div>
-                  <span className={`text-xs font-semibold ${course.percentage >= 75 ? 'text-green-600' : 'text-red-600'}`}>
+                  <span className={cn('text-xs font-semibold', attendancePctTextClass(course.percentage, thresholds))}>
                     {course.percentage}%
                   </span>
                 </div>
-                <Progress value={course.percentage} className={`h-2 ${course.percentage >= 75 ? '' : '[&>[data-slot=progress-indicator]]:bg-red-500'}`} />
+                <Progress value={course.percentage} className={`h-2 ${course.percentage >= thresholds.eligibilityPct ? '' : course.percentage >= thresholds.condonationPct ? '[&>[data-slot=progress-indicator]]:bg-amber-500' : '[&>[data-slot=progress-indicator]]:bg-red-500'}`} />
               </div>
             ))}
           </CardContent>

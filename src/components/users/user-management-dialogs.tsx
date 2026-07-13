@@ -9,6 +9,8 @@ import type { Role } from '@/lib/store';
 import {
   defaultRoleForScope,
   rolesForActor,
+  canDeactivateUser,
+  canResetUserPassword,
   type RoleScope,
 } from '@/lib/user-management';
 import { Button } from '@/components/ui/button';
@@ -129,6 +131,8 @@ export function EditUserDialog({
   const [uploading, setUploading] = useState(false);
   const [form, setForm] = useState({
     name: '',
+    email: '',
+    employeeId: '',
     role: 'student' as Role,
     status: 'active',
     departmentId: '',
@@ -140,6 +144,8 @@ export function EditUserDialog({
     if (!user) return;
     setForm({
       name: user.name,
+      email: user.email,
+      employeeId: user.employeeId || '',
       role: user.role as Role,
       status: user.status,
       departmentId: resolveDepartmentId(user, departments),
@@ -151,6 +157,11 @@ export function EditUserDialog({
 
   const assignableRoles = rolesForActor(actorRole);
   const canEditDept = actorRole !== 'hod';
+  const canEditIdentity = actorRole === 'super_admin' || actorRole === 'admin';
+  const showResetPassword = user ? canResetUserPassword(actorRole, user.role as Role) : false;
+  const showDeactivate = user
+    ? canDeactivateUser(actorRole, user.role as Role) && user.status !== 'inactive'
+    : false;
 
   const handleSave = () => {
     if (!user) return;
@@ -163,6 +174,8 @@ export function EditUserDialog({
       {
         id: user.id,
         name: form.name,
+        email: canEditIdentity ? form.email : undefined,
+        employeeId: canEditIdentity ? form.employeeId : undefined,
         role: form.role,
         status: form.status,
         department: selectedDept?.name ?? (form.departmentId ? undefined : user.department ?? undefined),
@@ -242,6 +255,25 @@ export function EditUserDialog({
             <Label htmlFor="eu-name">Full name</Label>
             <Input id="eu-name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
           </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="eu-email">Email</Label>
+            <Input
+              id="eu-email"
+              type="email"
+              value={form.email}
+              disabled={!canEditIdentity}
+              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="eu-emp">Employee ID</Label>
+            <Input
+              id="eu-emp"
+              value={form.employeeId}
+              disabled={!canEditIdentity}
+              onChange={(e) => setForm((f) => ({ ...f, employeeId: e.target.value }))}
+            />
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-1.5">
               <Label>Role</Label>
@@ -306,7 +338,7 @@ export function EditUserDialog({
           </div>
         </div>
         <DialogFooter className="flex-col sm:flex-row gap-2">
-          {['super_admin', 'admin'].includes(actorRole) && (
+          {showResetPassword && (
             <Button
               variant="outline"
               size="sm"
@@ -318,7 +350,7 @@ export function EditUserDialog({
               Reset password
             </Button>
           )}
-          {['super_admin', 'admin'].includes(actorRole) && user.status !== 'inactive' && (
+          {showDeactivate && (
             <Button
               variant="destructive"
               size="sm"
@@ -527,6 +559,8 @@ export function useUserMutations() {
     mutationFn: async ({ id, ...body }: {
       id: string;
       name?: string;
+      email?: string;
+      employeeId?: string | null;
       role?: Role;
       status?: string;
       department?: string;
@@ -558,7 +592,12 @@ export function useUserMutations() {
 
   const deactivateUser = useMutation({
     mutationFn: async (id: string) => {
-      const res = await fetch(`/api/users/${id}`, { method: 'DELETE' });
+      // Soft-deactivate via PATCH so HOD (and admins) share one working path.
+      const res = await fetch(`/api/users/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'inactive' }),
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Deactivate failed');
       return data;

@@ -1,7 +1,8 @@
 import { db } from '@/lib/db';
-import { getSystemConfig } from '@/lib/system-config';
+import { getSystemConfig, getAttendanceThresholds } from '@/lib/system-config';
 import { createInAppNotification } from '@/lib/notifications';
 import { getGlobalNumber } from '@/lib/settings';
+import { attendancePercentageFromCounts } from '@/lib/attendance-percentage';
 
 const LOW_ATTENDANCE_TITLE = 'Low attendance warning';
 
@@ -36,13 +37,15 @@ export async function getStudentAttendancePct(studentId: string): Promise<{ pct:
     _count: { _all: true },
   });
   let present = 0;
+  let late = 0;
   let total = 0;
   for (const row of grouped) {
     const n = row._count._all;
     total += n;
-    if (row.status === 'present' || row.status === 'late') present += n;
+    if (row.status === 'present') present += n;
+    else if (row.status === 'late') late += n;
   }
-  const pct = total > 0 ? Math.round((present / total) * 100) : 100;
+  const pct = total > 0 ? attendancePercentageFromCounts({ present, late, total }) : 100;
   return { pct, total };
 }
 
@@ -63,8 +66,14 @@ export async function maybeNotifyLowAttendance(studentId: string): Promise<void>
   const config = await getSystemConfig();
   if (!config.notifications.lowAttendanceWarningEnabled) return;
 
+  const student = await db.user.findUnique({
+    where: { id: studentId },
+    select: { email: true, name: true, phone: true, departmentId: true },
+  });
+  const thresholds = await getAttendanceThresholds({ departmentId: student?.departmentId });
+
   const { pct, total } = await getStudentAttendancePct(studentId);
-  if (total < 3 || pct >= config.attendance.eligibilityPct) return;
+  if (total < 3 || pct >= thresholds.eligibilityPct) return;
 
   // Enterprise: cleared-for-term students are exam-eligible — do not nag.
   const { getStudentCondonationClearance } = await import('@/lib/condonation-service');
@@ -73,7 +82,7 @@ export async function maybeNotifyLowAttendance(studentId: string): Promise<void>
 
   if (await hasRecentNotification(studentId, LOW_ATTENDANCE_TITLE)) return;
 
-  const message = `Your attendance is ${pct}% (${total} sessions recorded), below the ${config.attendance.eligibilityPct}% minimum. Contact faculty or HOD if you need support.`;
+  const message = `Your attendance is ${pct}% (${total} sessions recorded), below the ${thresholds.eligibilityPct}% minimum. Contact faculty or HOD if you need support.`;
 
   await createInAppNotification({
     userId: studentId,
@@ -85,31 +94,18 @@ export async function maybeNotifyLowAttendance(studentId: string): Promise<void>
 
   await notifyLinkedParents(studentId, LOW_ATTENDANCE_TITLE, message);
 
-  if (config.notifications.lowAttendanceEmailEnabled) {
-    const student = await db.user.findUnique({
-      where: { id: studentId },
-      select: { email: true, name: true, phone: true },
-    });
-    if (student?.email) {
-      const { sendLowAttendanceEmail } = await import('@/lib/email');
-      await sendLowAttendanceEmail(student.email, student.name, pct, config.attendance.eligibilityPct);
-    }
+  if (config.notifications.lowAttendanceEmailEnabled && student?.email) {
+    const { sendLowAttendanceEmail } = await import('@/lib/email');
+    await sendLowAttendanceEmail(student.email, student.name, pct, thresholds.eligibilityPct);
   }
 
-  const { getGlobalBoolean } = await import('@/lib/settings');
-  const smsEnabled = await getGlobalBoolean('notifications.low_attendance_sms', false);
-  if (smsEnabled) {
-    const student = await db.user.findUnique({
-      where: { id: studentId },
-      select: { phone: true, name: true },
-    });
-    if (student?.phone) {
-      const { sendSms } = await import('@/lib/sms');
-      await sendSms(
-        student.phone,
-        `AIMSCS: attendance ${pct}% is below the ${config.attendance.eligibilityPct}% minimum. Check the app for details.`,
-      );
-    }
+  const smsEnabled = config.notifications.lowAttendanceSmsEnabled;
+  if (smsEnabled && student?.phone) {
+    const { sendSms } = await import('@/lib/sms');
+    await sendSms(
+      student.phone,
+      `AIMSCS: attendance ${pct}% is below the ${thresholds.eligibilityPct}% minimum. Check the app for details.`,
+    );
   }
 }
 

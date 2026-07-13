@@ -56,6 +56,18 @@ export {
   type AuthSettings,
 } from './auth-config';
 export {
+  parseIdentityMode,
+  isKnuctUiEnabled,
+  isKnuctLoginVisible,
+  preferKnuctLogin,
+  formatIdentityModePreview,
+  knuctPolicyBlockedMessage,
+  DEFAULT_IDENTITY_MODE,
+  IDENTITY_MODE_LABELS,
+  type IdentityMode,
+} from './identity-mode';
+export { getIdentityMode } from './identity-mode-server';
+export {
   getOrgSettings,
   isNonWorkingDay,
   DEFAULT_ORG_SETTINGS,

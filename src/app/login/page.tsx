@@ -22,6 +22,7 @@ import { DEMO_FLOW, DEMO_PREP_STEPS, DEMO_DO_NOT_SHOW } from '@/lib/demo-walkthr
 import { ROLE_COLORS } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import type { IdentityMode } from '@/lib/settings/identity-mode';
 
 const QUICK_TRY = [
   { label: 'Super Admin', email: 'vice.chancellor@aimscs.ac.in', icon: Crown, color: '#1A3C6E' },
@@ -47,6 +48,9 @@ export default function LoginPage() {
   const [mfaRequired, setMfaRequired] = useState(false);
   const [mfaCode, setMfaCode] = useState('');
   const [googleSso, setGoogleSso] = useState(false);
+  const [identityMode, setIdentityMode] = useState<IdentityMode>('password_only');
+  const [knuctDidVisible, setKnuctDidVisible] = useState(false);
+  const [loginTab, setLoginTab] = useState<'password' | 'knuct'>('password');
 
   useEffect(() => {
     setMounted(true);
@@ -68,8 +72,30 @@ export default function LoginPage() {
 
     fetch('/api/auth/methods')
       .then((r) => r.json())
-      .then((d) => setGoogleSso(d.google === true))
-      .catch(() => setGoogleSso(false));
+      .then((d: {
+        google?: boolean;
+        knuctDid?: boolean;
+        identityMode?: IdentityMode;
+        preferKnuctLogin?: boolean;
+      }) => {
+        setGoogleSso(d.google === true);
+        const knuctDid = d.knuctDid === true;
+        setKnuctDidVisible(knuctDid);
+        if (d.identityMode === 'hybrid' || d.identityMode === 'knuct_based' || d.identityMode === 'password_only') {
+          setIdentityMode(d.identityMode);
+        }
+        if (knuctDid && d.preferKnuctLogin) {
+          setLoginTab('knuct');
+        } else {
+          setLoginTab('password');
+        }
+      })
+      .catch(() => {
+        setGoogleSso(false);
+        setKnuctDidVisible(false);
+        setIdentityMode('password_only');
+        setLoginTab('password');
+      });
   }, []);
 
   const signInAs = async (targetEmail: string, targetPassword = DEMO_PASSWORD, code?: string) => {
@@ -210,7 +236,11 @@ export default function LoginPage() {
             {general.appName}
           </CardTitle>
           <CardDescription>
-            {general.tagline} — sign in with email or Knuct DID
+            {knuctDidVisible
+              ? identityMode === 'knuct_based'
+                ? `${general.tagline} — Knuct DID sign-in (password available as fallback)`
+                : `${general.tagline} — sign in with email or Knuct DID`
+              : `${general.tagline} — sign in with email and password`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -220,10 +250,12 @@ export default function LoginPage() {
               <Skeleton className="h-9 w-full" />
               <Skeleton className="h-24 w-full" />
             </div>
-          ) : (
-            <Tabs defaultValue="password" className="space-y-4">
+          ) : knuctDidVisible ? (
+            <Tabs value={loginTab} onValueChange={(v) => setLoginTab(v as 'password' | 'knuct')} className="space-y-4">
               <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="password">Email & password</TabsTrigger>
+                <TabsTrigger value="password">
+                  {identityMode === 'knuct_based' ? 'Password (fallback)' : 'Email & password'}
+                </TabsTrigger>
                 <TabsTrigger value="knuct" className="gap-1.5">
                   <KeyRound className="h-3.5 w-3.5" />
                   Knuct DID
@@ -441,6 +473,108 @@ export default function LoginPage() {
                 </Link>
               </p>
             </Tabs>
+          ) : (
+            <div className="space-y-4">
+              {error && (
+                <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2">
+                  <p className="text-sm text-destructive">{error}</p>
+                </div>
+              )}
+              <div className="grid md:grid-cols-2 gap-6">
+                <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="email-only">Email</Label>
+                    <Input
+                      id="email-only"
+                      type="email"
+                      placeholder={BRAND.emailPlaceholder}
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      disabled={loading}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="password-only">Password</Label>
+                    <Input
+                      id="password-only"
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      disabled={loading || mfaRequired}
+                      required
+                    />
+                  </div>
+                  {mfaRequired && (
+                    <div className="space-y-2">
+                      <Label htmlFor="mfa-only">Authenticator code</Label>
+                      <Input
+                        id="mfa-only"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        className="font-mono tracking-widest"
+                        maxLength={6}
+                        value={mfaCode}
+                        onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        disabled={loading}
+                        required
+                        placeholder="000000"
+                      />
+                    </div>
+                  )}
+                  <Button
+                    type="submit"
+                    className="w-full text-white hover:opacity-90"
+                    style={{ backgroundColor: general.brandingPrimaryColor }}
+                    disabled={loading}
+                  >
+                    {loadingEmail === email ? <Loader2 className="h-4 w-4 animate-spin" /> : mfaRequired ? 'Verify & sign in' : 'Sign in'}
+                  </Button>
+                  {googleSso && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      disabled={loading}
+                      onClick={() => void signIn('google', { callbackUrl: '/' })}
+                    >
+                      Continue with Google
+                    </Button>
+                  )}
+                </form>
+                <div className="space-y-4">
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground mb-2">Try instantly — no setup needed</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {QUICK_TRY.map((q) => {
+                        const Icon = q.icon;
+                        const isLoading = loadingEmail === q.email;
+                        return (
+                          <Button
+                            key={q.email}
+                            type="button"
+                            variant="outline"
+                            className="h-auto py-3 flex flex-col gap-1.5"
+                            disabled={loading}
+                            onClick={() => void signInAs(q.email)}
+                          >
+                            {isLoading ? (
+                              <Loader2 className="h-5 w-5 animate-spin" style={{ color: q.color }} />
+                            ) : (
+                              <Icon className="h-5 w-5" style={{ color: q.color }} />
+                            )}
+                            <span className="text-[11px] font-medium">{q.label}</span>
+                          </Button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground text-center">
+                    Campus identity mode is password only. Ask a Super Admin to enable Hybrid or Knuct-based for DID login.
+                  </p>
+                </div>
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>

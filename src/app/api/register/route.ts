@@ -10,6 +10,7 @@ import { enforceRateLimit } from '@/lib/rate-limit';
 import { runDidAuthChallenge, runDidAuthComplete } from '@/lib/knuct/did-auth-flow';
 import { createRegistrationRequest, createRegistrationPendingWallet } from '@/lib/knuct/registration-service';
 import { purgeDIDAuthSessions } from '@/lib/knuct/did-auth-session';
+import { rejectIfKnuctPolicyDisabled } from '@/lib/knuct/policy-gate';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -30,6 +31,9 @@ export async function POST(req: Request) {
   if (!authSettings.selfRegistrationEnabled) {
     return NextResponse.json({ error: 'Self-registration is disabled' }, { status: 403 });
   }
+
+  const policyBlock = await rejectIfKnuctPolicyDisabled();
+  if (policyBlock) return policyBlock;
 
   await purgeDIDAuthSessions();
 

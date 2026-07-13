@@ -291,14 +291,14 @@ const defs: SettingDefinition[] = [
     description: 'Minimum attendance percentage for exam eligibility.',
     valueType: 'number',
     defaultValue: 75,
-    validation: { min: 0, max: 100, required: true },
+    validation: { min: 50, max: 100, required: true },
     allowDepartmentOverride: true,
   },
   {
     key: 'attendance.condonation_pct',
     category: 'attendance',
     displayName: 'Condonation attendance %',
-    description: 'Lower bound for condonation consideration.',
+    description: 'Lower bound for condonation consideration (must be ≤ eligibility %).',
     valueType: 'number',
     defaultValue: 65,
     validation: { min: 0, max: 100, required: true },
@@ -889,8 +889,27 @@ const defs: SettingDefinition[] = [
 
   // User management / auth
   {
+    key: 'auth.identity_mode',
+    category: 'users',
+    subcategory: 'Identity & login',
+    displayName: 'Campus identity mode',
+    description:
+      'How users sign in and whether Knuct wallets/DID are part of campus policy. Password-only hides Knuct. Hybrid keeps email/password primary with optional Knuct. Knuct-based opens DID login first; Super Admin password remains as break-glass. Live vendor calls still need KNUCT_ENABLED in the environment.',
+    valueType: 'enum',
+    defaultValue: 'password_only',
+    validation: {
+      allowedValues: ['password_only', 'hybrid', 'knuct_based'],
+      optionLabels: {
+        password_only: 'Password only (Postgres + next-auth)',
+        hybrid: 'Hybrid (password + Knuct)',
+        knuct_based: 'Knuct-based (DID primary)',
+      },
+    },
+  },
+  {
     key: 'users.password_min_length',
     category: 'users',
+    subcategory: 'Password policy',
     displayName: 'Password minimum length',
     description: 'Minimum characters required for new or reset passwords.',
     valueType: 'number',
@@ -1182,10 +1201,6 @@ export function validateSettingValue(def: SettingDefinition, value: unknown): st
     if (!v.allowedValues.includes(value as string | number | boolean)) {
       return `Allowed values: ${v.allowedValues.join(', ')}`;
     }
-  }
-
-  if (def.key === 'attendance.eligibility_pct' || def.key === 'attendance.condonation_pct') {
-    // Cross-field check happens in adapter when saving full config.
   }
 
   return null;

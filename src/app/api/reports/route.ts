@@ -13,6 +13,7 @@ import {
 import { getAttendanceThresholds } from '@/lib/system-config';
 import { rateLimitByUser } from '@/lib/api-rate-limit';
 import { getCondonationClearanceMap, getStudentCondonationClearance } from '@/lib/condonation-service';
+import { attendancePercentageFromCounts } from '@/lib/attendance-percentage';
 
 export async function GET(request: Request) {
   try {
@@ -21,8 +22,6 @@ export async function GET(request: Request) {
 
     const limited = await rateLimitByUser(request, session.user.id, 'reports', 40, 60_000);
     if (limited) return limited;
-
-    const thresholds = await getAttendanceThresholds();
 
     const { searchParams } = new URL(request.url);
     const { studentId, error: studentError } = await resolveStudentId(session, searchParams.get('studentId'));
@@ -35,13 +34,15 @@ export async function GET(request: Request) {
       const student = await db.user.findUnique({
         where: { id: studentId },
         select: {
-          id: true, name: true, email: true, employeeId: true, department: true, role: true,
+          id: true, name: true, email: true, employeeId: true, department: true, departmentId: true, role: true,
         },
       });
 
       if (!student) {
         return NextResponse.json({ error: 'Student not found' }, { status: 404 });
       }
+
+      const thresholds = await getAttendanceThresholds({ departmentId: student.departmentId });
 
       // 2. Get enrolled courses
       const enrollments = await db.courseEnrollment.findMany({
@@ -65,7 +66,11 @@ export async function GET(request: Request) {
         db.attendanceRecord.count({ where: { studentId, status: 'late' } }),
         db.attendanceRecord.count({ where: { studentId } }),
       ]);
-      const overallPercentage = totalSessions > 0 ? Math.round((presentCount / totalSessions) * 100) : 0;
+      const overallPercentage = attendancePercentageFromCounts({
+        present: presentCount,
+        late: lateCount,
+        total: totalSessions,
+      });
       const clearance = await getStudentCondonationClearance(studentId);
       const examEligible =
         overallPercentage >= thresholds.eligibilityPct || clearance.clearedForTerm;
@@ -99,7 +104,7 @@ export async function GET(request: Request) {
       });
       const courseAttendance = Array.from(courseAttendanceMap.values()).map(ca => ({
         ...ca,
-        percentage: ca.total > 0 ? Math.round((ca.present / ca.total) * 100) : 0,
+        percentage: attendancePercentageFromCounts(ca),
       }));
 
       // Recent attendance sessions (for the student's courses)
@@ -289,6 +294,9 @@ export async function GET(request: Request) {
 
     const deptName = scope.level === 'department' ? await getDepartmentName(scope.departmentId) : undefined;
     const { scope: analyticsScope, label: scopeLabelText } = scopeLabel(scope, deptName);
+    const thresholds = await getAttendanceThresholds({
+      departmentId: scope.level === 'department' ? scope.departmentId : undefined,
+    });
 
     const [
       totalStudents,
@@ -436,7 +444,8 @@ export async function GET(request: Request) {
 
     const expectedSum = sessionAgg._sum.expectedCount ?? 0;
     const presentSum = sessionAgg._sum.presentCount ?? 0;
-    const avgAttendancePct = expectedSum > 0 ? Math.round((presentSum / expectedSum) * 100) : 0;
+    const lateSum = sessionAgg._sum.lateCount ?? 0;
+    const avgAttendancePct = expectedSum > 0 ? Math.round(((presentSum + lateSum) / expectedSum) * 100) : 0;
 
     const avgGradePct =
       allGrades.length > 0

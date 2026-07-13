@@ -18,6 +18,13 @@ import { usePlatformSettings, useOrgSettings, useActiveAcademicYear } from '@/ho
 import { DEFAULT_GENERAL_SETTINGS } from '@/lib/settings/general-defaults';
 import { DEFAULT_ORG_SETTINGS } from '@/lib/settings/org-defaults';
 import { DEFAULT_BRAND_PRIMARY } from '@/lib/brand-color';
+import {
+  attendancePctBgClass,
+  attendancePctTextClass,
+  DEFAULT_ATTENDANCE_THRESHOLDS_LITE,
+  sessionAttendanceRate,
+  type AttendanceThresholdsLite,
+} from '@/lib/attendance-percentage';
 import { Button } from '@/components/ui/button';
 import { useMemo } from 'react';
 import {
@@ -33,20 +40,8 @@ import {
 
 const COLORS = [DEFAULT_BRAND_PRIMARY, '#2E7D32', '#E65100', '#6A1B9A', '#C62828', '#00838F', '#F9A825'];
 
-type ReportThresholds = { eligibilityPct: number; condonationPct: number };
-const FALLBACK_THRESHOLDS: ReportThresholds = { eligibilityPct: 75, condonationPct: 65 };
-
-function attendancePctTextClass(pct: number, t: ReportThresholds): string {
-  if (pct >= t.eligibilityPct) return 'text-emerald-600';
-  if (pct >= t.condonationPct) return 'text-amber-600';
-  return 'text-red-600';
-}
-
-function attendancePctBgClass(pct: number, t: ReportThresholds): string {
-  if (pct >= t.eligibilityPct) return 'bg-emerald-100 dark:bg-emerald-900/30';
-  if (pct >= t.condonationPct) return 'bg-amber-100 dark:bg-amber-900/30';
-  return 'bg-red-100 dark:bg-red-900/30';
-}
+type ReportThresholds = AttendanceThresholdsLite;
+const FALLBACK_THRESHOLDS: ReportThresholds = DEFAULT_ATTENDANCE_THRESHOLDS_LITE;
 
 const ROLE_COLORS: Record<string, string> = {
   super_admin: DEFAULT_BRAND_PRIMARY,
@@ -964,6 +959,7 @@ function StaffAnalyticsView({ data }: { data: StaffReportData }) {
             onClick={() => exportStaffReportCsv({
               scopeLabel: data.scopeLabel,
               analyticsScope: data.analyticsScope,
+              thresholds: data.thresholds,
               kpis: data.kpis,
               weeklyAttendanceTrend: data.weeklyAttendanceTrend,
               departmentAnalytics: data.departmentAnalytics,
@@ -981,6 +977,7 @@ function StaffAnalyticsView({ data }: { data: StaffReportData }) {
             onClick={() => exportStaffReportPdf({
               scopeLabel: data.scopeLabel,
               analyticsScope: data.analyticsScope,
+              thresholds: data.thresholds,
               kpis: data.kpis,
               weeklyAttendanceTrend: data.weeklyAttendanceTrend,
               departmentAnalytics: data.departmentAnalytics,
@@ -1179,7 +1176,7 @@ function StaffAnalyticsView({ data }: { data: StaffReportData }) {
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
                   <div className="h-10 w-10 rounded-lg bg-green-100 flex items-center justify-center"><TrendingUp className="h-5 w-5 text-green-600" /></div>
-                  <div><p className="text-xs text-muted-foreground">Avg Attendance</p><p className="text-xl font-bold">{attendanceSummary?.length > 0 ? Math.round(attendanceSummary.reduce((s: number, a: { presentCount: number; expectedCount: number }) => s + (a.expectedCount > 0 ? (a.presentCount / a.expectedCount) * 100 : 0), 0) / attendanceSummary.length) : 0}%</p></div>
+                  <div><p className="text-xs text-muted-foreground">Avg Attendance</p><p className="text-xl font-bold">{attendanceSummary?.length > 0 ? Math.round(attendanceSummary.reduce((s: number, a: { presentCount: number; lateCount?: number; expectedCount: number }) => s + sessionAttendanceRate(a), 0) / attendanceSummary.length) : 0}%</p></div>
                 </div>
               </CardContent>
             </Card>
@@ -1223,7 +1220,7 @@ function StaffAnalyticsView({ data }: { data: StaffReportData }) {
                   </TableHeader>
                   <TableBody>
                     {(attendanceSummary || []).slice(0, 15).map((s: { id: string; sessionDate: string; presentCount: number; expectedCount: number; absentCount: number; lateCount: number; course: { name: string; code: string } }, i: number) => {
-                      const rate = s.expectedCount > 0 ? Math.round((s.presentCount / s.expectedCount) * 100) : 0;
+                      const rate = sessionAttendanceRate(s);
                       return (
                         <TableRow key={s.id || i}>
                           <TableCell className="text-sm">{s.sessionDate}</TableCell>

@@ -24,6 +24,7 @@ import { formatCampusCurrency, formatCampusDateTime } from '@/lib/datetime-forma
 import { KnuctCampusDetailsCard } from '@/components/administration/knuct-campus-details';
 import { formatTimetableDefaultsPreview } from '@/lib/settings/timetable-defaults';
 import { formatCampusIdentityPreview } from '@/lib/report-brand';
+import { formatIdentityModePreview, parseIdentityMode } from '@/lib/settings/identity-mode';
 import { DEFAULT_ORG_SETTINGS } from '@/lib/settings/org-defaults';
 import { DEFAULT_GENERAL_SETTINGS } from '@/lib/settings/general-defaults';
 
@@ -488,6 +489,14 @@ function SettingLivePreview({
       </p>
     );
   }
+  if (settingKey === 'auth.identity_mode') {
+    const mode = parseIdentityMode(draft);
+    return (
+      <p className="text-[11px] rounded-md border bg-muted/40 px-2.5 py-1.5 text-muted-foreground">
+        Preview: <span className="font-medium text-foreground">{formatIdentityModePreview(mode)}</span>
+      </p>
+    );
+  }
   if (settingKey === 'general.date_format' || settingKey === 'general.time_format' || settingKey === 'general.timezone' || settingKey === 'general.locale') {
     const dateFormat = settingKey === 'general.date_format' ? String(draft ?? 'dd/MM/yyyy') : 'dd/MM/yyyy';
     const timeFormat = settingKey === 'general.time_format' ? (draft === '24h' ? '24h' : '12h') : '12h';
@@ -663,6 +672,7 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
       queryClient.invalidateQueries({ queryKey: ['platform-settings'] });
       queryClient.invalidateQueries({ queryKey: ['system-config'] });
       queryClient.invalidateQueries({ queryKey: ['rbac-config'] });
+      queryClient.invalidateQueries({ queryKey: ['auth-identity-mode'] });
     },
     onError: (err: Error) => toast({ title: 'Save failed', description: err.message, variant: 'destructive' }),
   });

@@ -2,7 +2,7 @@ import { db } from '@/lib/db';
 import { isFaceVerificationApiConfigured, getFaceVerificationMode } from '@/lib/face-verification';
 import { NextResponse } from 'next/server';
 import { requireSection, resolveStudentId, getCampusScope, buildCourseIdFilter } from '@/lib/auth-helpers';
-import { getSystemConfig } from '@/lib/system-config';
+import { getSystemConfig, getAttendanceThresholds } from '@/lib/system-config';
 
 export async function GET(request: Request) {
   try {
@@ -32,7 +32,7 @@ export async function GET(request: Request) {
       where,
       include: {
         course: { select: { name: true, code: true } },
-        geofence: { select: { name: true, type: true, centerLat: true, centerLng: true, radiusMtrs: true, polygonData: true } },
+        geofence: { select: { id: true, name: true, type: true, centerLat: true, centerLng: true, radiusMtrs: true, polygonData: true } },
         timetableSlot: { select: { roomNumber: true, building: true, startTime: true, endTime: true } },
         creator: { select: { name: true } },
         records: studentId ? { where: { studentId } } : false,
@@ -49,6 +49,15 @@ export async function GET(request: Request) {
     });
 
     const systemConfig = await getSystemConfig();
+    let departmentId: string | null | undefined;
+    if (studentId) {
+      const student = await db.user.findUnique({
+        where: { id: studentId },
+        select: { departmentId: true },
+      });
+      departmentId = student?.departmentId;
+    }
+    const thresholds = await getAttendanceThresholds({ departmentId });
 
     return NextResponse.json({
       sessions: enriched,
@@ -56,6 +65,11 @@ export async function GET(request: Request) {
       faceVerificationConfigured: isFaceVerificationApiConfigured(),
       faceVerificationMode: getFaceVerificationMode(),
       faceVerificationEnforced: systemConfig.policies.faceVerificationEnforced,
+      geofenceSelfMarkRequired: systemConfig.policies.geofenceSelfMarkRequired,
+      thresholds: {
+        eligibilityPct: thresholds.eligibilityPct,
+        condonationPct: thresholds.condonationPct,
+      },
     });
   } catch (error) {
     console.error('Active sessions API error:', error);

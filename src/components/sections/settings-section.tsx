@@ -27,6 +27,8 @@ import { UserAccountsPanel } from '@/components/users/user-accounts-panel';
 import MastersSection from '@/components/sections/masters-section';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAppStore, ROLE_LABELS, useRoleSections, useSectionAccess, type Role, type Section, type SectionContext } from '@/lib/store';
+import { useIdentityMode } from '@/hooks/use-identity-mode';
+import { formatIdentityModePreview } from '@/lib/settings/identity-mode';
 import { ALL_ROLES, DEFAULT_ROLE_SECTIONS } from '@/lib/rbac-defaults';
 import { notifyRbacUpdated } from '@/components/rbac-sync';
 import { useToast } from '@/hooks/use-toast';
@@ -86,7 +88,13 @@ type UserRbacDetail = {
   override: { grant: Section[]; revoke: Section[] };
 };
 
-function UserRbacOverridesPanel({ isSuperAdmin }: { isSuperAdmin: boolean }) {
+function UserRbacOverridesPanel({
+  isSuperAdmin,
+  initialUserId,
+}: {
+  isSuperAdmin: boolean;
+  initialUserId?: string | null;
+}) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: allowOverridesData } = useQuery({
@@ -101,6 +109,10 @@ function UserRbacOverridesPanel({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const [selectedUserId, setSelectedUserId] = useState('');
   const [draftEffective, setDraftEffective] = useState<Section[] | null>(null);
   const [userDirty, setUserDirty] = useState(false);
+
+  useEffect(() => {
+    if (initialUserId) setSelectedUserId(initialUserId);
+  }, [initialUserId]);
 
   const { data: usersData } = useQuery({
     queryKey: ['rbac-user-picker'],
@@ -350,7 +362,7 @@ function SuperAdminControlCenter({
   ];
 
   const settingsShortcuts: { settingsTab: string; label: string; description: string; icon: typeof Shield }[] = [
-    { settingsTab: 'users', label: 'User Accounts', description: 'Create teachers, students, all roles', icon: Users },
+    { settingsTab: 'users', label: 'User Accounts', description: 'Quick create + queues (full directory in Users & RBAC)', icon: Users },
     { settingsTab: 'rbac', label: 'RBAC Matrix', description: 'Section access per role', icon: Shield },
     { settingsTab: 'config', label: 'Configuration', description: 'Attendance, policies, integrations', icon: SettingsIcon },
     { settingsTab: 'knuct', label: 'Knuct', description: 'Wallet provisioning and anchors', icon: Wallet },
@@ -454,16 +466,21 @@ export default function SettingsSection() {
   const isAdmin = currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
   const isSuperAdmin = currentUser?.role === 'super_admin';
   const showSettingsAdminTabs = hasSettingsAccess && isAdmin;
+  const { identityMode, knuctUiEnabled } = useIdentityMode(!!currentUser && showSettingsAdminTabs);
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState(() => (hasMastersAccess && !hasSettingsAccess ? 'masters' : 'config'));
+  const [pendingRbacUserId, setPendingRbacUserId] = useState<string | null>(null);
 
   useEffect(() => {
     if (sectionContext?.settingsTab) {
       setActiveTab(sectionContext.settingsTab);
+      if (sectionContext.rbacUserId) {
+        setPendingRbacUserId(sectionContext.rbacUserId);
+      }
       setSectionContext(null);
     }
-  }, [sectionContext?.settingsTab, setSectionContext]);
+  }, [sectionContext, setSectionContext]);
 
   useEffect(() => {
     if (!hasSettingsAccess && hasMastersAccess && activeTab !== 'masters') {
@@ -480,6 +497,9 @@ export default function SettingsSection() {
     enabled: !!currentUser && hasSettingsAccess,
   });
   const eligibilityPct = configData?.settings?.attendance?.eligibilityPct ?? 75;
+  const lowAttendanceWarning = configData?.settings?.notifications?.lowAttendanceWarningEnabled ?? true;
+  const lowAttendanceEmail = configData?.settings?.notifications?.lowAttendanceEmailEnabled ?? false;
+  const lowAttendanceSms = configData?.settings?.notifications?.lowAttendanceSmsEnabled ?? false;
 
   const [auditAnchorOnly, setAuditAnchorOnly] = useState(true);
 
@@ -865,7 +885,7 @@ export default function SettingsSection() {
             </CardContent>
           </Card>
 
-          <UserRbacOverridesPanel isSuperAdmin={isSuperAdmin} />
+          <UserRbacOverridesPanel isSuperAdmin={isSuperAdmin} initialUserId={pendingRbacUserId} />
 
           {/* Role Hierarchy */}
           <Card>
@@ -888,12 +908,55 @@ export default function SettingsSection() {
 
         {isSuperAdmin && (
           <TabsContent value="users" className="space-y-4">
+            <Card className="border-dashed">
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">Primary directory</CardTitle>
+                <CardDescription className="text-xs">
+                  Day-to-day user management lives in <strong>Users &amp; RBAC</strong>. This tab keeps quick-create shortcuts and approval queues for Super Admin.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <Button size="sm" variant="outline" onClick={() => navigateToSection('users')}>
+                  <Users className="h-3.5 w-3.5 mr-1.5" /> Open Users &amp; RBAC
+                </Button>
+              </CardContent>
+            </Card>
             <UserAccountsPanel actorRole={currentUser.role} />
           </TabsContent>
         )}
 
         {showSettingsAdminTabs && (
           <TabsContent value="knuct" className="space-y-4">
+            <Card className="border-dashed">
+              <CardHeader className="py-3">
+                <CardTitle className="text-sm">Campus identity mode</CardTitle>
+                <CardDescription className="text-xs">
+                  {formatIdentityModePreview(identityMode)}. Change this under Configuration → User management → Campus identity mode.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="pt-0 flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => navigateToSection('settings', { settingsTab: 'config' })}
+                >
+                  Open Configuration
+                </Button>
+              </CardContent>
+            </Card>
+            {!knuctUiEnabled ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Link2 className="h-4 w-4 text-brand" /> Knuct disabled by policy
+                  </CardTitle>
+                  <CardDescription>
+                    Identity mode is Password only. DID login, wallet provisioning, and Knuct registration are hidden until Super Admin selects Hybrid or Knuct-based.
+                  </CardDescription>
+                </CardHeader>
+              </Card>
+            ) : (
+            <>
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
@@ -901,6 +964,11 @@ export default function SettingsSection() {
                 </CardTitle>
                 <CardDescription>
                   Live Knuct pilot — set KNUCT_ENABLED=true and optional KNUCT_API_KEY in .env
+                  {!knuctData?.config?.enabled && (
+                    <span className="block mt-1 text-amber-700 dark:text-amber-400">
+                      Vendor env is off — UI is allowed by campus policy, but live adapter traffic uses mock/off until KNUCT_ENABLED=true.
+                    </span>
+                  )}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -1131,6 +1199,8 @@ export default function SettingsSection() {
                 </CardContent>
               </Card>
             )}
+            </>
+            )}
           </TabsContent>
         )}
 
@@ -1276,11 +1346,19 @@ export default function SettingsSection() {
             <CardContent>
               <div className="space-y-3">
                 {[
-                  { rule: `Low attendance warning (< ${eligibilityPct}%)`, channels: 'In-App + Email + SMS', target: 'Student + Parent + HOD' },
+                  {
+                    rule: `Low attendance warning (< ${eligibilityPct}%)`,
+                    channels: [
+                      lowAttendanceWarning ? 'In-App' : null,
+                      lowAttendanceEmail ? 'Email' : null,
+                      lowAttendanceSms ? 'SMS' : null,
+                    ].filter(Boolean).join(' + ') || 'Off',
+                    target: 'Student + linked parents',
+                  },
                   { rule: 'Attendance marked successfully', channels: 'In-App', target: 'Student' },
                   { rule: 'Assignment due reminder (3 days)', channels: 'In-App + Push', target: 'Student' },
                   { rule: 'Grade published', channels: 'In-App + Email', target: 'Student' },
-                  { rule: 'Violation detected', channels: 'In-App + Email + SMS', target: 'HOD + Admin + Security' },
+                  { rule: 'Violation / integrity alert', channels: 'In-App (+ Email when enabled)', target: 'Student + linked parents' },
                   { rule: 'New enrollment', channels: 'In-App + Email', target: 'Faculty' },
                 ].map(r => (
                   <div key={r.rule} className="flex items-center justify-between border-b pb-3">

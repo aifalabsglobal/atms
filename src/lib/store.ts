@@ -136,6 +136,8 @@ export type SectionContext = {
   attendanceSessionId?: string;
   attendanceTab?: 'sessions' | 'timetable' | 'condonation' | 'mark' | 'history';
   settingsTab?: string;
+  /** Pre-select user in Settings → RBAC per-user overrides. */
+  rbacUserId?: string;
 };
 
 interface AppState {

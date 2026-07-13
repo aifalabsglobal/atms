@@ -27,11 +27,19 @@ import { cn } from '@/lib/utils';
 import { useAppStore, useCanManageTimetable } from '@/lib/store';
 import {
   captureMethodRequiresGeofence,
+  sessionNeedsGeofence,
+  shouldEnforceGeofence,
   suggestGeofenceForBuilding,
   checkLocationAgainstSessionGeofence,
   geofenceStatusLabel,
   type GeofenceCheckResult,
 } from '@/lib/geofence-policy';
+import {
+  attendancePctTextClass,
+  DEFAULT_ATTENDANCE_THRESHOLDS_LITE,
+  sessionAttendanceRate,
+  type AttendanceThresholdsLite,
+} from '@/lib/attendance-percentage';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -122,6 +130,7 @@ interface SessionsResponse {
   total: number;
   page: number;
   limit: number;
+  thresholds?: AttendanceThresholdsLite;
   summary: {
     totalSessions: number;
     activeCount: number;
@@ -151,10 +160,8 @@ const STATUS_CONFIG: Record<string, { variant: 'default' | 'secondary' | 'destru
 };
 
 // ─── Helper ─────────────────────────────────────────────────────
-function getAttendanceColor(rate: number) {
-  if (rate >= 75) return 'text-green-600';
-  if (rate >= 65) return 'text-amber-600';
-  return 'text-red-600';
+function getAttendanceColor(rate: number, t: AttendanceThresholdsLite = DEFAULT_ATTENDANCE_THRESHOLDS_LITE) {
+  return attendancePctTextClass(rate, t);
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -171,6 +178,8 @@ function StudentMarkAttendance() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { currentUser } = useAppStore();
+  const { data: orgSettings } = useOrgSettings();
+  const org = orgSettings ?? DEFAULT_ORG_SETTINGS;
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [selectedSession, setSelectedSession] = useState<ActiveSession | null>(null);
@@ -194,6 +203,7 @@ function StudentMarkAttendance() {
   const faceVerificationMode = (activeData?.faceVerificationMode ?? 'disabled') as 'live' | 'demo' | 'disabled';
   const faceVerificationEnforced = activeData?.faceVerificationEnforced === true;
   const faceVerificationConfigured = activeData?.faceVerificationConfigured === true;
+  const geofenceSelfMarkRequired = activeData?.geofenceSelfMarkRequired === true;
   const selfieRequired = faceVerificationEnforced && faceVerificationConfigured;
   const faceMisconfigured = faceVerificationEnforced && !faceVerificationConfigured;
 
@@ -292,17 +302,28 @@ function StudentMarkAttendance() {
   });
 
   const geoRequiredForSession = (session: ActiveSession) =>
-    captureMethodRequiresGeofence(session.captureMethod);
+    shouldEnforceGeofence(
+      geofenceSelfMarkRequired,
+      sessionNeedsGeofence({
+        hasGeofence: !!session.geofence,
+        sessionCaptureMethod: session.captureMethod,
+        markMethod: 'self_geo_face',
+      }),
+    );
 
   // Submit attendance
   const handleSubmit = () => {
     if (!currentUser || !selectedSession) return;
-    if (!userLocation) return;
-    if (geoRequiredForSession(selectedSession) && !selectedSession.geofence) {
+    const needsGeo = geoRequiredForSession(selectedSession);
+    if (needsGeo && !userLocation) {
+      toast({ title: 'Location required', description: 'Enable location to mark attendance for this session.', variant: 'destructive' });
+      return;
+    }
+    if (needsGeo && !selectedSession.geofence) {
       toast({ title: 'Geofence required', description: 'This session requires a geofence — contact faculty.', variant: 'destructive' });
       return;
     }
-    if (geofenceCheck?.requiresGeofence && !geofenceCheck.inside) {
+    if (needsGeo && geofenceCheck?.requiresGeofence && !geofenceCheck.inside) {
       toast({ title: 'Outside geofence', description: geofenceStatusLabel(geofenceCheck), variant: 'destructive' });
       return;
     }
@@ -362,6 +383,16 @@ function StudentMarkAttendance() {
       {faceMisconfigured && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">
           Face verification is enforced in Settings but the verification API is not configured. Attendance marking is blocked until an administrator sets FACE_VERIFICATION_API_URL.
+        </div>
+      )}
+      {(org.holidayBlockAttendance || org.enforceDayHours) && (
+        <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900">
+          Self-mark follows campus Organization rules
+          {org.holidayBlockAttendance ? ' (holidays / exam-day policy may block marking)' : ''}
+          {org.enforceDayHours
+            ? ` · allowed during campus hours ${org.dayStartTime}–${org.dayEndTime}${org.saturdayMode === 'half' ? ` (half-day Saturday ends ${org.halfDayEndTime})` : ''}`
+            : ''}
+          .
         </div>
       )}
       {faceVerificationMode === 'demo' && !faceVerificationEnforced && (
@@ -594,11 +625,11 @@ function StudentMarkAttendance() {
                   disabled={
                     markMutation.isPending ||
                     faceMisconfigured ||
-                    !userLocation ||
                     (selfieRequired && !selfieBase64) ||
-                    (selectedSession.geofence
-                      ? geofenceCheck?.requiresGeofence && !geofenceCheck.inside
-                      : geoRequiredForSession(selectedSession))
+                    (geoRequiredForSession(selectedSession) &&
+                      (!userLocation ||
+                        !selectedSession.geofence ||
+                        (!!geofenceCheck?.requiresGeofence && !geofenceCheck.inside)))
                   }
                   onClick={handleSubmit}
                 >
@@ -608,13 +639,13 @@ function StudentMarkAttendance() {
                     <><UserCheck className="h-4 w-4" /> Mark Attendance</>
                   )}
                 </Button>
-                {!userLocation && (
+                {geoRequiredForSession(selectedSession) && !userLocation && (
                   <span className="text-xs text-amber-600">⚠️ Location required</span>
                 )}
-                {selfieRequired && !selfieBase64 && userLocation && (
+                {selfieRequired && !selfieBase64 && (!geoRequiredForSession(selectedSession) || userLocation) && (
                   <span className="text-xs text-amber-600">⚠️ Selfie required for face verification</span>
                 )}
-                {!selfieRequired && !selfieBase64 && userLocation && faceVerificationMode === 'disabled' && (
+                {!selfieRequired && !selfieBase64 && faceVerificationMode === 'disabled' && (
                   <span className="text-xs text-muted-foreground">Selfie optional (face verification off)</span>
                 )}
               </div>
@@ -1513,7 +1544,7 @@ function AdminSessionsView() {
       sessionDate: dateStr,
       startTime: slot.startTime,
       endTime: slot.endTime,
-      captureMethod: 'manual',
+      captureMethod: 'self_geo_face',
       geofenceId: '',
       timetableSlotId: slot.id,
     });
@@ -1562,6 +1593,7 @@ function AdminSessionsView() {
   const geofences = geofencesData?.geofences ?? [];
   const geofenceRequired = captureMethodRequiresGeofence(newSession.captureMethod);
   const sessions = data?.sessions ?? [];
+  const thresholds = data?.thresholds ?? DEFAULT_ATTENDANCE_THRESHOLDS_LITE;
   const totalPages = Math.max(1, Math.ceil((data?.total ?? 0) / limit));
   const hasActiveFilters = statusFilter !== 'all' || courseFilter !== 'all' || methodFilter !== 'all' || dateFilter !== undefined;
 
@@ -1700,7 +1732,17 @@ function AdminSessionsView() {
           { title: 'Total Sessions', value: data?.summary?.totalSessions ?? 0, icon: ScanLine, color: UOH_NAVY, bg: 'bg-brand/10' },
           { title: 'Active', value: data?.summary?.activeCount ?? 0, icon: Clock, color: '#16a34a', bg: 'bg-green-100 dark:bg-green-900/30' },
           { title: 'Completed', value: data?.summary?.completedCount ?? 0, icon: CheckCircle2, color: UOH_NAVY, bg: 'bg-brand/10' },
-          { title: 'Avg Rate', value: `${data?.summary?.avgAttendanceRate ?? 0}%`, icon: Users, color: (data?.summary?.avgAttendanceRate ?? 0) >= 75 ? '#16a34a' : '#d97706', bg: 'bg-amber-100 dark:bg-amber-900/30' },
+          {
+            title: 'Avg Rate',
+            value: `${data?.summary?.avgAttendanceRate ?? 0}%`,
+            icon: Users,
+            color: (data?.summary?.avgAttendanceRate ?? 0) >= thresholds.eligibilityPct
+              ? '#16a34a'
+              : (data?.summary?.avgAttendanceRate ?? 0) >= thresholds.condonationPct
+                ? '#d97706'
+                : '#dc2626',
+            bg: 'bg-amber-100 dark:bg-amber-900/30',
+          },
         ].map(card => {
           const Icon = card.icon;
           return (
@@ -1875,7 +1917,7 @@ function AdminSessionsView() {
                       const methodConf = CAPTURE_METHOD_CONFIG[s.captureMethod] ?? CAPTURE_METHOD_CONFIG.manual;
                       const MethodIcon = methodConf.icon;
                       const statusConf = STATUS_CONFIG[s.status] ?? STATUS_CONFIG.upcoming;
-                      const rate = s.expectedCount > 0 ? Math.round((s.presentCount / s.expectedCount) * 100) : 0;
+                      const rate = sessionAttendanceRate(s);
                       return (
                         <TableRow key={s.id}>
                           <TableCell className="text-xs font-medium">{formatDate(s.sessionDate + 'T00:00:00')}</TableCell>
@@ -1883,7 +1925,7 @@ function AdminSessionsView() {
                           <TableCell><ScheduleTypeBadge timetableSlotId={s.timetableSlotId} /></TableCell>
                           <TableCell className="text-xs">{s.startTime}</TableCell>
                           <TableCell><div className="flex items-center gap-1"><MethodIcon className="h-3 w-3 text-muted-foreground" /><span className="text-xs">{methodConf.label}</span></div></TableCell>
-                          <TableCell className="text-center"><span className={cn('text-xs font-semibold', rate >= 75 ? 'text-green-600' : rate >= 65 ? 'text-amber-600' : 'text-red-600')}>{s.presentCount} ({rate}%)</span></TableCell>
+                          <TableCell className="text-center"><span className={cn('text-xs font-semibold', getAttendanceColor(rate, thresholds))}>{s.presentCount + (s.lateCount ?? 0)} ({rate}%)</span></TableCell>
                           <TableCell><Badge variant={statusConf.variant} className={cn('text-[10px]', statusConf.className)}>{statusConf.label}</Badge></TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1">

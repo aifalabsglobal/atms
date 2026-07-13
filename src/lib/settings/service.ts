@@ -235,6 +235,37 @@ export async function setSetting(
 
   const scope = options.scope ?? GLOBAL_SCOPE;
   const scopeId = options.scopeId ?? EMPTY_SCOPE_ID;
+
+  // Cross-field: condonation ≤ eligibility (same scope).
+  // Skip when blob adapter already validated the pair (sequential writes can temporarily invert order).
+  if (
+    options.reason !== 'system_config_save' &&
+    (key === 'attendance.eligibility_pct' || key === 'attendance.condonation_pct')
+  ) {
+    const otherKey =
+      key === 'attendance.eligibility_pct'
+        ? 'attendance.condonation_pct'
+        : 'attendance.eligibility_pct';
+    const deptOpts =
+      scope === 'department' && scopeId ? { departmentId: scopeId } : undefined;
+    const otherRaw = await getSetting(otherKey, deptOpts);
+    const eligibility =
+      key === 'attendance.eligibility_pct'
+        ? (nextValue as number)
+        : typeof otherRaw === 'number'
+          ? otherRaw
+          : 75;
+    const condonation =
+      key === 'attendance.condonation_pct'
+        ? (nextValue as number)
+        : typeof otherRaw === 'number'
+          ? otherRaw
+          : 65;
+    if (condonation > eligibility) {
+      throw new Error('Condonation threshold cannot exceed eligibility threshold');
+    }
+  }
+
   if (scope !== GLOBAL_SCOPE && !options.scopeId) {
     throw new Error('scopeId is required for non-global scopes');
   }

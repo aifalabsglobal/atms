@@ -25,7 +25,7 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { signOut, useSession } from 'next-auth/react';
@@ -34,6 +34,8 @@ import { DEMO_ACCOUNTS } from '@/lib/demo-accounts';
 import { RoleSwitcherMenu } from '@/components/role-switcher-menu';
 import { GlobalSearch } from '@/components/global-search';
 import { DemoBanner } from '@/components/demo-banner';
+import { VoiceAttendanceFab } from '@/components/voice-attendance-fab';
+import { MyProfileDialog } from '@/components/users/my-profile-dialog';
 
 function SectionFallback() {
   return (
@@ -83,6 +85,7 @@ function AppContent() {
   const allowedSections = useEffectiveSections();
   const { data: platformGeneral } = usePlatformSettings(status === 'authenticated');
   const general = platformGeneral ?? DEFAULT_GENERAL_SETTINGS;
+  const [profileOpen, setProfileOpen] = useState(false);
 
   useEffect(() => {
     if (status === 'unauthenticated') {
@@ -297,6 +300,9 @@ function AppContent() {
                 </div>
                 <DropdownMenuSeparator />
                 {isDemoUser && <RoleSwitcherMenu />}
+                <DropdownMenuItem onClick={() => setProfileOpen(true)}>
+                  <UserCircle className="mr-2 h-4 w-4" /> My Profile
+                </DropdownMenuItem>
                 {canAccessSettings && (
                   <DropdownMenuItem onClick={() => setActiveSection('settings')}>
                     <Settings className="mr-2 h-4 w-4" /> Administration
@@ -402,6 +408,8 @@ function AppContent() {
           </main>
         </div>
       </div>
+      {role === 'student' && allowedSections.includes('attendance') && <VoiceAttendanceFab />}
+      <MyProfileDialog open={profileOpen} onOpenChange={setProfileOpen} />
     </TooltipProvider>
   );
 }

@@ -51,6 +51,10 @@ async function readFromSettings(): Promise<SystemConfigSettings> {
     'notifications.low_attendance_email',
     base.notifications.lowAttendanceEmailEnabled,
   );
+  base.notifications.lowAttendanceSmsEnabled = await bool(
+    'notifications.low_attendance_sms',
+    base.notifications.lowAttendanceSmsEnabled,
+  );
   base.notifications.violationAlertEnabled = await bool(
     'notifications.violation_alert',
     base.notifications.violationAlertEnabled,
@@ -95,6 +99,7 @@ export async function saveSystemConfigViaSettings(
     ['geofence.default_radius_meters', s.geofence.defaultRadiusMeters],
     ['notifications.low_attendance_warning', s.notifications.lowAttendanceWarningEnabled],
     ['notifications.low_attendance_email', s.notifications.lowAttendanceEmailEnabled],
+    ['notifications.low_attendance_sms', s.notifications.lowAttendanceSmsEnabled],
     ['notifications.violation_alert', s.notifications.violationAlertEnabled],
   ];
 

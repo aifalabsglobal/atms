@@ -124,6 +124,7 @@ export interface UserItem {
   role: string;
   status: string;
   avatarUrl: string | null;
+  profileImageUrl?: string | null;
   linkedStudentId: string | null;
   linkedStudent?: { id: string; name: string; email: string } | null;
   lastLoginAt: string | null;

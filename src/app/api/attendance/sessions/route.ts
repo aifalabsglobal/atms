@@ -11,6 +11,7 @@ import {
   validateSessionTimetableLink,
 } from '@/lib/timetable-helpers';
 import { logAudit, getClientIp } from '@/lib/audit';
+import { getAttendanceThresholds } from '@/lib/system-config';
 
 export async function GET(request: Request) {
   try {
@@ -75,18 +76,28 @@ export async function GET(request: Request) {
     const activeCount = await db.attendanceSession.count({ where: { ...summaryWhere, status: 'active' } });
     const completedCount = await db.attendanceSession.count({ where: { ...summaryWhere, status: 'completed' } });
     const avgAttendance = await db.attendanceSession.aggregate({
-      _avg: { presentCount: true, expectedCount: true },
+      _avg: { presentCount: true, lateCount: true, expectedCount: true },
       where: { ...summaryWhere, status: 'completed' },
     });
+    const thresholds = await getAttendanceThresholds({
+      departmentId: scope.level === 'department' ? scope.departmentId : undefined,
+    });
+    const avgPresent = avgAttendance._avg.presentCount ?? 0;
+    const avgLate = avgAttendance._avg.lateCount ?? 0;
+    const avgExpected = avgAttendance._avg.expectedCount ?? 0;
 
     return NextResponse.json({
       sessions, total, page, limit,
+      thresholds: {
+        eligibilityPct: thresholds.eligibilityPct,
+        condonationPct: thresholds.condonationPct,
+      },
       summary: {
         totalSessions,
         activeCount,
         completedCount,
-        avgAttendanceRate: avgAttendance._avg.expectedCount && avgAttendance._avg.presentCount
-          ? Math.round(((avgAttendance._avg.presentCount / avgAttendance._avg.expectedCount) * 100))
+        avgAttendanceRate: avgExpected > 0
+          ? Math.round(((avgPresent + avgLate) / avgExpected) * 100)
           : 0,
       }
     });

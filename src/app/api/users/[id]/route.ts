@@ -61,6 +61,41 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     if (body.name?.trim()) data.name = body.name.trim();
     if (body.phone !== undefined) data.phone = body.phone?.trim() || null;
+    if (body.email !== undefined) {
+      if (actorRole !== 'super_admin' && actorRole !== 'admin') {
+        return NextResponse.json({ error: 'Only admins can change email' }, { status: 403 });
+      }
+      const email = typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
+      if (!email || !email.includes('@')) {
+        return NextResponse.json({ error: 'Valid email is required' }, { status: 400 });
+      }
+      if (email !== target.email) {
+        const taken = await db.user.findUnique({ where: { email }, select: { id: true } });
+        if (taken) {
+          return NextResponse.json({ error: 'Email already registered' }, { status: 409 });
+        }
+        data.email = email;
+      }
+    }
+    if (body.employeeId !== undefined) {
+      if (actorRole !== 'super_admin' && actorRole !== 'admin') {
+        return NextResponse.json({ error: 'Only admins can change employee ID' }, { status: 403 });
+      }
+      const employeeId =
+        body.employeeId === null || body.employeeId === ''
+          ? null
+          : String(body.employeeId).trim();
+      if (employeeId) {
+        const taken = await db.user.findFirst({
+          where: { employeeId, NOT: { id } },
+          select: { id: true },
+        });
+        if (taken) {
+          return NextResponse.json({ error: 'Employee ID already in use' }, { status: 409 });
+        }
+      }
+      data.employeeId = employeeId;
+    }
     if (body.department !== undefined) data.department = body.department?.trim() || null;
     if (body.departmentId !== undefined) {
       data.departmentId = body.departmentId || null;

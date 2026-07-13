@@ -1,5 +1,6 @@
 import { db } from '@/lib/db';
 import type { CampusScope } from '@/lib/auth-helpers';
+import { attendancePercentageFromCounts } from '@/lib/attendance-percentage';
 import {
   attendanceRiskStatus,
   DEFAULT_ATTENDANCE_THRESHOLDS,
@@ -45,7 +46,7 @@ export function buildWeeklyTrend(
     .map((w) => ({
       ...w,
       rate: w.present + w.absent + w.late > 0
-        ? Math.round((w.present / (w.present + w.absent + w.late)) * 100)
+        ? Math.round(((w.present + w.late) / (w.present + w.absent + w.late)) * 100)
         : 0,
     }));
 }
@@ -81,7 +82,7 @@ export async function buildStudentAttendanceStats(studentWhere: Record<string, u
   return students
     .map((s) => {
       const stats = statsMap.get(s.id) ?? { present: 0, absent: 0, late: 0, total: 0 };
-      const percentage = stats.total > 0 ? Math.round((stats.present / stats.total) * 100) : 0;
+      const percentage = attendancePercentageFromCounts(stats);
       return {
         ...s,
         stats: { ...stats, percentage },

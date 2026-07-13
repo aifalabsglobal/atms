@@ -13,6 +13,27 @@ export function captureMethodRequiresLocation(method: string): boolean {
   return captureMethodRequiresGeofence(method);
 }
 
+/** Matches mark-route: geofence on session OR geo capture method on session/mark. */
+export function sessionNeedsGeofence(opts: {
+  hasGeofence: boolean;
+  sessionCaptureMethod: string;
+  markMethod?: string;
+}): boolean {
+  return (
+    opts.hasGeofence ||
+    captureMethodRequiresGeofence(opts.sessionCaptureMethod) ||
+    (!!opts.markMethod && captureMethodRequiresGeofence(opts.markMethod))
+  );
+}
+
+/** Policy On + session needs geo → enforce location check. */
+export function shouldEnforceGeofence(
+  geofenceSelfMarkRequired: boolean,
+  needsGeo: boolean,
+): boolean {
+  return geofenceSelfMarkRequired && needsGeo;
+}
+
 export type GeofencePickerOption = {
   id: string;
   name: string;

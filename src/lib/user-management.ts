@@ -89,6 +89,27 @@ export function canManageUsers(actorRole: Role): boolean {
   return ADMIN_ROLES.includes(actorRole) || actorRole === 'hod';
 }
 
+/** Soft-deactivate via PATCH status — any actor who can manage the target role. */
+export function canDeactivateUser(actorRole: Role, targetRole: Role): boolean {
+  return canAssignRole(actorRole, targetRole);
+}
+
+/** Reset password for a managed user — same rule as assign/manage. */
+export function canResetUserPassword(actorRole: Role, targetRole: Role): boolean {
+  return canAssignRole(actorRole, targetRole);
+}
+
+/** Prefer face-profile photo, fall back to legacy avatarUrl. */
+export function resolveDisplayAvatarUrl(
+  profileImageUrl?: string | null,
+  avatarUrl?: string | null,
+): string | null {
+  const primary = profileImageUrl?.trim();
+  if (primary) return primary;
+  const legacy = avatarUrl?.trim();
+  return legacy || null;
+}
+
 export function isStaffRole(role: Role): boolean {
   return STAFF_ROLES.includes(role);
 }

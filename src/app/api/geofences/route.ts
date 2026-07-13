@@ -46,11 +46,11 @@ export async function POST(request: Request) {
 
     const geofence = await db.geofence.create({
       data: {
-        name: body.name,
+        name: String(body.name).trim(),
         type: body.type || 'circle',
-        centerLat: body.centerLat ?? null,
-        centerLng: body.centerLng ?? null,
-        radiusMtrs: body.radiusMtrs ?? null,
+        centerLat: typeof body.centerLat === 'number' ? body.centerLat : body.centerLat != null ? Number(body.centerLat) : null,
+        centerLng: typeof body.centerLng === 'number' ? body.centerLng : body.centerLng != null ? Number(body.centerLng) : null,
+        radiusMtrs: typeof body.radiusMtrs === 'number' ? body.radiusMtrs : body.radiusMtrs != null ? Number(body.radiusMtrs) : null,
         polygonData: body.polygonData ?? null,
         building: body.building ?? null,
         floor: body.floor ?? null,

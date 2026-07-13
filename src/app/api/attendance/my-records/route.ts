@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { requireSection, resolveStudentId } from '@/lib/auth-helpers';
 import { getAttendanceThresholds } from '@/lib/system-config';
 import { getStudentCondonationClearance } from '@/lib/condonation-service';
+import { attendancePercentageFromCounts } from '@/lib/attendance-percentage';
 
 export async function GET(request: Request) {
   try {
@@ -44,7 +45,8 @@ export async function GET(request: Request) {
       getStudentCondonationClearance(studentId),
     ]);
 
-    const present = records.filter((r) => r.status === 'present' || r.status === 'late').length;
+    const present = records.filter((r) => r.status === 'present').length;
+    const late = records.filter((r) => r.status === 'late').length;
     const total = records.length;
 
     return NextResponse.json({
@@ -57,7 +59,8 @@ export async function GET(request: Request) {
       summary: {
         total,
         present,
-        percentage: total > 0 ? Math.round((present / total) * 100) : 0,
+        late,
+        percentage: attendancePercentageFromCounts({ present, late, total }),
       },
     });
   } catch (error) {

@@ -5,7 +5,7 @@ import { assertNotInMaintenance } from '@/lib/settings/maintenance';
 import type { Role } from '@/lib/store';
 import { verifyFaceMatch, isFaceVerificationApiConfigured } from '@/lib/face-verification';
 import { validateGeofenceLocation } from '@/lib/geofence';
-import { captureMethodRequiresGeofence } from '@/lib/geofence-policy';
+import { sessionNeedsGeofence } from '@/lib/geofence-policy';
 import { rateLimitByUser } from '@/lib/api-rate-limit';
 import { logAudit, getClientIp } from '@/lib/audit';
 import { getSystemConfig } from '@/lib/system-config';
@@ -87,10 +87,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'You are not enrolled in this course' }, { status: 403 });
     }
 
-    const sessionNeedsGeo =
-      !!attendanceSession.geofence ||
-      captureMethodRequiresGeofence(attendanceSession.captureMethod) ||
-      captureMethodRequiresGeofence(method);
+    const sessionNeedsGeo = sessionNeedsGeofence({
+      hasGeofence: !!attendanceSession.geofence,
+      sessionCaptureMethod: attendanceSession.captureMethod,
+      markMethod: method,
+    });
 
     const systemConfig = await getSystemConfig();
 
@@ -197,6 +198,20 @@ export async function POST(request: Request) {
           courseCode: attendanceSession.course.code,
           detail: msg,
         });
+
+        try {
+          await db.attendanceViolation.create({
+            data: {
+              studentId,
+              type: 'out_of_geofence',
+              severity: 'medium',
+              description: msg,
+              reviewStatus: 'pending',
+            },
+          });
+        } catch (violationErr) {
+          console.error('Failed to create geofence violation:', violationErr);
+        }
 
         return NextResponse.json(
           {

@@ -106,13 +106,16 @@ export function enqueueWalletProvision(userId: string): void {
 }
 
 export function maybeProvisionWalletOnCreate(userId: string): void {
-  if (getKnuctConfig().walletOnUserCreate) {
-    void import('./wallet-provision-request-service')
-      .then(({ queueWalletProvisionRequestOnUserCreate }) =>
-        queueWalletProvisionRequestOnUserCreate(userId)
-      )
-      .catch((err) => {
-        console.error('[knuct] wallet provision request on user create failed', { userId, err });
-      });
-  }
+  if (!getKnuctConfig().walletOnUserCreate) return;
+  void import('@/lib/settings/identity-mode-server')
+    .then(async ({ getIdentityMode }) => {
+      const { isKnuctUiEnabled } = await import('@/lib/settings/identity-mode');
+      const mode = await getIdentityMode();
+      if (!isKnuctUiEnabled(mode)) return;
+      const { queueWalletProvisionRequestOnUserCreate } = await import('./wallet-provision-request-service');
+      await queueWalletProvisionRequestOnUserCreate(userId);
+    })
+    .catch((err) => {
+      console.error('[knuct] wallet provision request on user create failed', { userId, err });
+    });
 }

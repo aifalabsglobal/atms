@@ -10,29 +10,22 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   MapPin, Plus, Building2, Circle, Pentagon, ToggleLeft, ToggleRight,
-  Navigation, ScanFace, CheckCircle2, XCircle, Clock, ShieldCheck,
-  ShieldAlert, Loader2, Crosshair, Maximize2, UserCheck, AlertTriangle,
+  Navigation, CheckCircle2, XCircle, Clock, Loader2, Crosshair, Maximize2,
   Pencil, Trash2,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAppStore, GEOFENCE_WRITE_ROLES, useEffectiveSections } from '@/lib/store';
 import { parsePolygonData } from '@/lib/geofence';
-import {
-  captureMethodRequiresGeofence,
-  checkLocationAgainstSessionGeofence,
-  geofenceStatusLabel,
-  type GeofenceCheckResult,
-} from '@/lib/geofence-policy';
 import { cn } from '@/lib/utils';
 import { DEFAULT_BRAND_PRIMARY } from '@/lib/brand-color';
 import type { GeofenceItem } from '@/lib/types';
+import { StudentMapSelfMarkPanel } from '@/components/attendance/student-map-self-mark-panel';
 
 async function fetchGeofences(includeInactive: boolean): Promise<{ geofences: GeofenceItem[]; defaults?: { radiusMeters: number } }> {
   const qs = includeInactive ? '?includeInactive=true' : '';
@@ -47,18 +40,6 @@ const NAVY = DEFAULT_BRAND_PRIMARY;
 const DEFAULT_CENTER: [number, number] = [17.4563, 78.6698]; // AIMSCS approximate location
 const DEFAULT_ZOOM = 16;
 
-// ─── Haversine Distance ─────────────────────────────────────────────────────
-function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371000;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
 // ─── Active Session Type ────────────────────────────────────────────────────
 interface ActiveSession {
   id: string;
@@ -68,9 +49,11 @@ interface ActiveSession {
   status: string;
   expectedCount: number;
   presentCount: number;
+  geofenceId?: string | null;
   course: { name: string; code: string };
   creator: { name: string };
   geofence: {
+    id?: string;
     name: string;
     type?: string;
     centerLat?: number;
@@ -85,6 +68,10 @@ interface ActiveSession {
     faceVerified: boolean;
     geofenceValidated: boolean;
   } | null;
+}
+
+function sessionGeofenceId(session: ActiveSession): string | null {
+  return session.geofence?.id ?? session.geofenceId ?? null;
 }
 
 // ─── Map Component (dynamic import to avoid SSR issues) ─────────────────────
@@ -171,7 +158,7 @@ function MapView({
 
     // Draw geofence shapes (active zones only on map)
     geofences.filter((g) => g.isActive).forEach(g => {
-      const isActive = activeSessions.some(s => s.geofence?.name === g.name);
+      const isActive = activeSessions.some((s) => sessionGeofenceId(s) === g.id);
 
       if (g.type === 'polygon' && g.polygonData) {
         const polygon = parsePolygonData(g.polygonData);
@@ -284,6 +271,13 @@ function MapView({
         parsePolygonData(g.polygonData)?.forEach((p) => bounds.extend([p.lat, p.lng]));
       } else if (g.centerLat != null && g.centerLng != null) {
         bounds.extend([g.centerLat, g.centerLng]);
+        if (g.radiusMtrs) {
+          // Approximate circle extent so fitBounds includes the edge
+          const dLat = g.radiusMtrs / 111320;
+          const dLng = g.radiusMtrs / (111320 * Math.cos((g.centerLat * Math.PI) / 180));
+          bounds.extend([g.centerLat + dLat, g.centerLng + dLng]);
+          bounds.extend([g.centerLat - dLat, g.centerLng - dLng]);
+        }
       }
     });
     if (bounds.isValid()) {
@@ -325,273 +319,6 @@ function MapView({
   );
 }
 
-// ─── Student Mark Attendance Panel ──────────────────────────────────────────
-function StudentMarkPanel() {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const { currentUser } = useAppStore();
-  const [selectedSession, setSelectedSession] = useState<ActiveSession | null>(null);
-  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const [locationError, setLocationError] = useState<string | null>(null);
-  const [geofenceStatus, setGeofenceStatus] = useState<GeofenceCheckResult | null>(null);
-
-  // Fetch active sessions
-  const { data: activeData, isLoading: activeLoading } = useQuery({
-    queryKey: ['active-sessions-map', currentUser?.id],
-    queryFn: () => fetch(`/api/attendance/active-sessions?studentId=${currentUser!.id}`).then(r => r.json()),
-    enabled: !!currentUser,
-    refetchInterval: 15000,
-  });
-
-  const requestLocation = useCallback((sessionOverride?: ActiveSession | null) => {
-    const session = sessionOverride ?? selectedSession;
-    if (!navigator.geolocation) {
-      setLocationError('Geolocation not supported');
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const loc = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        setUserLocation(loc);
-        setLocationError(null);
-
-        if (session?.geofence) {
-          setGeofenceStatus(checkLocationAgainstSessionGeofence(session.geofence, loc.lat, loc.lng));
-        } else {
-          setGeofenceStatus(null);
-        }
-      },
-      (err) => setLocationError(err.message),
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
-  }, [selectedSession]);
-
-  useEffect(() => {
-    if (!userLocation || !selectedSession?.geofence) return;
-    setGeofenceStatus(
-      checkLocationAgainstSessionGeofence(selectedSession.geofence, userLocation.lat, userLocation.lng),
-    );
-  }, [selectedSession, userLocation]);
-
-  // Mark attendance mutation
-  const markMutation = useMutation({
-    mutationFn: (body: Record<string, unknown>) =>
-      fetch('/api/attendance/mark', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      }).then(async r => {
-        const data = await r.json();
-        if (!r.ok) throw new Error(data.error || 'Failed to mark attendance');
-        return data;
-      }),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['active-sessions-map'] });
-      queryClient.invalidateQueries({ queryKey: ['geofences'] });
-      toast({
-        title: 'Attendance Marked!',
-        description: `Geo: ${data.geofenceValidated ? '✅' : '❌'} | ${data.geofenceValidated ? `Within ${Math.round(data.distanceFromCenter)}m` : 'Out of bounds'}`,
-        variant: data.geofenceValidated ? 'default' : 'destructive',
-      });
-      setSelectedSession(null);
-      setGeofenceStatus(null);
-    },
-    onError: (err) => {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' });
-    },
-  });
-
-  if (!currentUser) return null;
-
-  const activeSessions: ActiveSession[] = activeData?.sessions ?? [];
-  const geoRequiredForSession = (session: ActiveSession) =>
-    captureMethodRequiresGeofence(session.captureMethod);
-
-  const handleMarkAttendance = () => {
-    if (!selectedSession || !userLocation) return;
-    markMutation.mutate({
-      sessionId: selectedSession.id,
-      studentId: currentUser.id,
-      latitude: userLocation.lat,
-      longitude: userLocation.lng,
-      captureMethod: 'self_geo_face',
-    });
-  };
-
-  return (
-    <Card className="border-l-4" style={{ borderLeftColor: NAVY }}>
-      <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
-          <Navigation className="h-4 w-4" />
-          Mark Attendance from Map
-        </CardTitle>
-        <CardDescription>Select an active session, verify your location, and mark attendance</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {/* Session Selector */}
-        <div className="space-y-2">
-          <Label className="text-xs font-semibold">Active Sessions</Label>
-          {activeLoading ? (
-            <div className="space-y-2">
-              {[1, 2].map(i => <Skeleton key={i} className="h-12 w-full" />)}
-            </div>
-          ) : activeSessions.length === 0 ? (
-            <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
-              <Clock className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">No active sessions right now</span>
-            </div>
-          ) : (
-            <ScrollArea className="max-h-48">
-              <div className="space-y-2">
-                {activeSessions.map(session => (
-                  <button
-                    key={session.id}
-                    onClick={() => {
-                      setSelectedSession(session);
-                      setUserLocation(null);
-                      setGeofenceStatus(null);
-                      setLocationError(null);
-                      requestLocation(session);
-                    }}
-                    className={cn(
-                      'w-full text-left p-3 rounded-lg border transition-all hover:shadow-sm',
-                      session.alreadyMarked ? 'opacity-50 cursor-not-allowed bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800' :
-                      selectedSession?.id === session.id ? 'ring-2 ring-brand bg-brand/5 border-brand' : 'hover:border-brand/30'
-                    )}
-                    disabled={session.alreadyMarked}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <Badge className="font-mono text-[10px] shrink-0" style={{ backgroundColor: NAVY, color: '#fff' }}>
-                          {session.course?.code || 'N/A'}
-                        </Badge>
-                        <span className="text-sm font-medium truncate">{session.course?.name}</span>
-                      </div>
-                      {session.alreadyMarked ? (
-                        <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 border-green-200 shrink-0">
-                          <CheckCircle2 className="h-3 w-3 mr-0.5" /> Marked
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 border-green-200 shrink-0">
-                          Live
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{session.startTime}</span>
-                      {session.geofence && (
-                        <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{session.geofence.name}</span>
-                      )}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </ScrollArea>
-          )}
-        </div>
-
-        {/* Location + Geofence Status */}
-        {selectedSession && (
-          <div className="space-y-3 pt-2 border-t">
-            <Label className="text-xs font-semibold flex items-center gap-1.5">
-              <Navigation className="h-3.5 w-3.5" /> Location & Geofence Status
-            </Label>
-
-            {userLocation ? (
-              <div className={cn(
-                'p-3 rounded-lg border',
-                !selectedSession.geofence
-                  ? 'bg-muted/50 border-border'
-                  : geofenceStatus?.inside
-                    ? 'bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800'
-                    : 'bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800'
-              )}>
-                <div className="flex items-center gap-2 mb-2">
-                  {!selectedSession.geofence ? (
-                    <MapPin className="h-5 w-5 text-muted-foreground" />
-                  ) : geofenceStatus?.inside ? (
-                    <ShieldCheck className="h-5 w-5 text-green-600" />
-                  ) : (
-                    <ShieldAlert className="h-5 w-5 text-red-600" />
-                  )}
-                  <div>
-                    <p className="text-sm font-semibold">
-                      {!selectedSession.geofence
-                        ? 'No geofence on this session'
-                        : geofenceStatus?.inside ? '✅ Inside Geofence' : '❌ Outside Geofence'}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {geofenceStatus ? geofenceStatusLabel(geofenceStatus) : selectedSession.geofence ? 'Checking...' : 'Location captured for audit'}
-                    </p>
-                  </div>
-                </div>
-                <div className="text-[10px] text-muted-foreground">
-                  GPS: {userLocation.lat.toFixed(6)}, {userLocation.lng.toFixed(6)}
-                </div>
-              </div>
-            ) : locationError ? (
-              <div className="p-3 rounded-lg bg-red-50 border border-red-200 dark:bg-red-900/20 dark:border-red-800">
-                <div className="flex items-center gap-2">
-                  <ShieldAlert className="h-4 w-4 text-red-600" />
-                  <p className="text-xs text-red-700 dark:text-red-400">{locationError}</p>
-                </div>
-                <Button variant="outline" size="sm" className="mt-2 text-xs h-7" onClick={() => requestLocation()}>
-                  Retry Location
-                </Button>
-              </div>
-            ) : (
-              <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 dark:bg-amber-900/20 dark:border-amber-800">
-                <div className="flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 text-amber-600 animate-spin" />
-                  <p className="text-xs text-amber-700 dark:text-amber-400">Acquiring location...</p>
-                </div>
-              </div>
-            )}
-
-            <Button variant="outline" size="sm" className="text-xs h-7" onClick={() => requestLocation()}>
-              <Crosshair className="h-3 w-3 mr-1" /> Refresh Location
-            </Button>
-
-            {/* Mark Button */}
-            <div className="pt-2 border-t">
-              <Button
-                className="w-full bg-brand hover:bg-brand/90 text-white gap-2"
-                disabled={
-                  markMutation.isPending ||
-                  !userLocation ||
-                  (selectedSession.geofence
-                    ? !geofenceStatus?.inside
-                    : geoRequiredForSession(selectedSession))
-                }
-                onClick={handleMarkAttendance}
-              >
-                {markMutation.isPending ? (
-                  <><Loader2 className="h-4 w-4 animate-spin" /> Verifying...</>
-                ) : (
-                  <><UserCheck className="h-4 w-4" /> Mark Attendance</>
-                )}
-              </Button>
-              {!userLocation && (
-                <p className="text-[10px] text-amber-600 mt-1 text-center">⚠️ Location required</p>
-              )}
-              {userLocation && selectedSession.geofence && geofenceStatus && !geofenceStatus.inside && (
-                <p className="text-[10px] text-red-600 mt-1 text-center">
-                  ❌ {geofenceStatusLabel(geofenceStatus)}
-                </p>
-              )}
-              {userLocation && !selectedSession.geofence && geoRequiredForSession(selectedSession) && (
-                <p className="text-[10px] text-red-600 mt-1 text-center">
-                  This session requires a geofence — contact faculty.
-                </p>
-              )}
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 // ─── Main Geofences Section ────────────────────────────────────────────────
 export default function GeofencesSection() {
   const qc = useQueryClient();
@@ -600,9 +327,10 @@ export default function GeofencesSection() {
   const [showCreate, setShowCreate] = useState(false);
   const [newFence, setNewFence] = useState({ name: '', type: 'circle', centerLat: '17.4563', centerLng: '78.6698', radiusMtrs: '200', building: '', floor: '' });
   const [editTarget, setEditTarget] = useState<GeofenceItem | null>(null);
-  const [editForm, setEditForm] = useState({ name: '', description: '', centerLat: '', centerLng: '', radiusMtrs: '' });
+  const [editForm, setEditForm] = useState({ name: '', centerLat: '', centerLng: '', radiusMtrs: '' });
   const [deleteTarget, setDeleteTarget] = useState<GeofenceItem | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [mapSelectedSession, setMapSelectedSession] = useState<ActiveSession | null>(null);
   const [activeTab, setActiveTab] = useState('map');
 
   const effectiveSections = useEffectiveSections();
@@ -617,16 +345,69 @@ export default function GeofencesSection() {
     enabled: !!currentUser,
   });
   const defaultRadius = String(data?.defaults?.radiusMeters ?? 100);
-  const activeSessionsQuery = isStudent && currentUser ? `?studentId=${currentUser.id}` : '';
 
-  const { data: activeSessionsData } = useQuery({
-    queryKey: ['active-sessions-geofence', currentUser?.id, isStudent],
-    queryFn: () => fetch(`/api/attendance/active-sessions${activeSessionsQuery}`).then(r => r.json()),
-    enabled: !!currentUser,
+  const { data: studentSessionsData } = useQuery({
+    queryKey: ['active-sessions-geofence', currentUser?.id],
+    queryFn: () => fetch(`/api/attendance/active-sessions?studentId=${currentUser!.id}`).then((r) => r.json()),
+    enabled: !!currentUser && isStudent,
     refetchInterval: 15000,
   });
 
-  const activeSessions: ActiveSession[] = activeSessionsData?.sessions ?? [];
+  const { data: liveActivity } = useQuery({
+    queryKey: ['geofence-live-activity'],
+    queryFn: async () => {
+      const res = await fetch('/api/geofences/live-activity');
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Failed to load live activity');
+      return json as {
+        byGeofence: {
+          geofenceId: string;
+          sessionCount: number;
+          sessions: {
+            id: string;
+            courseCode: string;
+            courseName: string;
+            presentCount: number;
+            expectedCount: number;
+          }[];
+        }[];
+        totalActiveSessions: number;
+      };
+    },
+    enabled: !!currentUser && !isStudent,
+    refetchInterval: 15000,
+  });
+
+  const activeSessions: ActiveSession[] = useMemo(() => {
+    if (isStudent) return (studentSessionsData?.sessions as ActiveSession[]) ?? [];
+    return (liveActivity?.byGeofence ?? []).flatMap((g) =>
+      g.sessions.map(
+        (s): ActiveSession => ({
+          id: s.id,
+          sessionDate: '',
+          startTime: '',
+          captureMethod: 'manual',
+          status: 'active',
+          expectedCount: s.expectedCount,
+          presentCount: s.presentCount,
+          geofenceId: g.geofenceId,
+          course: { name: s.courseName, code: s.courseCode },
+          creator: { name: '' },
+          geofence: { id: g.geofenceId, name: '' },
+          timetableSlot: null,
+          alreadyMarked: false,
+        }),
+      ),
+    );
+  }, [isStudent, studentSessionsData, liveActivity]);
+
+  useEffect(() => {
+    if (!data?.defaults?.radiusMeters) return;
+    setNewFence((prev) => {
+      if (prev.name || prev.building) return prev;
+      return { ...prev, radiusMtrs: String(data.defaults!.radiusMeters) };
+    });
+  }, [data?.defaults?.radiusMeters]);
 
   const createMutation = useMutation({
     mutationFn: async (data: Record<string, unknown>) => {
@@ -715,7 +496,6 @@ export default function GeofencesSection() {
     setEditTarget(g);
     setEditForm({
       name: g.name,
-      description: '',
       centerLat: g.centerLat != null ? String(g.centerLat) : '',
       centerLng: g.centerLng != null ? String(g.centerLng) : '',
       radiusMtrs: g.radiusMtrs != null ? String(g.radiusMtrs) : '',
@@ -824,7 +604,7 @@ export default function GeofencesSection() {
                   activeSessions={activeSessions}
                   userLocation={userLocation}
                   onGeofenceClick={handleGeofenceClick}
-                  selectedSession={null}
+                  selectedSession={mapSelectedSession}
                   mapVisible={activeTab === 'map'}
                 />
               </CardContent>
@@ -833,7 +613,9 @@ export default function GeofencesSection() {
             {/* Right Panel: Student mark or Geofence details */}
             <div className="space-y-4">
               {isStudent ? (
-                <StudentMarkPanel />
+                <StudentMapSelfMarkPanel
+                  onSelectedSessionChange={(s) => setMapSelectedSession(s as ActiveSession | null)}
+                />
               ) : (
                 <Card>
                   <CardHeader className="pb-3">
@@ -846,7 +628,7 @@ export default function GeofencesSection() {
                     <ScrollArea className="max-h-[400px]">
                       <div className="space-y-3">
                         {geofences.map(g => {
-                          const hasActive = activeSessions.some(s => s.geofence?.name === g.name);
+                          const hasActive = activeSessions.some((s) => sessionGeofenceId(s) === g.id);
                           return (
                             <div
                               key={g.id}
@@ -885,7 +667,7 @@ export default function GeofencesSection() {
                               {hasActive && (
                                 <div className="mt-2 pt-2 border-t border-green-200 dark:border-green-800">
                                   {activeSessions
-                                    .filter(s => s.geofence?.name === g.name)
+                                    .filter((s) => sessionGeofenceId(s) === g.id)
                                     .map(s => (
                                       <div key={s.id} className="flex items-center gap-2 text-xs">
                                         <Badge className="font-mono text-[9px]" style={{ backgroundColor: NAVY, color: '#fff' }}>
@@ -1055,15 +837,6 @@ export default function GeofencesSection() {
           </DialogHeader>
           <div className="space-y-4">
             <div><Label>Name</Label><Input value={editForm.name} onChange={e => setEditForm(p => ({ ...p, name: e.target.value }))} /></div>
-            <div>
-              <Label>Description</Label>
-              <Textarea
-                rows={2}
-                value={editForm.description}
-                onChange={e => setEditForm(p => ({ ...p, description: e.target.value }))}
-                placeholder="Optional notes about this boundary"
-              />
-            </div>
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Center Latitude</Label><Input value={editForm.centerLat} onChange={e => setEditForm(p => ({ ...p, centerLat: e.target.value }))} /></div>
               <div><Label>Center Longitude</Label><Input value={editForm.centerLng} onChange={e => setEditForm(p => ({ ...p, centerLng: e.target.value }))} /></div>
@@ -1077,14 +850,15 @@ export default function GeofencesSection() {
               disabled={!editForm.name || !editTarget || updateMutation.isPending}
               onClick={() => {
                 if (!editTarget) return;
-                const payload: Record<string, unknown> = {
-                  name: editForm.name,
-                  centerLat: parseFloat(editForm.centerLat),
-                  centerLng: parseFloat(editForm.centerLng),
-                  radiusMtrs: parseFloat(editForm.radiusMtrs),
-                };
-                if (editForm.description.trim()) payload.description = editForm.description.trim();
-                updateMutation.mutate({ id: editTarget.id, data: payload });
+                updateMutation.mutate({
+                  id: editTarget.id,
+                  data: {
+                    name: editForm.name,
+                    centerLat: parseFloat(editForm.centerLat),
+                    centerLng: parseFloat(editForm.centerLng),
+                    radiusMtrs: parseFloat(editForm.radiusMtrs),
+                  },
+                });
               }}
             >
               {updateMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-1" />}

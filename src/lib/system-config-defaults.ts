@@ -18,6 +18,7 @@ export interface GeofenceDefaults {
 export interface NotificationPolicies {
   lowAttendanceWarningEnabled: boolean;
   lowAttendanceEmailEnabled: boolean;
+  lowAttendanceSmsEnabled: boolean;
   violationAlertEnabled: boolean;
 }
 
@@ -60,6 +61,7 @@ export const DEFAULT_SYSTEM_CONFIG: SystemConfigSettings = {
   notifications: {
     lowAttendanceWarningEnabled: true,
     lowAttendanceEmailEnabled: false,
+    lowAttendanceSmsEnabled: false,
     violationAlertEnabled: true,
   },
 };
@@ -111,6 +113,9 @@ export function parseSystemConfig(raw: unknown): SystemConfigSettings {
     }
     if (typeof notifications.lowAttendanceEmailEnabled === 'boolean') {
       base.notifications.lowAttendanceEmailEnabled = notifications.lowAttendanceEmailEnabled;
+    }
+    if (typeof notifications.lowAttendanceSmsEnabled === 'boolean') {
+      base.notifications.lowAttendanceSmsEnabled = notifications.lowAttendanceSmsEnabled;
     }
     if (typeof notifications.violationAlertEnabled === 'boolean') {
       base.notifications.violationAlertEnabled = notifications.violationAlertEnabled;
