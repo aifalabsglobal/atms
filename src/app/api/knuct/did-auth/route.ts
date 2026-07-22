@@ -13,7 +13,6 @@ import { authOptions } from '@/lib/auth';
 import { purgeDIDAuthSessions } from '@/lib/knuct/did-auth-session';
 import { persistKnuctSessionForUser, persistVerifiedDid, runDidAuthChallenge, runDidAuthComplete } from '@/lib/knuct/did-auth-flow';
 import { rateLimitByUser } from '@/lib/api-rate-limit';
-import { rejectIfKnuctPolicyDisabled } from '@/lib/knuct/policy-gate';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -24,9 +23,12 @@ export async function POST(req: Request) {
   if (!session?.user?.id) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-
-  const policyBlock = await rejectIfKnuctPolicyDisabled();
-  if (policyBlock) return policyBlock;
+  if (session.user.authSurface !== 'knuct') {
+    return NextResponse.json(
+      { error: 'Knuct console session required. Sign in at /knuct/login.' },
+      { status: 403 },
+    );
+  }
 
   const limited = await rateLimitByUser(req, session.user.id, 'knuct-did-auth', 15, 60_000);
   if (limited) return limited;

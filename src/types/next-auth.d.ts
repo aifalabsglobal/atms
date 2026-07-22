@@ -1,6 +1,8 @@
 import type { DefaultSession } from 'next-auth';
 import type { Role } from '@/lib/store';
 
+export type AuthSurface = 'campus' | 'knuct';
+
 declare module 'next-auth' {
   interface Session {
     user: {
@@ -10,6 +12,8 @@ declare module 'next-auth' {
       profileImageUrl?: string;
       linkedStudentId?: string;
       avatar: string;
+      authSurface: AuthSurface;
+      knuctConsoleAccess: boolean;
     } & DefaultSession['user'];
   }
 
@@ -18,6 +22,8 @@ declare module 'next-auth' {
     department?: string;
     profileImageUrl?: string;
     linkedStudentId?: string;
+    authSurface?: AuthSurface;
+    knuctConsoleAccess?: boolean;
   }
 }
 
@@ -28,5 +34,9 @@ declare module 'next-auth/jwt' {
     department?: string;
     profileImageUrl?: string;
     linkedStudentId?: string;
+    authSurface?: AuthSurface;
+    knuctConsoleAccess?: boolean;
+    active?: boolean;
+    refreshedAt?: number;
   }
 }

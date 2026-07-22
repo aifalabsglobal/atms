@@ -10,7 +10,6 @@ import {
   getDepartmentName,
   scopeLabel,
 } from '@/lib/reports-analytics';
-import { getKnuctDashboardStats } from '@/lib/knuct';
 import { getAttendanceThresholds } from '@/lib/system-config';
 import { getCachedJson, setCachedJson } from '@/lib/api-cache';
 import { countPendingCondonations, getCondonationClearanceMap, getStudentCondonationClearance } from '@/lib/condonation-service';
@@ -248,7 +247,6 @@ export async function GET() {
       gradeSamples,
       quizAgg,
       submissionCount,
-      knuct,
       pendingCondonations,
     ] = await Promise.all([
       db.user.count({ where: studentWhere }),
@@ -344,7 +342,6 @@ export async function GET() {
       db.submission.count({
         where: scope.level === 'all' ? {} : { assignment: { courseId: courseFilter } },
       }),
-      role === 'super_admin' ? getKnuctDashboardStats() : Promise.resolve(undefined),
       countPendingCondonations(scope),
     ]);
 
@@ -423,7 +420,6 @@ export async function GET() {
       thresholds,
       scopeLabel: scopeLabelText,
       analyticsScope,
-      knuct,
       stats: { totalStudents, totalFaculty, totalCourses, totalSessions, activeSessions, pendingViolations: totalViolations, pendingCondonations, totalEnrollments, overallAttendance, totalPresent, totalAbsent, totalLate },
       analytics: {
         atRiskCount: atRiskStudents.length,

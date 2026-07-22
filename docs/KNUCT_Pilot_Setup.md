@@ -37,10 +37,13 @@ Expected: `startTempNode` → 204, `createWallet` → 200 with nested `{ data: {
 npm run knuct:pilot:sync
 ```
 
-**UI (super_admin):**
+**UI (Knuct console operators only):**
 
-- Dashboard → **Run live pilot (5 users)**
-- Settings → Knuct → **Run live pilot (5)**
+1. Grant ops access: `npx tsx scripts/grant-knuct-console-access.ts vice.chancellor@aimscs.ac.in`
+2. Open `/knuct/login` → **Ops password** (not campus `/login`)
+3. Use **Run live pilot (5)** on the Knuct console dashboard
+
+Campus ATMS roles never see Knuct UI. Blockchain anchors still run server-side from attendance/LMS APIs.
 
 **API:**
 
@@ -53,9 +56,7 @@ Default cohort: registrar, HOD, faculty, two students.
 
 ## 4. Monitor
 
-- Dashboard → Knuct Operations Center (live adapter badge, wallet counts)
-- Users → Wallet column
-- Settings → Knuct tab (health, mode)
+- `/knuct` ops dashboard (adapter health, wallet counts, anchors)
 - `GET /api/health` → `knuct.queue`, circuit state
 
 ## 5. Rollback
@@ -68,4 +69,6 @@ Set `KNUCT_ENABLED="false"` — SCMS continues normally; only new live provision
 |---------|--------|
 | `createwallet` HTTP 500 | Confirm vendor base URL / API key; retry after `starttempnode` |
 | Circuit open | Wait 60s or restart app; check `/api/health` |
-| Wallet `failed` | Settings → Knuct shows `lastError`; retry from Users → Provision |
+| Wallet `failed` | `/knuct` wallet panel shows `lastError`; retry from ops queues |
+| Campus login shows no DID | Expected — use `/knuct/login` |
+| Ops password rejected | Run `npx tsx scripts/grant-knuct-console-access.ts <email>` |

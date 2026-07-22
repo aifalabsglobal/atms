@@ -4,10 +4,8 @@ import { useAppStore, ROLE_LABELS, type Role } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import { DEFAULT_BRAND_PRIMARY } from '@/lib/brand-color';
 import type { GeofenceItem } from '@/lib/types';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useToast } from '@/hooks/use-toast';
+import { useQuery } from '@tanstack/react-query';
 import { BrandLogo } from '@/components/brand-logo';
-import { MyKnuctWalletPanel } from '@/components/knuct/my-knuct-wallet-panel';
 import { useCampusFormat } from '@/hooks/use-campus-format';
 import {
   attendancePctHexColor,
@@ -22,7 +20,7 @@ import {
   AlertTriangle, RefreshCw, Calendar, ClipboardCheck,
   TrendingUp, FileText, Award, Bell, Eye, Radio,
   Building2, Wifi, ShieldCheck, CheckCircle2, XCircle,
-  Timer, BookMarked,   BarChart2, Target, Download, Link2, Wallet,
+  Timer, BookMarked, BarChart2, Target,
 } from 'lucide-react';
 import {
   Card, CardHeader, CardTitle, CardContent, CardDescription,
@@ -114,18 +112,6 @@ interface ActiveSession {
   timetableSlot: { roomNumber: string; building: string } | null;
 }
 
-interface KnuctDashboardStats {
-  enabled: boolean;
-  adapterMode: 'mock' | 'live';
-  health: 'ok' | 'degraded' | 'down' | 'unknown';
-  circuitBreakerOpen: boolean;
-  wallets: { total: number; active: number; failed: number; pending: number };
-  didCoveragePct: number;
-  credentials: { today: number; week: number; failed: number; byType: Record<string, number> };
-  anchors: { today: number; byModule: Record<string, number> };
-  recentActivity: Array<{ type: 'anchor' | 'credential'; module: string; ref: string; at: string }>;
-}
-
 interface DashboardData {
   scope?: 'student' | 'parent' | 'campus' | 'department' | 'instructor' | 'visitor';
   scopeLabel?: string;
@@ -135,7 +121,6 @@ interface DashboardData {
   examEligible?: boolean;
   condonationClearance?: { clearedForTerm: boolean; clearedAt: string | null; attendancePctSnapshot: number | null };
   analytics?: DashboardAnalytics;
-  knuct?: KnuctDashboardStats;
   weeklyRateTrend?: { week: string; present: number; absent: number; late: number; sessions: number; rate: number }[];
   ward?: { id: string; name: string; department: string | null; employeeId: string | null };
   stats: DashboardStats;
@@ -858,140 +843,6 @@ function RecentActivityFeed({ activities }: { activities: RecentActivity[] }) {
 
 // ─── ROLE-SPECIFIC DASHBOARD SECTIONS ────────────────────────────────────────
 
-// ─── Super Admin Knuct Operations Center ────────────────────────────────────
-
-function KnuctOpsPanel({ knuct }: { knuct?: KnuctDashboardStats }) {
-  const { setActiveSection } = useAppStore();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-
-  const { data: pilotStatus } = useQuery({
-    queryKey: ['knuct-pilot-status'],
-    queryFn: async () => {
-      const res = await fetch('/api/knuct/pilot');
-      if (!res.ok) throw new Error('Failed to load pilot status');
-      return res.json() as Promise<{
-        pilotReady: boolean;
-        health: { adapterMode: 'mock' | 'live'; health: 'ok' | 'degraded' | 'down' | 'unknown'; circuitBreakerOpen: boolean };
-      }>;
-    },
-  });
-
-  const adapterMode = pilotStatus?.health?.adapterMode ?? knuct?.adapterMode ?? 'mock';
-  const health = pilotStatus?.health?.health ?? knuct?.health ?? 'unknown';
-  const circuitBreakerOpen = pilotStatus?.health?.circuitBreakerOpen ?? knuct?.circuitBreakerOpen ?? false;
-
-  const pilotMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch('/api/knuct/pilot', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sync: true, limit: 5 }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error ?? 'Pilot failed');
-      }
-      return res.json();
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      queryClient.invalidateQueries({ queryKey: ['audit-logs'] });
-      queryClient.invalidateQueries({ queryKey: ['knuct-status'] });
-      queryClient.invalidateQueries({ queryKey: ['knuct-pilot-status'] });
-      const active = data.results?.filter((r: { status: string }) => r.status === 'active').length ?? 0;
-      const failed = data.results?.filter((r: { status: string }) => r.status === 'failed').length ?? 0;
-      toast({
-        title: 'Live pilot run complete',
-        description: `${active} active, ${failed} failed — see Users for details`,
-        variant: failed > 0 ? 'destructive' : 'default',
-      });
-    },
-    onError: (err: Error) => {
-      toast({ title: 'Pilot failed', description: err.message, variant: 'destructive' });
-    },
-  });
-  const healthBadge = {
-    ok: { label: 'Healthy', className: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
-    degraded: { label: 'Degraded', className: 'bg-amber-100 text-amber-800 border-amber-200' },
-    down: { label: 'Down', className: 'bg-red-100 text-red-800 border-red-200' },
-    unknown: { label: 'Not checked', className: 'bg-slate-100 text-slate-700 border-slate-200' },
-  }[health] ?? { label: 'Unknown', className: 'bg-muted text-muted-foreground border-border' };
-
-  return (
-    <Card className="border-brand/20 bg-gradient-to-br from-brand/5 to-transparent">
-      <CardHeader className="pb-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <CardTitle className="text-base flex items-center gap-2" style={{ color: NAVY }}>
-            <Link2 className="h-4 w-4" /> Knuct Operations Center
-          </CardTitle>
-          <div className="flex flex-wrap gap-2">
-            <Badge variant="outline" className={healthBadge.className}>{healthBadge.label}</Badge>
-            <Badge variant="outline">{adapterMode === 'live' ? 'Live adapter' : 'Mock adapter'}</Badge>
-            {circuitBreakerOpen && (
-              <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Circuit open</Badge>
-            )}
-          </div>
-        </div>
-        <CardDescription>
-          Blockchain identity pilot — wallet provisioning and campus DID coverage (super_admin)
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-          {[
-            { label: 'Active wallets', value: knuct?.wallets.active ?? '—', icon: Wallet, color: NAVY },
-            { label: 'Anchors today', value: knuct?.anchors.today ?? '—', icon: ShieldCheck, color: '#1B6B4A' },
-            { label: 'Failed wallets', value: knuct?.wallets.failed ?? '—', icon: XCircle, color: '#E74C3C' },
-            { label: 'DID coverage', value: knuct ? `${knuct.didCoveragePct}%` : '—', icon: Users, color: '#7C3AED' },
-            { label: 'Pending wallets', value: knuct?.wallets.pending ?? '—', icon: Timer, color: '#B45309' },
-            { label: 'Adapter', value: adapterMode, icon: Radio, color: '#0E7490' },
-          ].map((k) => (
-            <div key={k.label} className="rounded-lg border bg-card p-3">
-              <div className="flex items-center gap-2 mb-1">
-                <k.icon className="h-3.5 w-3.5" style={{ color: k.color }} />
-                <span className="text-[10px] text-muted-foreground uppercase tracking-wide">{k.label}</span>
-              </div>
-              <p className="text-lg font-bold">{k.value}</p>
-            </div>
-          ))}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            size="sm"
-            style={{ backgroundColor: NAVY }}
-            disabled={adapterMode !== 'live' || pilotMutation.isPending}
-            title={adapterMode !== 'live' ? 'Requires live Knuct adapter (set KNUCT_ENABLED=true)' : undefined}
-            onClick={() => pilotMutation.mutate()}
-          >
-            {pilotMutation.isPending ? 'Provisioning…' : 'Run live pilot (5 users)'}
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setActiveSection('settings')}>
-            Settings
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => setActiveSection('users')}>
-            Users (retry failed)
-          </Button>
-        </div>
-        <p className="text-[11px] text-muted-foreground">
-          Hash anchors stored in PostgreSQL; enable <code className="text-xs">KNUCT_CHAIN_PUBLISH_URL</code> when the vendor publish API is available.
-        </p>
-        {(knuct?.recentActivity.length ?? 0) > 0 && (
-          <div className="rounded-lg border p-3 space-y-2">
-            <p className="text-xs font-medium">Recent anchors</p>
-            {knuct!.recentActivity.slice(0, 5).map((a, i) => (
-              <div key={i} className="flex items-center justify-between text-[11px] text-muted-foreground font-mono">
-                <span>{a.module}</span>
-                <span>{a.ref}…</span>
-              </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 // ─── Admin / Super Admin Dashboard (Full View) ──────────────────────────────
 
 function AdminDashboard({ data, role }: { data: DashboardData; role: Role }) {
@@ -999,7 +850,6 @@ function AdminDashboard({ data, role }: { data: DashboardData; role: Role }) {
 
   return (
     <div className="space-y-6">
-      {role === 'super_admin' && <KnuctOpsPanel knuct={data.knuct} />}
       <AnalyticsInsightsPanel data={data} />
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Total Students" value={stats.totalStudents} icon={Users} format="number" />
@@ -1608,8 +1458,6 @@ export default function DashboardSection() {
 
       {/* Role-specific Welcome */}
       <WelcomeBanner />
-
-      <MyKnuctWalletPanel />
 
       {/* Role-specific content */}
       {(role === 'super_admin' || role === 'admin') && <AdminDashboard data={data} role={role} />}

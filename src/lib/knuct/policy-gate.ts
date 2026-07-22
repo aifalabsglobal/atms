@@ -1,18 +1,36 @@
 import { NextResponse } from 'next/server';
-import { getIdentityMode } from '@/lib/settings/identity-mode-server';
-import {
-  isKnuctUiEnabled,
-  knuctPolicyBlockedMessage,
-} from '@/lib/settings/identity-mode';
+import { getAuthSession, requireKnuctConsoleSession, requireKnuctOpsAccess } from '@/lib/auth-helpers';
 
-/** Returns a 403 response when campus identity mode is password_only. */
-export async function rejectIfKnuctPolicyDisabled(): Promise<NextResponse | null> {
-  const mode = await getIdentityMode();
-  if (isKnuctUiEnabled(mode)) return null;
-  return NextResponse.json({ error: knuctPolicyBlockedMessage() }, { status: 403 });
+/**
+ * Interactive Knuct APIs require a Knuct console session.
+ * Silent backend anchors / wallet hooks are not gated here.
+ */
+export async function rejectUnlessKnuctConsoleSession(): Promise<NextResponse | null> {
+  const { error } = await requireKnuctConsoleSession();
+  return error;
 }
 
+/** Ops-only Knuct APIs (pilot, approve queues, credential mint). */
+export async function rejectUnlessKnuctOpsAccess(): Promise<NextResponse | null> {
+  const { error } = await requireKnuctOpsAccess();
+  return error;
+}
+
+/** @deprecated Use rejectUnlessKnuctConsoleSession — identity_mode no longer gates Knuct APIs. */
+export async function rejectIfKnuctPolicyDisabled(): Promise<NextResponse | null> {
+  return rejectUnlessKnuctConsoleSession();
+}
+
+export async function isKnuctConsoleSession(): Promise<boolean> {
+  const session = await getAuthSession();
+  return session?.user?.authSurface === 'knuct' && !!session.user.id;
+}
+
+/** @deprecated Prefer isKnuctConsoleSession. */
 export async function isKnuctCampusPolicyEnabled(): Promise<boolean> {
-  const mode = await getIdentityMode();
-  return isKnuctUiEnabled(mode);
+  return isKnuctConsoleSession();
+}
+
+export function knuctConsoleRequiredMessage(): string {
+  return 'Knuct console session required. Sign in at /knuct/login.';
 }

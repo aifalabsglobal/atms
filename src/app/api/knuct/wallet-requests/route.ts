@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
-import { requireAuth, requireRoles, requireWritableRoles } from '@/lib/auth-helpers';
+import {
+  requireKnuctConsoleSession,
+  requireKnuctOpsAccess,
+} from '@/lib/auth-helpers';
 import { enforceRateLimit } from '@/lib/rate-limit';
 import { getClientIp } from '@/lib/audit';
 import {
@@ -9,14 +12,13 @@ import {
   rejectWalletProvisionRequest,
   type WalletProvisionRequestType,
 } from '@/lib/knuct/wallet-provision-request-service';
-import { rejectIfKnuctPolicyDisabled } from '@/lib/knuct/policy-gate';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function GET(req: Request) {
   try {
-    const { error, session } = await requireRoles(['super_admin', 'admin']);
+    const { error, session } = await requireKnuctOpsAccess();
     if (error || !session) return error;
 
     const status = new URL(req.url).searchParams.get('status') ?? 'pending';
@@ -37,12 +39,6 @@ export async function POST(req: Request) {
     );
     if (limited) return limited;
 
-    const policyBlock = await rejectIfKnuctPolicyDisabled();
-    if (policyBlock) return policyBlock;
-
-    const { error, session } = await requireAuth();
-    if (error || !session) return error;
-
     const body = (await req.json()) as {
       action?: 'request' | 'approve' | 'reject';
       requestType?: WalletProvisionRequestType;
@@ -52,6 +48,9 @@ export async function POST(req: Request) {
     };
 
     if (body.action === 'request') {
+      const { error, session } = await requireKnuctConsoleSession();
+      if (error || !session) return error;
+
       const requestType = body.requestType;
       if (requestType !== 'create' && requestType !== 'reprovision') {
         return NextResponse.json({ error: 'requestType must be create or reprovision' }, { status: 400 });
@@ -71,13 +70,13 @@ export async function POST(req: Request) {
           status: request.status,
           createdAt: request.createdAt,
         },
-        message: 'Wallet request submitted. An administrator must approve it before provisioning runs.',
+        message: 'Wallet request submitted. A Knuct console operator must approve it before provisioning runs.',
       });
     }
 
     if (body.action === 'approve' || body.action === 'reject') {
-      const adminCheck = await requireWritableRoles(['super_admin', 'admin']);
-      if (adminCheck.error || !adminCheck.session) return adminCheck.error;
+      const { error, session } = await requireKnuctOpsAccess();
+      if (error || !session) return error;
 
       if (!body.id) {
         return NextResponse.json({ error: 'id is required' }, { status: 400 });
@@ -86,7 +85,7 @@ export async function POST(req: Request) {
       if (body.action === 'approve') {
         const approved = await approveWalletProvisionRequest({
           requestId: body.id,
-          reviewerId: adminCheck.session.user.id,
+          reviewerId: session.user.id,
         });
         return NextResponse.json({
           ok: true,
@@ -101,7 +100,7 @@ export async function POST(req: Request) {
 
       await rejectWalletProvisionRequest({
         requestId: body.id,
-        reviewerId: adminCheck.session.user.id,
+        reviewerId: session.user.id,
         reason: body.reason,
       });
       return NextResponse.json({ ok: true, message: 'Wallet request rejected.' });

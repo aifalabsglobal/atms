@@ -21,10 +21,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { formatCampusCurrency, formatCampusDateTime } from '@/lib/datetime-format';
-import { KnuctCampusDetailsCard } from '@/components/administration/knuct-campus-details';
 import { formatTimetableDefaultsPreview } from '@/lib/settings/timetable-defaults';
 import { formatCampusIdentityPreview } from '@/lib/report-brand';
-import { formatIdentityModePreview, parseIdentityMode } from '@/lib/settings/identity-mode';
 import { DEFAULT_ORG_SETTINGS } from '@/lib/settings/org-defaults';
 import { DEFAULT_GENERAL_SETTINGS } from '@/lib/settings/general-defaults';
 
@@ -108,6 +106,18 @@ function SettingEditor({
 }) {
   const def = setting.definition;
   const type = def.valueType;
+
+  if (setting.key === 'auth.identity_mode') {
+    return (
+      <div className="space-y-2">
+        <p className="text-xs rounded-md border bg-muted/40 px-2.5 py-2 text-muted-foreground">
+          Campus sign-in is locked to{' '}
+          <span className="font-medium text-foreground">Password only</span> on this console.
+          Knuct / DID identity is managed on the separate Knuct portal.
+        </p>
+      </div>
+    );
+  }
 
   if (type === 'boolean') {
     return (
@@ -490,10 +500,9 @@ function SettingLivePreview({
     );
   }
   if (settingKey === 'auth.identity_mode') {
-    const mode = parseIdentityMode(draft);
     return (
       <p className="text-[11px] rounded-md border bg-muted/40 px-2.5 py-1.5 text-muted-foreground">
-        Preview: <span className="font-medium text-foreground">{formatIdentityModePreview(mode)}</span>
+        Preview: <span className="font-medium text-foreground">Password only (locked)</span>
       </p>
     );
   }
@@ -776,6 +785,7 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
   const departments = deptData?.departments ?? [];
   const canDeptOverride = Boolean(selected?.definition.allowDepartmentOverride);
   const editable = isSuperAdmin && selected && !selected.definition.envOnly && selected.definition.editable !== false
+    && selected.key !== 'auth.identity_mode'
     && (editScope === 'global' || (editScope === 'department' && canDeptOverride && !!departmentId));
   const hasDeptLayer = Boolean(
     selected?.layers?.some((l) => l.scope === 'department' && l.scopeId === departmentId),
@@ -904,11 +914,6 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
           </div>
 
           <div className="grid gap-3 lg:grid-cols-[1fr_1.2fr]">
-            {category === 'general' && (
-              <div className="lg:col-span-2">
-                <KnuctCampusDetailsCard />
-              </div>
-            )}
             {category === 'runtime' && (
               <Card className="lg:col-span-2">
                 <CardHeader className="py-3">
@@ -924,9 +929,6 @@ export function SettingsWorkspace({ isSuperAdmin }: { isSuperAdmin: boolean }) {
                     <dl className="grid gap-3 sm:grid-cols-2 text-xs">
                       {[
                         ['Face verification', `${runtimeMeta.runtime.faceVerification.mode} (api: ${runtimeMeta.runtime.faceVerification.apiConfigured ? 'yes' : 'no'})`],
-                        ['Knuct live', runtimeMeta.runtime.knuct.liveEnabled ? 'on' : 'off'],
-                        ['Knuct anchors', runtimeMeta.runtime.knuct.anchorsEnabled ? 'on' : 'off'],
-                        ['Chain publish', runtimeMeta.runtime.knuct.chainPublish ? 'on' : 'off'],
                         ['Email', `${runtimeMeta.runtime.email.status}${runtimeMeta.runtime.email.provider ? ` · ${runtimeMeta.runtime.email.provider}` : ''}`],
                         ['SMS', runtimeMeta.runtime.sms.configured ? 'configured' : 'not configured'],
                         ['Rate limit', runtimeMeta.runtime.rateLimit.backend],

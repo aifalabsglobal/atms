@@ -26,12 +26,13 @@ export async function GET() {
     redisMeta = await Promise.race([
       knuctKvPing(),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Redis ping timed out')), 5000)
+        setTimeout(() => reject(new Error('Redis ping timed out')), 8_000)
       ),
     ]);
     checks.redis = redisMeta.status === 'ok' ? 'ok' : 'error';
   } catch (err) {
-    console.error('[health] redis check failed:', err);
+    const timedOut = err instanceof Error && err.message.includes('timed out');
+    if (!timedOut) console.error('[health] redis check failed:', err);
     checks.redis = 'error';
     redisMeta = {
       backend: 'upstash',
@@ -42,10 +43,11 @@ export async function GET() {
   }
 
   try {
+    // Live Knuct vendor ping often takes 5–8s; keep under route maxDuration.
     const knuct = await Promise.race([
       getKnuctHealth({ ping: true }),
       new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Knuct health ping timed out')), 5000)
+        setTimeout(() => reject(new Error('Knuct health ping timed out')), 12_000)
       ),
     ]);
     const queue = getKnuctQueueStats();
@@ -58,7 +60,8 @@ export async function GET() {
           : 'error';
     checks.knuctQueue = queue.pending > 10 ? 'degraded' : 'ok';
   } catch (err) {
-    console.error('[health] knuct check failed:', err);
+    const timedOut = err instanceof Error && err.message.includes('timed out');
+    if (!timedOut) console.error('[health] knuct check failed:', err);
     checks.knuct = 'degraded';
   }
 

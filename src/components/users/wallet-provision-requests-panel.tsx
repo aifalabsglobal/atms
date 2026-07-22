@@ -24,8 +24,17 @@ type WalletProvisionRequest = {
   };
 };
 
-export function WalletProvisionRequestsPanel({ actorRole }: { actorRole: Role }) {
-  const canReview = actorRole === 'super_admin' || actorRole === 'admin';
+export function WalletProvisionRequestsPanel({
+  actorRole,
+  canReview: canReviewProp,
+}: {
+  actorRole?: Role;
+  canReview?: boolean;
+}) {
+  const canReview =
+    canReviewProp === true ||
+    actorRole === 'super_admin' ||
+    actorRole === 'admin';
   const { toast } = useToast();
   const queryClient = useQueryClient();
 

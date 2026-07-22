@@ -1,11 +1,9 @@
 /**
  * GET /api/knuct/privshare
- * Downloads the authenticated user's private share image (decrypted from DB).
- * The file is served as application/octet-stream with a .png content-disposition.
+ * Downloads the authenticated Knuct console user's private share image.
  */
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { requireKnuctConsoleSession } from '@/lib/auth-helpers';
 import { db } from '@/lib/db';
 import { decryptBuffer } from '@/lib/crypto';
 
@@ -13,10 +11,8 @@ export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function GET() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const { error, session } = await requireKnuctConsoleSession();
+  if (error || !session) return error;
 
   const wallet = await db.knuctWallet.findUnique({
     where: { userId: session.user.id },

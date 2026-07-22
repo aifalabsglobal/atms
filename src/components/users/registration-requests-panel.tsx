@@ -26,8 +26,15 @@ type RegistrationRequest = {
   createdAt: string;
 };
 
-export function RegistrationRequestsPanel({ actorRole }: { actorRole: Role }) {
-  const approveRoles = rolesForActor(actorRole);
+export function RegistrationRequestsPanel({
+  actorRole,
+  opsMode = false,
+}: {
+  actorRole: Role;
+  /** Knuct console ops — assign roles as super_admin regardless of campus role. */
+  opsMode?: boolean;
+}) {
+  const approveRoles = rolesForActor(opsMode ? 'super_admin' : actorRole);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [roleOverrides, setRoleOverrides] = useState<Record<string, Role>>({});

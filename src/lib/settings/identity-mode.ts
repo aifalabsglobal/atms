@@ -45,5 +45,5 @@ export function formatIdentityModePreview(mode: IdentityMode): string {
 
 /** Server gate for Knuct mutating/feature APIs when campus policy is password_only. */
 export function knuctPolicyBlockedMessage(): string {
-  return 'Knuct is disabled by campus identity mode (Password only). Change Settings → User management → Identity mode.';
+  return 'Knuct interactive features live on the standalone console at /knuct/login.';
 }

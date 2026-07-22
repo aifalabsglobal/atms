@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireAuth } from '@/lib/auth-helpers';
+import { requireKnuctConsoleSession } from '@/lib/auth-helpers';
 import { fetchKnuctCapiBundle } from '@/lib/knuct/capi-service';
 import { getKnuctPublicConfig } from '@/lib/knuct/config';
 import { knuctKvBackend } from '@/lib/knuct/redis-store';
@@ -7,10 +7,10 @@ import { knuctKvBackend } from '@/lib/knuct/redis-store';
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-/** Live Knuct CAPI data — requires an active post-auth Knuct session (after DID login). */
+/** Live Knuct CAPI data — requires Knuct console session (after DID login). */
 export async function GET() {
   try {
-    const { error, session } = await requireAuth();
+    const { error, session } = await requireKnuctConsoleSession();
     if (error || !session) return error;
 
     const config = getKnuctPublicConfig();

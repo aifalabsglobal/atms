@@ -13,8 +13,6 @@ import { enforceRateLimit } from '@/lib/rate-limit';
 import { findActiveUserByDid, persistKnuctSessionForUser, runDidAuthChallenge, runDidAuthComplete } from '@/lib/knuct/did-auth-flow';
 import { createKnuctLoginGrant } from '@/lib/knuct/login-grant';
 import { purgeDIDAuthSessions } from '@/lib/knuct/did-auth-session';
-import { rejectIfKnuctPolicyDisabled } from '@/lib/knuct/policy-gate';
-
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 export const maxDuration = 30;
@@ -29,9 +27,7 @@ export async function POST(req: Request) {
   const limited = await enforceRateLimit(`knuct-login:${clientIp(req)}`, 10, 60_000);
   if (limited) return limited;
 
-  const policyBlock = await rejectIfKnuctPolicyDisabled();
-  if (policyBlock) return policyBlock;
-
+  // Public DID login for /knuct/login — no console session yet.
   await purgeDIDAuthSessions();
 
   const body = (await req.json()) as {

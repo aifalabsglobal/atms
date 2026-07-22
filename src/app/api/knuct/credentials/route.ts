@@ -1,5 +1,8 @@
 import { NextResponse } from 'next/server';
-import { requireAuth, requireSection, requireRoles, requireWritableRoles } from '@/lib/auth-helpers';
+import {
+  requireKnuctConsoleSession,
+  requireKnuctOpsAccess,
+} from '@/lib/auth-helpers';
 import {
   getCredentialStats,
   getUserCredentials,
@@ -19,24 +22,22 @@ const VALID_TYPES: CredentialType[] = [
 
 export async function GET(request: Request) {
   try {
-    const { error, session } = await requireAuth();
+    const { error, session } = await requireKnuctConsoleSession();
     if (error || !session) return error;
 
     const { searchParams } = new URL(request.url);
     const targetUserId = searchParams.get('userId') ?? session.user.id;
-    const role = session.user.role;
 
     if (targetUserId !== session.user.id) {
-      const { error: settingsError } = await requireSection('settings');
-      if (settingsError) return settingsError;
-      if (role !== 'super_admin' && role !== 'admin') {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-      }
+      const ops = await requireKnuctOpsAccess();
+      if (ops.error || !ops.session) return ops.error;
     }
 
     const [credentials, stats] = await Promise.all([
       getUserCredentials(targetUserId),
-      targetUserId === session.user.id ? null : getCredentialStats(),
+      targetUserId === session.user.id && !session.user.knuctConsoleAccess
+        ? null
+        : getCredentialStats(),
     ]);
 
     return NextResponse.json({
@@ -52,15 +53,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { error, session } = await requireSection('settings');
+    const { error, session } = await requireKnuctOpsAccess();
     if (error || !session) return error;
-
-    const roleError = (await requireWritableRoles(['super_admin', 'admin'])).error;
-    if (roleError) return roleError;
-
-    const { rejectIfKnuctPolicyDisabled } = await import('@/lib/knuct/policy-gate');
-    const policyBlock = await rejectIfKnuctPolicyDisabled();
-    if (policyBlock) return policyBlock;
 
     const body = await request.json().catch(() => ({}));
     const userId = body.userId as string | undefined;
@@ -79,6 +73,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ credential: result }, { status: 202 });
   } catch (err) {
     console.error('[knuct] credentials POST error:', err);
-    return NextResponse.json({ error: 'Credential issue failed' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to issue credential' }, { status: 500 });
   }
 }

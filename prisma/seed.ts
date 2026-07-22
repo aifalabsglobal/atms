@@ -233,7 +233,7 @@ async function main() {
   const passwordHash = await bcrypt.hash('demo123', 10);
   const usersData = [
     // Super Admin
-    { id: 'u1', email: 'vice.chancellor@aimscs.ac.in', name: 'Dr. K. Sreenivasa Raju', employeeId: 'AIMSCS001', departmentId: cseDept.id, department: 'Administration', role: 'super_admin' as const, status: 'active', phone: '+91-9876543201', profileImageUrl: '/profiles/staff-male-admin.png' },
+    { id: 'u1', email: 'vice.chancellor@aimscs.ac.in', name: 'Dr. K. Sreenivasa Raju', employeeId: 'AIMSCS001', departmentId: cseDept.id, department: 'Administration', role: 'super_admin' as const, status: 'active', phone: '+91-9876543201', profileImageUrl: '/profiles/staff-male-admin.png', knuctConsoleAccess: true },
     // Admin
     { id: 'u2', email: 'registrar@aimscs.ac.in', name: 'Prof. M. Manzoor Hussain', employeeId: 'AIMSCS002', departmentId: cseDept.id, department: 'Administration', role: 'admin' as const, status: 'active', phone: '+91-9876543202', profileImageUrl: '/profiles/staff-male-admin.png' },
     // HODs (one per dept)

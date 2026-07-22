@@ -1,16 +1,14 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { requireSection, requireRoles } from '@/lib/auth-helpers';
+import { requireKnuctOpsAccess } from '@/lib/auth-helpers';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 export async function GET(request: Request) {
   try {
-    const { error, session } = await requireSection('settings');
+    const { error, session } = await requireKnuctOpsAccess();
     if (error || !session) return error;
-    const roleError = (await requireRoles(['super_admin'])).error;
-    if (roleError) return roleError;
 
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');

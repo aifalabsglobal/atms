@@ -107,12 +107,8 @@ export function enqueueWalletProvision(userId: string): void {
 
 export function maybeProvisionWalletOnCreate(userId: string): void {
   if (!getKnuctConfig().walletOnUserCreate) return;
-  void import('@/lib/settings/identity-mode-server')
-    .then(async ({ getIdentityMode }) => {
-      const { isKnuctUiEnabled } = await import('@/lib/settings/identity-mode');
-      const mode = await getIdentityMode();
-      if (!isKnuctUiEnabled(mode)) return;
-      const { queueWalletProvisionRequestOnUserCreate } = await import('./wallet-provision-request-service');
+  void import('./wallet-provision-request-service')
+    .then(async ({ queueWalletProvisionRequestOnUserCreate }) => {
       await queueWalletProvisionRequestOnUserCreate(userId);
     })
     .catch((err) => {

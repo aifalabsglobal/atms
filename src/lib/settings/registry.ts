@@ -894,15 +894,14 @@ const defs: SettingDefinition[] = [
     subcategory: 'Identity & login',
     displayName: 'Campus identity mode',
     description:
-      'How users sign in and whether Knuct wallets/DID are part of campus policy. Password-only hides Knuct. Hybrid keeps email/password primary with optional Knuct. Knuct-based opens DID login first; Super Admin password remains as break-glass. Live vendor calls still need KNUCT_ENABLED in the environment.',
+      'Campus ATMS is password-only. Knuct DID, wallets, anchors, and credentials live on the standalone /knuct console.',
     valueType: 'enum',
     defaultValue: 'password_only',
+    editable: false,
     validation: {
-      allowedValues: ['password_only', 'hybrid', 'knuct_based'],
+      allowedValues: ['password_only'],
       optionLabels: {
         password_only: 'Password only (Postgres + next-auth)',
-        hybrid: 'Hybrid (password + Knuct)',
-        knuct_based: 'Knuct-based (DID primary)',
       },
     },
   },

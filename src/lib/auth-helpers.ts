@@ -24,6 +24,38 @@ export async function requireAuth() {
   return { error: null, session };
 }
 
+/** Standalone Knuct console session (DID or knuct-console password). */
+export async function requireKnuctConsoleSession() {
+  const { error, session } = await requireAuth();
+  if (error || !session) return { error, session: null };
+  if (session.user.authSurface !== 'knuct') {
+    return {
+      error: NextResponse.json(
+        { error: 'Knuct console session required. Sign in at /knuct/login.' },
+        { status: 403 },
+      ),
+      session: null,
+    };
+  }
+  return { error: null, session };
+}
+
+/** Knuct ops (pilot, queues, credentials mint) — console session + knuctConsoleAccess. */
+export async function requireKnuctOpsAccess() {
+  const { error, session } = await requireKnuctConsoleSession();
+  if (error || !session) return { error, session: null };
+  if (!session.user.knuctConsoleAccess) {
+    return {
+      error: NextResponse.json(
+        { error: 'Knuct console operator access required.' },
+        { status: 403 },
+      ),
+      session: null,
+    };
+  }
+  return { error: null, session };
+}
+
 export async function requireRoles(allowedRoles: Role[]) {
   const { error, session } = await requireAuth();
   if (error || !session) return { error, session: null };

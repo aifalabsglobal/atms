@@ -10,6 +10,7 @@ import { revokeUserKnuctSession } from '@/lib/knuct/knuct-persistent-session';
 import { isPlaceholderPasswordHash, verifyPlaceholderPassword } from '@/lib/demo-mode';
 import { isGoogleSsoConfigured, verifyMfaToken } from '@/lib/mfa';
 import type { Role } from '@/lib/store';
+import type { AuthSurface } from '@/lib/auth-surface';
 
 applyPlatformDefaults();
 
@@ -24,15 +25,19 @@ function initialsFromName(name: string): string {
     .join('');
 }
 
-async function buildAuthUser(user: {
-  id: string;
-  email: string;
-  name: string;
-  role: string;
-  department: string | null;
-  profileImageUrl: string | null;
-  linkedStudentId: string | null;
-}) {
+async function buildAuthUser(
+  user: {
+    id: string;
+    email: string;
+    name: string;
+    role: string;
+    department: string | null;
+    profileImageUrl: string | null;
+    linkedStudentId: string | null;
+    knuctConsoleAccess?: boolean;
+  },
+  authSurface: AuthSurface,
+) {
   await db.user.update({
     where: { id: user.id },
     data: { lastLoginAt: new Date() },
@@ -46,7 +51,98 @@ async function buildAuthUser(user: {
     department: user.department ?? undefined,
     profileImageUrl: user.profileImageUrl ?? undefined,
     linkedStudentId: user.linkedStudentId ?? undefined,
+    authSurface,
+    knuctConsoleAccess: user.knuctConsoleAccess === true,
   };
+}
+
+async function authorizePassword(
+  credentials: { email?: string; password?: string; mfaCode?: string } | undefined,
+  authSurface: AuthSurface,
+  opts?: { requireKnuctConsoleAccess?: boolean },
+) {
+  if (!credentials?.email || !credentials?.password) return null;
+
+  try {
+    const user = await db.user.findUnique({
+      where: { email: credentials.email.trim().toLowerCase() },
+    });
+
+    if (!user || user.status !== 'active') return null;
+    if (opts?.requireKnuctConsoleAccess && !user.knuctConsoleAccess) return null;
+
+    const {
+      getAuthSettings,
+      getLoginLockState,
+      recordLoginFailure,
+      clearLoginFailures,
+    } = await import('@/lib/settings/auth-config');
+    const authSettings = await getAuthSettings();
+    const lock = getLoginLockState(credentials.email);
+    if (lock.locked) {
+      throw new Error(`ACCOUNT_LOCKED:${lock.retryAfterSeconds}`);
+    }
+
+    const valid = isPlaceholderPasswordHash(user.passwordHash)
+      ? verifyPlaceholderPassword(credentials.password)
+      : await bcrypt.compare(credentials.password, user.passwordHash);
+
+    if (!valid) {
+      const { locked } = recordLoginFailure(credentials.email, authSettings);
+      const { getGlobalBoolean } = await import('@/lib/settings');
+      const logFailed = await getGlobalBoolean('audit.log_failed_logins', true);
+      if (logFailed) {
+        await logAudit({
+          userId: user.id,
+          action: 'login.failed',
+          resource: `user:${user.id}`,
+          details: { email: user.email, locked, surface: authSurface },
+        });
+      }
+      if (locked) {
+        throw new Error(`ACCOUNT_LOCKED:${authSettings.lockoutMinutes * 60}`);
+      }
+      return null;
+    }
+
+    clearLoginFailures(credentials.email);
+
+    if (user.mfaEnabled) {
+      const code = credentials.mfaCode?.trim() ?? '';
+      if (!code) {
+        throw new Error('MFA_REQUIRED');
+      }
+      if (!user.mfaSecret || !verifyMfaToken(user.mfaSecret, code)) {
+        throw new Error('MFA_INVALID');
+      }
+    }
+
+    await logAudit({
+      userId: user.id,
+      action: 'login',
+      resource: `user:${user.id}`,
+      details: {
+        email: user.email,
+        role: user.role,
+        method: user.mfaEnabled ? 'password_mfa' : 'password',
+        surface: authSurface,
+      },
+    });
+
+    return buildAuthUser(user, authSurface);
+  } catch (err) {
+    if (err instanceof Error && (err.message === 'MFA_REQUIRED' || err.message === 'MFA_INVALID')) {
+      throw err;
+    }
+    if (err instanceof Error && err.message.startsWith('ACCOUNT_LOCKED:')) {
+      throw err;
+    }
+    console.error('[auth] authorize failed:', err);
+    if (isConnectionError(err)) {
+      throw new Error('DatabaseConnectionError');
+    }
+    return null;
+  }
 }
 
 const providers: NextAuthOptions['providers'] = [
@@ -58,86 +154,19 @@ const providers: NextAuthOptions['providers'] = [
       mfaCode: { label: 'MFA Code', type: 'text' },
     },
     async authorize(credentials) {
-      if (!credentials?.email || !credentials?.password) return null;
-
-      try {
-        const user = await db.user.findUnique({
-          where: { email: credentials.email.trim().toLowerCase() },
-        });
-
-        if (!user || user.status !== 'active') return null;
-
-        const {
-          getAuthSettings,
-          getLoginLockState,
-          recordLoginFailure,
-          clearLoginFailures,
-        } = await import('@/lib/settings/auth-config');
-        const authSettings = await getAuthSettings();
-        const lock = getLoginLockState(credentials.email);
-        if (lock.locked) {
-          throw new Error(`ACCOUNT_LOCKED:${lock.retryAfterSeconds}`);
-        }
-
-        const valid = isPlaceholderPasswordHash(user.passwordHash)
-          ? verifyPlaceholderPassword(credentials.password)
-          : await bcrypt.compare(credentials.password, user.passwordHash);
-
-        if (!valid) {
-          const { locked } = recordLoginFailure(credentials.email, authSettings);
-          const { getGlobalBoolean } = await import('@/lib/settings');
-          const logFailed = await getGlobalBoolean('audit.log_failed_logins', true);
-          if (logFailed) {
-            await logAudit({
-              userId: user.id,
-              action: 'login.failed',
-              resource: `user:${user.id}`,
-              details: { email: user.email, locked },
-            });
-          }
-          if (locked) {
-            throw new Error(`ACCOUNT_LOCKED:${authSettings.lockoutMinutes * 60}`);
-          }
-          return null;
-        }
-
-        clearLoginFailures(credentials.email);
-
-        if (user.mfaEnabled) {
-          const code = credentials.mfaCode?.trim() ?? '';
-          if (!code) {
-            throw new Error('MFA_REQUIRED');
-          }
-          if (!user.mfaSecret || !verifyMfaToken(user.mfaSecret, code)) {
-            throw new Error('MFA_INVALID');
-          }
-        }
-
-        await logAudit({
-          userId: user.id,
-          action: 'login',
-          resource: `user:${user.id}`,
-          details: {
-            email: user.email,
-            role: user.role,
-            method: user.mfaEnabled ? 'password_mfa' : 'password',
-          },
-        });
-
-        return buildAuthUser(user);
-      } catch (err) {
-        if (err instanceof Error && (err.message === 'MFA_REQUIRED' || err.message === 'MFA_INVALID')) {
-          throw err;
-        }
-        if (err instanceof Error && err.message.startsWith('ACCOUNT_LOCKED:')) {
-          throw err;
-        }
-        console.error('[auth] authorize failed:', err);
-        if (isConnectionError(err)) {
-          throw new Error('DatabaseConnectionError');
-        }
-        return null;
-      }
+      return authorizePassword(credentials, 'campus');
+    },
+  }),
+  CredentialsProvider({
+    id: 'knuct-console',
+    name: 'Knuct Console',
+    credentials: {
+      email: { label: 'Email', type: 'email' },
+      password: { label: 'Password', type: 'password' },
+      mfaCode: { label: 'MFA Code', type: 'text' },
+    },
+    async authorize(credentials) {
+      return authorizePassword(credentials, 'knuct', { requireKnuctConsoleAccess: true });
     },
   }),
   CredentialsProvider({
@@ -158,10 +187,10 @@ const providers: NextAuthOptions['providers'] = [
           userId: user.id,
           action: 'login',
           resource: `user:${user.id}`,
-          details: { email: user.email, role: user.role, method: 'knuct_did' },
+          details: { email: user.email, role: user.role, method: 'knuct_did', surface: 'knuct' },
         });
 
-        return buildAuthUser(user);
+        return buildAuthUser(user, 'knuct');
       } catch (err) {
         console.error('[auth] knuct authorize failed:', err);
         return null;
@@ -204,12 +233,14 @@ export const authOptions: NextAuthOptions = {
       (user as { department?: string }).department = dbUser.department ?? undefined;
       (user as { profileImageUrl?: string }).profileImageUrl = dbUser.profileImageUrl ?? undefined;
       (user as { linkedStudentId?: string }).linkedStudentId = dbUser.linkedStudentId ?? undefined;
+      (user as { authSurface?: AuthSurface }).authSurface = 'campus';
+      (user as { knuctConsoleAccess?: boolean }).knuctConsoleAccess = dbUser.knuctConsoleAccess === true;
 
       await logAudit({
         userId: dbUser.id,
         action: 'login',
         resource: `user:${dbUser.id}`,
-        details: { email: dbUser.email, role: dbUser.role, method: 'google_sso' },
+        details: { email: dbUser.email, role: dbUser.role, method: 'google_sso', surface: 'campus' },
       });
       await db.user.update({
         where: { id: dbUser.id },
@@ -218,13 +249,22 @@ export const authOptions: NextAuthOptions = {
 
       return true;
     },
-    async jwt({ token, user }) {
+    async jwt({ token, user, account }) {
       if (user) {
         token.id = user.id;
         token.role = (user as { role?: Role }).role ?? 'visitor';
         token.department = (user as { department?: string }).department;
         token.profileImageUrl = (user as { profileImageUrl?: string }).profileImageUrl;
         token.linkedStudentId = (user as { linkedStudentId?: string }).linkedStudentId;
+        token.knuctConsoleAccess = (user as { knuctConsoleAccess?: boolean }).knuctConsoleAccess === true;
+        const fromUser = (user as { authSurface?: AuthSurface }).authSurface;
+        if (fromUser === 'knuct' || fromUser === 'campus') {
+          token.authSurface = fromUser;
+        } else if (account?.provider === 'knuct' || account?.provider === 'knuct-console') {
+          token.authSurface = 'knuct';
+        } else {
+          token.authSurface = 'campus';
+        }
         token.active = true;
         token.iat = Math.floor(Date.now() / 1000);
       }
@@ -257,6 +297,7 @@ export const authOptions: NextAuthOptions = {
                 linkedStudentId: true,
                 status: true,
                 name: true,
+                knuctConsoleAccess: true,
               },
             });
             if (dbUser?.status === 'active') {
@@ -265,6 +306,7 @@ export const authOptions: NextAuthOptions = {
               token.profileImageUrl = dbUser.profileImageUrl ?? undefined;
               token.linkedStudentId = dbUser.linkedStudentId ?? undefined;
               token.name = dbUser.name;
+              token.knuctConsoleAccess = dbUser.knuctConsoleAccess === true;
               token.active = true;
             } else {
               token.active = false;
@@ -289,6 +331,8 @@ export const authOptions: NextAuthOptions = {
         session.user.profileImageUrl = token.profileImageUrl as string | undefined;
         session.user.linkedStudentId = token.linkedStudentId as string | undefined;
         session.user.avatar = initialsFromName(session.user.name ?? '');
+        session.user.authSurface = token.authSurface === 'knuct' ? 'knuct' : 'campus';
+        session.user.knuctConsoleAccess = token.knuctConsoleAccess === true;
       }
       return session;
     },

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Users, Search, Filter, Shield, UserCheck, UserX, ChevronLeft,
   ChevronRight, Eye, MoreHorizontal, Mail, Phone, Building2,
@@ -43,11 +43,8 @@ import {
 } from '@/components/ui/chart';
 import { Pie, PieChart, Cell } from 'recharts';
 import { CreateUserDialog, EditUserDialog, useUserMutations } from '@/components/users/user-management-dialogs';
-import { RegistrationRequestsPanel } from '@/components/users/registration-requests-panel';
-import { WalletProvisionRequestsPanel } from '@/components/users/wallet-provision-requests-panel';
 import { useToast } from '@/hooks/use-toast';
 import { STAFF_ROLES, CAMPUS_USER_ROLES, canDeactivateUser, canResetUserPassword, canManageUsers } from '@/lib/user-management';
-import { useIdentityMode } from '@/hooks/use-identity-mode';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -195,27 +192,6 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-const WALLET_BADGE_STYLES: Record<string, string> = {
-  active: 'bg-emerald-100 text-emerald-800 border-emerald-200',
-  pending: 'bg-amber-100 text-amber-800 border-amber-200',
-  failed: 'bg-red-100 text-red-800 border-red-200',
-};
-
-function WalletBadge({ wallet }: { wallet?: UserItem['knuctWallet'] }) {
-  if (!wallet) {
-    return (
-      <Badge variant="outline" className="text-[10px] text-muted-foreground">
-        No wallet
-      </Badge>
-    );
-  }
-  return (
-    <Badge variant="outline" className={cn('text-[10px] font-mono', WALLET_BADGE_STYLES[wallet.status] ?? 'bg-gray-100')}>
-      {wallet.status === 'active' && wallet.did ? `${wallet.did.slice(0, 10)}…` : wallet.status}
-    </Badge>
-  );
-}
-
 function StatCard({ title, value, icon: Icon, color, subtitle }: {
   title: string; value: number; icon: React.ElementType; color: string; subtitle?: string;
 }) {
@@ -238,13 +214,10 @@ function StatCard({ title, value, icon: Icon, color, subtitle }: {
   );
 }
 
-function UserDetailDialog({ user, open, onOpenChange, canManage, onProvisionWallet, provisioning }: {
+function UserDetailDialog({ user, open, onOpenChange }: {
   user: UserItem | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  canManage: boolean;
-  onProvisionWallet: (userId: string) => void;
-  provisioning: boolean;
 }) {
   const { formatDate } = useCampusFormat();
   if (!user) return null;
@@ -306,65 +279,6 @@ function UserDetailDialog({ user, open, onOpenChange, canManage, onProvisionWall
                 <p className="text-[10px] text-muted-foreground">Last Login</p>
                 <p className="font-medium">{formatLastLogin(user.lastLoginAt, formatDate)}</p>
               </div>
-            </div>
-          </div>
-
-          <Separator />
-
-          {/* Knuct Wallet details */}
-          <div>
-            <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1.5">
-              <Database className="h-3.5 w-3.5" /> Knuct details
-            </h4>
-            <div className="rounded-lg border p-3 space-y-2.5">
-              <div className="flex items-center justify-between gap-2">
-                <WalletBadge wallet={user.knuctWallet} />
-                {canManage && user.knuctWallet?.status !== 'active' && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs"
-                    disabled={provisioning}
-                    onClick={() => onProvisionWallet(user.id)}
-                  >
-                    {provisioning ? 'Provisioning…' : 'Provision wallet'}
-                  </Button>
-                )}
-              </div>
-              <dl className="grid gap-1.5 text-[11px]">
-                <div className="flex justify-between gap-2">
-                  <dt className="text-muted-foreground">Status</dt>
-                  <dd className="font-medium capitalize">{user.knuctWallet?.status ?? 'none'}</dd>
-                </div>
-                <div className="flex justify-between gap-2">
-                  <dt className="text-muted-foreground shrink-0">DID</dt>
-                  <dd className="font-mono text-right break-all">
-                    {user.knuctWallet?.did || '—'}
-                  </dd>
-                </div>
-                {user.knuctWallet?.createdAt && (
-                  <div className="flex justify-between gap-2">
-                    <dt className="text-muted-foreground">Created</dt>
-                    <dd>{formatDate(user.knuctWallet.createdAt)}</dd>
-                  </div>
-                )}
-                {user.knuctWallet?.updatedAt && (
-                  <div className="flex justify-between gap-2">
-                    <dt className="text-muted-foreground">Updated</dt>
-                    <dd>{formatDate(user.knuctWallet.updatedAt)}</dd>
-                  </div>
-                )}
-                {user.knuctWallet?.lastError && (
-                  <div className="rounded-md bg-destructive/10 text-destructive px-2 py-1.5 text-[10px]">
-                    Last error: {user.knuctWallet.lastError}
-                  </div>
-                )}
-                {!user.knuctWallet && (
-                  <p className="text-muted-foreground text-[10px]">
-                    No Knuct wallet linked. Admins can provision from here or Settings → Knuct.
-                  </p>
-                )}
-              </dl>
             </div>
           </div>
 
@@ -528,33 +442,6 @@ export default function UsersSection() {
   const queryClient = useQueryClient();
 
   const canManage = currentUser ? canManageUsers(currentUser.role) : false;
-  const { knuctUiEnabled } = useIdentityMode(!!currentUser);
-  const canProvisionWallet =
-    !!currentUser &&
-    knuctUiEnabled &&
-    ['super_admin', 'admin'].includes(currentUser.role);
-
-  const provisionWallet = useMutation({
-    mutationFn: async (userId: string) => {
-      const res = await fetch('/api/knuct', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error ?? 'Provisioning failed');
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] });
-      toast({ title: 'Wallet provisioning started', description: 'Status will update shortly.' });
-    },
-    onError: (err: Error) => {
-      toast({ title: 'Provisioning failed', description: err.message, variant: 'destructive' });
-    },
-  });
 
   const roleOptions = useMemo(() => {
     if (categoryTab === 'staff') {
@@ -682,9 +569,6 @@ export default function UsersSection() {
 
   return (
     <div className="space-y-4">
-      {canManage && knuctUiEnabled && <RegistrationRequestsPanel actorRole={currentUser.role} />}
-      {canProvisionWallet && <WalletProvisionRequestsPanel actorRole={currentUser.role} />}
-
       {/* Section Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
         <div>
@@ -698,11 +582,6 @@ export default function UsersSection() {
               : categoryTab === 'campus'
                 ? 'Manage students, parents, and visitors'
                 : 'Manage users, roles, and permissions across the campus system'}
-            {canProvisionWallet && (
-              <span className="block mt-1 text-xs">
-                Knuct wallets: click a user row → profile dialog, or use <strong>Settings → Knuct</strong> for your wallet & pilot controls.
-              </span>
-            )}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -917,7 +796,6 @@ export default function UsersSection() {
                           <TableHead className="hidden md:table-cell">Department</TableHead>
                           <TableHead>Role</TableHead>
                           <TableHead>Status</TableHead>
-                          <TableHead className="hidden md:table-cell">Wallet</TableHead>
                           <TableHead className="hidden lg:table-cell">Last Login</TableHead>
                           <TableHead className="w-[50px]">Actions</TableHead>
                         </TableRow>
@@ -940,9 +818,6 @@ export default function UsersSection() {
                                 <div className="min-w-0">
                                   <p className="text-sm font-medium truncate">{user.name}</p>
                                   <p className="text-[10px] text-muted-foreground truncate">{user.email}</p>
-                                  <div className="mt-1 md:hidden">
-                                    <WalletBadge wallet={user.knuctWallet} />
-                                  </div>
                                 </div>
                               </div>
                             </TableCell>
@@ -957,9 +832,6 @@ export default function UsersSection() {
                             </TableCell>
                             <TableCell>
                               <StatusBadge status={user.status} />
-                            </TableCell>
-                            <TableCell className="hidden md:table-cell">
-                              <WalletBadge wallet={user.knuctWallet} />
                             </TableCell>
                             <TableCell className="hidden lg:table-cell">
                               <span className="text-xs text-muted-foreground">{formatLastLogin(user.lastLoginAt, formatDate)}</span>
@@ -1012,14 +884,6 @@ export default function UsersSection() {
                                           });
                                         }}>
                                           <Shield className="mr-2 h-3.5 w-3.5" /> RBAC override
-                                        </DropdownMenuItem>
-                                      )}
-                                      {canProvisionWallet && user.knuctWallet?.status !== 'active' && (
-                                        <DropdownMenuItem onClick={(e) => {
-                                          e.stopPropagation();
-                                          provisionWallet.mutate(user.id);
-                                        }}>
-                                          <Database className="mr-2 h-3.5 w-3.5" /> Provision Wallet
                                         </DropdownMenuItem>
                                       )}
                                     </>
@@ -1218,9 +1082,6 @@ export default function UsersSection() {
         user={selectedUser}
         open={dialogOpen}
         onOpenChange={setDialogOpen}
-        canManage={canProvisionWallet}
-        onProvisionWallet={(id) => provisionWallet.mutate(id)}
-        provisioning={provisionWallet.isPending}
       />
       <CreateUserDialog
         open={createOpen}

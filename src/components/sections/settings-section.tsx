@@ -15,20 +15,16 @@ import { Switch } from '@/components/ui/switch';
 import {
   Settings as SettingsIcon, Shield, Bell, Database, Server,
   ScanFace, MapPin, Clock, Lock, CheckCircle, X as XIcon, ScrollText,
-  Link2, RefreshCw, Wallet, Save, RotateCcw, UserCircle, Trash2, Download,
+  Save, RotateCcw, UserCircle, Trash2,
   Users, Building2, BookOpen, CalendarDays, MapPinned, BarChart3, Crown, FileWarning,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { KnuctDIDAuthPanel } from '@/components/knuct/did-auth-panel';
-import { KnuctCredentialsPanel } from '@/components/knuct/knuct-credentials-panel';
 import { MfaSettingsPanel } from '@/components/settings/mfa-settings-panel';
 import { SettingsWorkspace } from '@/components/administration/settings-workspace';
 import { UserAccountsPanel } from '@/components/users/user-accounts-panel';
 import MastersSection from '@/components/sections/masters-section';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAppStore, ROLE_LABELS, useRoleSections, useSectionAccess, type Role, type Section, type SectionContext } from '@/lib/store';
-import { useIdentityMode } from '@/hooks/use-identity-mode';
-import { formatIdentityModePreview } from '@/lib/settings/identity-mode';
 import { ALL_ROLES, DEFAULT_ROLE_SECTIONS } from '@/lib/rbac-defaults';
 import { notifyRbacUpdated } from '@/components/rbac-sync';
 import { useToast } from '@/hooks/use-toast';
@@ -334,7 +330,7 @@ function SuperAdminControlCenter({
   /** Tenant-specific catalog & admin modules — opened inside Administration, not main nav. */
   const tenantModules: { settingsTab?: string; section?: Section; label: string; description: string; icon: typeof Shield }[] = [
     { settingsTab: 'masters', label: 'Masters', description: 'Departments, programs, subjects, academic years (tenant catalog)', icon: Building2 },
-    { section: 'users', label: 'Users & RBAC', description: 'Directory, roles, wallets', icon: Users },
+    { section: 'users', label: 'Users & RBAC', description: 'Directory and roles', icon: Users },
     { section: 'geofences', label: 'Geofences', description: 'Campus zones and location rules', icon: MapPinned },
     { section: 'calendar', label: 'Calendar', description: 'Academic events and holidays', icon: CalendarDays },
   ];
@@ -362,10 +358,9 @@ function SuperAdminControlCenter({
   ];
 
   const settingsShortcuts: { settingsTab: string; label: string; description: string; icon: typeof Shield }[] = [
-    { settingsTab: 'users', label: 'User Accounts', description: 'Quick create + queues (full directory in Users & RBAC)', icon: Users },
+    { settingsTab: 'users', label: 'User Accounts', description: 'Quick create (full directory in Users & RBAC)', icon: Users },
     { settingsTab: 'rbac', label: 'RBAC Matrix', description: 'Section access per role', icon: Shield },
     { settingsTab: 'config', label: 'Configuration', description: 'Attendance, policies, integrations', icon: SettingsIcon },
-    { settingsTab: 'knuct', label: 'Knuct', description: 'Wallet provisioning and anchors', icon: Wallet },
   ];
 
   return (
@@ -466,7 +461,6 @@ export default function SettingsSection() {
   const isAdmin = currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
   const isSuperAdmin = currentUser?.role === 'super_admin';
   const showSettingsAdminTabs = hasSettingsAccess && isAdmin;
-  const { identityMode, knuctUiEnabled } = useIdentityMode(!!currentUser && showSettingsAdminTabs);
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState(() => (hasMastersAccess && !hasSettingsAccess ? 'masters' : 'config'));
@@ -474,13 +468,20 @@ export default function SettingsSection() {
 
   useEffect(() => {
     if (sectionContext?.settingsTab) {
-      setActiveTab(sectionContext.settingsTab);
+      const tab = sectionContext.settingsTab === 'knuct' ? 'config' : sectionContext.settingsTab;
+      setActiveTab(tab);
       if (sectionContext.rbacUserId) {
         setPendingRbacUserId(sectionContext.rbacUserId);
       }
       setSectionContext(null);
     }
   }, [sectionContext, setSectionContext]);
+
+  useEffect(() => {
+    if (activeTab === 'knuct') {
+      setActiveTab('config');
+    }
+  }, [activeTab]);
 
   useEffect(() => {
     if (!hasSettingsAccess && hasMastersAccess && activeTab !== 'masters') {
@@ -601,95 +602,6 @@ export default function SettingsSection() {
     enabled: showSettingsAdminTabs,
   });
 
-  const { data: knuctData, isLoading: knuctLoading, isError: knuctError, error: knuctQueryError, refetch: refetchKnuct } = useQuery({
-    queryKey: ['knuct-status'],
-    queryFn: () => fetch('/api/knuct').then((r) => {
-      if (!r.ok) throw new Error('Failed to load Knuct status');
-      return r.json();
-    }),
-    enabled: showSettingsAdminTabs,
-    refetchInterval: (query) =>
-      query.state.data?.wallet?.status === 'pending' ? 3000 : false,
-  });
-
-  const { data: knuctCapiData } = useQuery({
-    queryKey: ['knuct-capi-account'],
-    queryFn: () => fetch('/api/knuct/account').then((r) => {
-      if (!r.ok) throw new Error('Failed to load Knuct account (complete DID auth first)');
-      return r.json() as Promise<{
-        sessionActive: boolean;
-        accountInfo: unknown;
-        dashboard: unknown;
-        sessionStore: string;
-      }>;
-    }),
-    enabled: showSettingsAdminTabs && knuctData?.wallet?.status === 'active',
-  });
-
-  const { data: anchorsData, isLoading: anchorsLoading } = useQuery({
-    queryKey: ['knuct-anchors'],
-    queryFn: () => fetch('/api/knuct/anchors?limit=20').then((r) => {
-      if (!r.ok) throw new Error('Failed to load anchors');
-      return r.json();
-    }),
-    enabled: isSuperAdmin,
-  });
-
-  const provisionMutation = useMutation({
-    mutationFn: (userId?: string) =>
-      fetch('/api/knuct', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(userId ? { userId } : {}),
-      }).then(async (r) => {
-        const data = await r.json().catch(() => ({}));
-        if (!r.ok) throw new Error((data as { error?: string }).error || 'Provisioning failed');
-        return data;
-      }),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['knuct-status'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      if (data.wallet?.status === 'active') {
-        toast({ title: 'Wallet provisioned', description: `DID: ${data.wallet.did?.slice(0, 20)}…` });
-      } else if (data.wallet?.status === 'failed') {
-        toast({ title: 'Provisioning failed', description: data.wallet.lastError ?? 'Unknown error', variant: 'destructive' });
-      } else if (data.wallet?.status === 'pending' || data.queued) {
-        toast({
-          title: 'Provisioning started',
-          description: 'Live Knuct wallet creation can take 1–2 minutes. This page will refresh automatically.',
-        });
-      }
-    },
-    onError: (err: Error) => {
-      toast({ title: 'Provisioning failed', description: err.message, variant: 'destructive' });
-    },
-  });
-
-  const pilotMutation = useMutation({
-    mutationFn: () =>
-      fetch('/api/knuct/pilot', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sync: true, limit: 5 }),
-      }).then(async (r) => {
-        const data = await r.json();
-        if (!r.ok) throw new Error(data.error ?? 'Pilot failed');
-        return data;
-      }),
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['knuct-status'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
-      queryClient.invalidateQueries({ queryKey: ['users'] });
-      const active = data.results?.filter((r: { status: string }) => r.status === 'active').length ?? 0;
-      toast({ title: 'Live pilot complete', description: `${active} wallets active` });
-    },
-    onError: (err: Error) => {
-      toast({ title: 'Pilot failed', description: err.message, variant: 'destructive' });
-    },
-  });
-
-  if (!currentUser) return null;
-
   const { data: condonationPending } = useQuery({
     queryKey: ['condonation-requests', 'pending-count'],
     queryFn: async () => {
@@ -701,6 +613,8 @@ export default function SettingsSection() {
     enabled: isSuperAdmin,
     staleTime: 60_000,
   });
+
+  if (!currentUser) return null;
 
   return (
     <div className="space-y-6">
@@ -727,9 +641,9 @@ export default function SettingsSection() {
           className={cn(
             'grid w-full max-w-4xl h-auto',
             isSuperAdmin
-              ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-7'
+              ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6'
               : showSettingsAdminTabs
-                ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-6'
+                ? 'grid-cols-2 sm:grid-cols-3 lg:grid-cols-5'
                 : hasMastersAccess && hasSettingsAccess
                   ? 'grid-cols-4'
                   : hasMastersAccess
@@ -746,7 +660,6 @@ export default function SettingsSection() {
           {hasSettingsAccess && <TabsTrigger value="config">Settings</TabsTrigger>}
           {hasSettingsAccess && <TabsTrigger value="rbac">RBAC Matrix</TabsTrigger>}
           {isSuperAdmin && <TabsTrigger value="users">User Accounts</TabsTrigger>}
-          {showSettingsAdminTabs && <TabsTrigger value="knuct">Knuct</TabsTrigger>}
           {showSettingsAdminTabs && <TabsTrigger value="audit">Audit Log</TabsTrigger>}
           {hasSettingsAccess && <TabsTrigger value="notifications">Notifications</TabsTrigger>}
         </TabsList>
@@ -922,285 +835,6 @@ export default function SettingsSection() {
               </CardContent>
             </Card>
             <UserAccountsPanel actorRole={currentUser.role} />
-          </TabsContent>
-        )}
-
-        {showSettingsAdminTabs && (
-          <TabsContent value="knuct" className="space-y-4">
-            <Card className="border-dashed">
-              <CardHeader className="py-3">
-                <CardTitle className="text-sm">Campus identity mode</CardTitle>
-                <CardDescription className="text-xs">
-                  {formatIdentityModePreview(identityMode)}. Change this under Configuration → User management → Campus identity mode.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="pt-0 flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => navigateToSection('settings', { settingsTab: 'config' })}
-                >
-                  Open Configuration
-                </Button>
-              </CardContent>
-            </Card>
-            {!knuctUiEnabled ? (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Link2 className="h-4 w-4 text-brand" /> Knuct disabled by policy
-                  </CardTitle>
-                  <CardDescription>
-                    Identity mode is Password only. DID login, wallet provisioning, and Knuct registration are hidden until Super Admin selects Hybrid or Knuct-based.
-                  </CardDescription>
-                </CardHeader>
-              </Card>
-            ) : (
-            <>
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Link2 className="h-4 w-4 text-brand" /> Knuct Wallet & DID
-                </CardTitle>
-                <CardDescription>
-                  Live Knuct pilot — set KNUCT_ENABLED=true and optional KNUCT_API_KEY in .env
-                  {!knuctData?.config?.enabled && (
-                    <span className="block mt-1 text-amber-700 dark:text-amber-400">
-                      Vendor env is off — UI is allowed by campus policy, but live adapter traffic uses mock/off until KNUCT_ENABLED=true.
-                    </span>
-                  )}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {knuctLoading ? (
-                  <div className="space-y-2">
-                    <Skeleton className="h-8 w-full" />
-                    <Skeleton className="h-8 w-2/3" />
-                  </div>
-                ) : knuctError ? (
-                  <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
-                    Failed to load Knuct status: {(knuctQueryError as Error)?.message ?? 'Unknown error'}.
-                    {' '}Try <button type="button" className="underline font-medium" onClick={() => refetchKnuct()}>refresh</button>.
-                  </div>
-                ) : (
-                  <>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      <div className="rounded-lg border p-4 space-y-2">
-                        <p className="text-sm font-medium flex items-center gap-2"><Wallet className="h-4 w-4" /> Your wallet</p>
-                        <p className="text-xs text-muted-foreground font-mono break-all">
-                          DID: {knuctData?.wallet?.did ?? 'Not provisioned'}
-                        </p>
-                        <Badge variant="outline" className={
-                          knuctData?.wallet?.status === 'active' ? 'bg-green-50 text-green-700' :
-                          knuctData?.wallet?.status === 'failed' ? 'bg-red-50 text-red-700' :
-                          knuctData?.wallet?.status === 'pending' ? 'bg-amber-50 text-amber-700' :
-                          'bg-gray-100 text-gray-600'
-                        }>
-                          {knuctData?.wallet?.status === 'active' ? 'active' :
-                          knuctData?.wallet?.status === 'failed' ? 'failed' :
-                          knuctData?.wallet?.status === 'pending' ? 'provisioning…' :
-                          'not provisioned'}
-                        </Badge>
-                        {knuctData?.wallet?.lastError && (
-                          <p className="text-xs text-red-600">{knuctData.wallet.lastError}</p>
-                        )}
-                      </div>
-                      <div className="rounded-lg border p-4 space-y-2">
-                        <p className="text-sm font-medium">Adapter</p>
-                        <p className="text-sm text-muted-foreground">
-                          Mode: {knuctData?.health?.adapterMode ?? 'mock'} ·
-                          Health: {knuctData?.health?.health ?? 'unknown'}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          KNUCT_ENABLED: {knuctData?.config?.enabled ? 'true' : 'false'}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          Auto-provision on user create: {knuctData?.config?.walletOnUserCreate ? 'on' : 'off'}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          Chain publish: {knuctData?.config?.chainPublishEnabled ? (knuctData?.config?.chainPublishConfigured ? 'enabled · configured' : 'enabled · URL missing') : 'off'}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          Credentials: {knuctData?.config?.credentialsEnabled ? (knuctData?.config?.credentialMintConfigured ? 'enabled · mint configured' : 'enabled · hash-only') : 'off'}
-                        </p>
-                      </div>
-                    </div>
-
-                    {isSuperAdmin && knuctData?.stats && (
-                      <div className="rounded-lg border p-4 space-y-3">
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                          {[
-                            { label: 'Active wallets', value: knuctData.stats.wallets.active },
-                            { label: 'Anchors today', value: knuctData.stats.anchors.today },
-                            { label: 'Failed wallets', value: knuctData.stats.wallets.failed },
-                            { label: 'DID coverage', value: `${knuctData.stats.didCoveragePct}%` },
-                          ].map((s) => (
-                            <div key={s.label}>
-                              <p className="text-lg font-bold">{s.value}</p>
-                              <p className="text-[10px] text-muted-foreground">{s.label}</p>
-                            </div>
-                          ))}
-                        </div>
-                        {knuctData.stats.recentActivity.length > 0 && (
-                          <div className="space-y-1.5 pt-2 border-t">
-                            <p className="text-xs font-medium">Recent hash anchors</p>
-                            {knuctData.stats.recentActivity.slice(0, 5).map((a: { module: string; ref: string; hash?: string }, i: number) => (
-                              <div key={i} className="text-[10px] font-mono text-muted-foreground flex items-center justify-between gap-2">
-                                <span className="shrink-0">{a.module}</span>
-                                {a.hash ? (
-                                  <Link
-                                    href={`/verify?hash=${a.hash}`}
-                                    target="_blank"
-                                    className="truncate hover:text-brand hover:underline"
-                                    title={a.hash}
-                                  >
-                                    {a.hash.slice(0, 16)}…
-                                  </Link>
-                                ) : (
-                                  <span>{a.ref}…</span>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* DID Authentication — private share upload, runs entirely in browser */}
-                    <KnuctDIDAuthPanel
-                      onSuccess={() => {
-                        refetchKnuct();
-                        queryClient.invalidateQueries({ queryKey: ['knuct-capi-account'] });
-                      }}
-                    />
-
-                    {knuctCapiData?.sessionActive && knuctCapiData.accountInfo != null && (
-                      <div className="rounded-lg border p-4 space-y-2">
-                        <p className="text-sm font-medium">Live Knuct account (CAPI getAccountInfo)</p>
-                        <pre className="text-[10px] font-mono bg-muted/50 p-2 rounded overflow-x-auto max-h-40">
-                          {JSON.stringify(knuctCapiData.accountInfo, null, 2)}
-                        </pre>
-                        {knuctCapiData.dashboard != null && (
-                          <>
-                            <p className="text-xs font-medium text-muted-foreground mt-2">Dashboard (CAPI getDashboard)</p>
-                            <pre className="text-[10px] font-mono bg-muted/50 p-2 rounded overflow-x-auto max-h-32">
-                              {JSON.stringify(knuctCapiData.dashboard, null, 2)}
-                            </pre>
-                          </>
-                        )}
-                      </div>
-                    )}
-
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="gap-2"
-                        disabled={provisionMutation.isPending}
-                        onClick={() => provisionMutation.mutate(undefined)}
-                      >
-                        <RefreshCw className={`h-3.5 w-3.5 ${provisionMutation.isPending ? 'animate-spin' : ''}`} />
-                        {knuctData?.wallet?.status === 'active' ? 'Re-provision wallet' : 'Provision my wallet'}
-                      </Button>
-                      {knuctData?.wallet?.status === 'active' && (
-                        <Button size="sm" variant="outline" className="gap-2" asChild>
-                          <a href="/api/knuct/privshare" download>
-                            <Download className="h-3.5 w-3.5" />
-                            Download private share
-                          </a>
-                        </Button>
-                      )}
-                      <Button size="sm" variant="ghost" onClick={() => refetchKnuct()}>Refresh status</Button>
-                      <Button size="sm" variant="ghost" asChild>
-                        <Link href="/verify" target="_blank">Public verify page</Link>
-                      </Button>
-                      {isSuperAdmin && knuctData?.config?.enabled && (
-                        <Button
-                          size="sm"
-                          disabled={pilotMutation.isPending}
-                          onClick={() => pilotMutation.mutate()}
-                        >
-                          {pilotMutation.isPending ? 'Running pilot…' : 'Run live pilot (5)'}
-                        </Button>
-                      )}
-                    </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
-
-            <KnuctCredentialsPanel />
-
-            {isSuperAdmin && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <ScrollText className="h-4 w-4 text-brand" /> Blockchain Anchors
-                  </CardTitle>
-                  <CardDescription>Recent SHA-256 audit anchors stored in PostgreSQL (latest 20)</CardDescription>
-                </CardHeader>
-                <CardContent className="p-0">
-                  {anchorsLoading ? (
-                    <div className="p-4 space-y-2">
-                      {Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
-                    </div>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Resource type</TableHead>
-                            <TableHead>Resource ID</TableHead>
-                            <TableHead>Hash</TableHead>
-                            <TableHead>Created</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {(anchorsData?.anchors ?? []).map((anchor: {
-                            id: string;
-                            resourceType: string;
-                            resourceId: string;
-                            payloadHash: string;
-                            createdAt: string;
-                          }) => (
-                            <TableRow key={anchor.id}>
-                              <TableCell>
-                                <Badge variant="outline" className="text-[10px] font-mono">{anchor.resourceType}</Badge>
-                              </TableCell>
-                              <TableCell className="text-xs font-mono text-muted-foreground" title={anchor.resourceId}>
-                                {anchor.resourceId.length > 16 ? `${anchor.resourceId.slice(0, 16)}…` : anchor.resourceId}
-                              </TableCell>
-                              <TableCell className="text-xs font-mono">
-                                <Link
-                                  href={`/verify?hash=${anchor.payloadHash}`}
-                                  target="_blank"
-                                  className="text-muted-foreground hover:text-brand hover:underline"
-                                  title={anchor.payloadHash}
-                                >
-                                  {anchor.payloadHash.slice(0, 12)}…
-                                </Link>
-                              </TableCell>
-                              <TableCell className="text-xs whitespace-nowrap text-muted-foreground">
-                                {new Date(anchor.createdAt).toLocaleString('en-IN')}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                          {(anchorsData?.anchors ?? []).length === 0 && (
-                            <TableRow>
-                              <TableCell colSpan={4} className="text-center text-sm text-muted-foreground py-8">
-                                No anchors yet. Complete an attendance session or review a violation to create one.
-                              </TableCell>
-                            </TableRow>
-                          )}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-            </>
-            )}
           </TabsContent>
         )}
 

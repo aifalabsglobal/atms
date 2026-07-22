@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireUserManagement } from '@/lib/auth-helpers';
+import { requireKnuctOpsAccess } from '@/lib/auth-helpers';
 import {
   approveRegistrationRequest,
   listRegistrationRequests,
@@ -12,7 +12,7 @@ export const runtime = 'nodejs';
 
 export async function GET(req: Request) {
   try {
-    const { error, session } = await requireUserManagement();
+    const { error, session } = await requireKnuctOpsAccess();
     if (error || !session) return error;
 
     const status = new URL(req.url).searchParams.get('status') ?? 'pending';
@@ -26,7 +26,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const { error, session } = await requireUserManagement();
+    const { error, session } = await requireKnuctOpsAccess();
     if (error || !session) return error;
 
     const body = (await req.json()) as {
@@ -42,7 +42,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'id and action are required' }, { status: 400 });
     }
 
-    const reviewerRole = session.user.role as Role;
+    const reviewerRole = (session.user.knuctConsoleAccess
+      ? 'super_admin'
+      : session.user.role) as Role;
 
     if (body.action === 'approve') {
       const user = await approveRegistrationRequest({

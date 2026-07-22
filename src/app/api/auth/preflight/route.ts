@@ -10,6 +10,8 @@ export const dynamic = 'force-dynamic';
 /**
  * Password preflight — tells the login UI whether MFA is required
  * without creating a session.
+ *
+ * Optional body.requireKnuctConsoleAccess — also verifies knuctConsoleAccess.
  */
 export async function POST(request: Request) {
   const limited = await enforceRateLimit(`auth-preflight:${getClientIp(request) ?? 'anon'}`, 20, 60_000);
@@ -19,13 +21,19 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => ({}));
     const email = String(body.email ?? '').trim().toLowerCase();
     const password = String(body.password ?? '');
+    const requireKnuctConsoleAccess = body.requireKnuctConsoleAccess === true;
     if (!email || !password) {
       return NextResponse.json({ error: 'email and password required' }, { status: 400 });
     }
 
     const user = await db.user.findUnique({
       where: { email },
-      select: { passwordHash: true, status: true, mfaEnabled: true },
+      select: {
+        passwordHash: true,
+        status: true,
+        mfaEnabled: true,
+        knuctConsoleAccess: true,
+      },
     });
     if (!user || user.status !== 'active') {
       return NextResponse.json({ ok: false }, { status: 401 });
@@ -37,6 +45,13 @@ export async function POST(request: Request) {
 
     if (!valid) {
       return NextResponse.json({ ok: false }, { status: 401 });
+    }
+
+    if (requireKnuctConsoleAccess && !user.knuctConsoleAccess) {
+      return NextResponse.json(
+        { ok: false, error: 'KNUCT_CONSOLE_DENIED' },
+        { status: 401 },
+      );
     }
 
     return NextResponse.json({ ok: true, mfaRequired: user.mfaEnabled === true });

@@ -1,5 +1,6 @@
 'use client';
 
+import { useSession } from 'next-auth/react';
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -7,7 +8,6 @@ import {
 } from 'lucide-react';
 import { KnuctDIDAuthPanel } from '@/components/knuct/did-auth-panel';
 import { parseKnuctAccountView } from '@/lib/knuct/account-view';
-import { useAppStore } from '@/lib/store';
 import { useToast } from '@/hooks/use-toast';
 import { useCampusFormat } from '@/hooks/use-campus-format';
 import { cn } from '@/lib/utils';
@@ -40,6 +40,7 @@ type KnuctStatusResponse = {
     status: string;
     createdAt: string;
   } | null;
+  knuctConsoleAccess?: boolean;
 };
 
 type KnuctAccountResponse = {
@@ -59,8 +60,8 @@ export function MyKnuctWalletPanel({ className }: { className?: string }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { formatCurrency, currency: campusCurrency } = useCampusFormat();
-  const { currentUser } = useAppStore();
-  const isAdmin = currentUser?.role === 'super_admin' || currentUser?.role === 'admin';
+  const { data: session } = useSession();
+  const isOps = session?.user?.knuctConsoleAccess === true;
   const [open, setOpen] = useState(true);
   const [showAuth, setShowAuth] = useState(false);
 
@@ -98,7 +99,7 @@ export function MyKnuctWalletPanel({ className }: { className?: string }) {
 
   const provisionMutation = useMutation({
     mutationFn: async () => {
-      if (isAdmin) {
+      if (isOps) {
         const res = await fetch('/api/knuct', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -125,9 +126,8 @@ export function MyKnuctWalletPanel({ className }: { className?: string }) {
       queryClient.invalidateQueries({ queryKey: ['knuct-my-wallet'] });
       queryClient.invalidateQueries({ queryKey: ['knuct-status'] });
       queryClient.invalidateQueries({ queryKey: ['knuct-wallet-provision-requests'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
 
-      if (isAdmin) {
+      if (isOps) {
         const status = (payload as { wallet?: KnuctWalletStatus }).wallet?.status;
         if (status === 'active') {
           toast({ title: 'Wallet ready', description: 'Your Knuct wallet is active. Download your private share and keep it safe.' });
@@ -148,12 +148,12 @@ export function MyKnuctWalletPanel({ className }: { className?: string }) {
 
       toast({
         title: 'Request submitted',
-        description: (payload as { message?: string }).message ?? 'An administrator must approve before your wallet is created or re-provisioned.',
+        description: (payload as { message?: string }).message ?? 'A Knuct console operator must approve before your wallet is created or re-provisioned.',
       });
     },
     onError: (err: Error) => {
       toast({
-        title: isAdmin ? 'Provisioning failed' : 'Request failed',
+        title: isOps ? 'Provisioning failed' : 'Request failed',
         description: err.message,
         variant: 'destructive',
       });
@@ -315,7 +315,7 @@ export function MyKnuctWalletPanel({ className }: { className?: string }) {
                     ) : (
                       <RefreshCw className="h-3.5 w-3.5" />
                     )}
-                    {isAdmin
+                    {isOps
                       ? walletActive
                         ? 'Re-provision wallet'
                         : 'Provision my wallet'
@@ -364,7 +364,7 @@ export function MyKnuctWalletPanel({ className }: { className?: string }) {
 
                 <p className="text-[11px] text-muted-foreground">
                   Keep your private share PNG safe — it is your Knuct login key. Never share it.
-                  {!isAdmin && ' Wallet creation and re-provision require administrator approval.'}
+                  {!isOps && ' Wallet creation and re-provision require Knuct console operator approval.'}
                   {' '}Re-provisioning creates a new wallet and invalidates the old share.
                 </p>
               </>

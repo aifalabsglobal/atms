@@ -64,7 +64,7 @@ export function KnuctCredentialsPanel() {
 
   const { data: usersData, isLoading: usersLoading } = useQuery({
     queryKey: ['credential-user-picker'],
-    queryFn: () => fetchJson<{ users: UserOption[] }>('/api/users?category=campus&limit=100'),
+    queryFn: () => fetchJson<{ users: UserOption[] }>('/api/knuct/users?category=campus&limit=100'),
   });
 
   const {
@@ -89,7 +89,7 @@ export function KnuctCredentialsPanel() {
             userId: selectedUserId,
             type: credentialType,
             resourceId: resourceId.trim() || undefined,
-            payload: { issuedVia: 'settings_ui', at: new Date().toISOString() },
+            payload: { issuedVia: 'knuct_console', at: new Date().toISOString() },
           }),
         },
       ),
@@ -257,7 +257,7 @@ export function KnuctCredentialsPanel() {
                     </TableCell>
                     <TableCell className="text-xs font-mono">
                       <Link
-                        href={`/verify?hash=${c.payloadHash}`}
+                        href={`/knuct/verify?hash=${c.payloadHash}`}
                         target="_blank"
                         className="text-muted-foreground hover:text-brand hover:underline"
                       >
